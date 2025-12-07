@@ -643,10 +643,9 @@ qboolean IsHeadShotWeapon( int mod, qboolean aicharacter ) {
 	return qfalse;
 }
 
-qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod ) {
+qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3_t end, int mod ) {
 	gentity_t   *head;
 	trace_t tr;
-	vec3_t start, end;
 	gentity_t   *traceEnt;
 	orientation_t or;           // DHM - Nerve
 
@@ -664,16 +663,20 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t
 	head_shot_weapon = IsHeadShotWeapon( mod, isAICharacter );
 
 	if ( head_shot_weapon ) {
-		head = G_Spawn();
+		if(targ->isHeadshot){
+			return qtrue;
+		}
 
-		G_ComputeHeadPosition(targ, head);
+		head = targ->headBBox;
 
-		trap_LinkEntity( head );
+		//remove owner so the trace doesn't ignore it
+		int oldOwner = head->r.ownerNum;
+		head->r.ownerNum = ENTITYNUM_NONE;
 
 		// trace another shot see if we hit the head
-		VectorCopy( point, start );
-		VectorMA( start, 64, dir, end );
 		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
+
+		head->r.ownerNum = oldOwner;
 
 		traceEnt = &g_entities[ tr.entityNum ];
 
@@ -687,24 +690,10 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t
 			tent = G_TempEntity( b1, EV_RAILTRAIL );
 			VectorCopy( b2, tent->s.origin2 );
 			tent->s.dmgFlags = 1;
-
-			// show headshot trace
-			// end the headshot trace at the head box if it hits
-			if ( tr.fraction != 1 ) {
-				VectorMA( start, ( tr.fraction * 64 ), dir, end );
-			}
-			tent = G_TempEntity( start, EV_RAILTRAIL );
-			VectorCopy( end, tent->s.origin2 );
-			tent->s.dmgFlags = 0;
 		}
 
-		G_FreeEntity( head );
-
 		if ( traceEnt == head ) {
-			level.totalHeadshots++;         // NERVE - SMF
 			return qtrue;
-		} else {
-			level.missedHeadshots++;    // NERVE - SMF
 		}
 	}
 
@@ -714,9 +703,11 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t
 void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 	orientation_t or;           // DHM - Nerve
 
-	if ( 0 && trap_GetTag( ent->s.number, "tag_head", &or ) ) { //@TODO
-		G_SetOrigin( head, or.origin );
+	if ( trap_GetTag( "tag_head", &or, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
+		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &or);
+		G_SetOrigin( head, head->r.currentOrigin);
 	} else {
+		/*
 		float height, dest;
 		vec3_t v, angles, forward, up, right;
 
@@ -744,6 +735,7 @@ void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 		VectorAdd( v, head->r.currentOrigin, head->r.currentOrigin );
 		head->r.currentOrigin[2] += height / 2;
 		// -NERVE - SMF
+		*/
 	}
 
 	VectorCopy( head->r.currentOrigin, head->s.origin );
@@ -1070,7 +1062,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	asave = CheckArmor( targ, take, dflags );
 	take -= asave;
 
-	qboolean isHeadshot = IsHeadShot( targ, qfalse, dir, point, mod );
+	qboolean isHeadshot = targ->isHeadshot;
 	if ( isHeadshot ) {
 
 		if ( take * 2 < 50 ) { // head shots, all weapons, do minimum 50 points damage

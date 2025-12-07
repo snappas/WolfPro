@@ -418,6 +418,7 @@ struct gentity_s {
 	qboolean	moreCalled;
 
 	gentity_t *headBBox;
+	qboolean isHeadshot;
 };
 
 // Ridah
@@ -685,6 +686,11 @@ typedef struct unlagged_s {
 	qboolean        spawnprotected;
 } unlagged_t;
 
+typedef struct animationInfo_s {
+	lerpInfo_t lerpInfo;
+	lerpFrame_t torso;
+	lerpFrame_t legs;
+} animationInfo_t;
 
 // this structure is cleared on each ClientSpawn(),
 // except for 'client->pers' and 'client->sess'
@@ -787,6 +793,8 @@ struct gclient_s {
 
 	unlagged_t unlag;
 	int lastRevivePushTime;
+
+	animationInfo_t animationInfo;
 };
 
 
@@ -967,8 +975,6 @@ typedef struct {
 	animScriptData_t animScriptData;
 
 	// NERVE - SMF - debugging/profiling info
-	int totalHeadshots;
-	int missedHeadshots;
 	qboolean lastRestartTime;
 	// -NERVE - SMF
 
@@ -1629,7 +1635,7 @@ int     trap_BotAllocateClient( void );
 void    trap_BotFreeClient( int clientNum );
 void    trap_GetUsercmd( int clientNum, usercmd_t *cmd );
 qboolean    trap_GetEntityToken( char *buffer, int bufferSize );
-qboolean trap_GetTag( int clientNum, char *tagName, orientation_t * or );
+qboolean trap_GetTag( char *tagName, orientation_t *or, lerpInfo_t *li);
 
 int     trap_DebugPolygonCreate( int color, int numPoints, vec3_t *points );
 void    trap_DebugPolygonDelete( int id );
@@ -1893,6 +1899,12 @@ void G_PredictPlayerMove(gentity_t* ent, float frametime);
 // g_referee.c
 qboolean G_refCommandCheck(void);
 void G_refSpeclockTeams_cmd( gentity_t *ent, qboolean fLock );
+
+void AddHeadEntities(gentity_t* skip, int content, int mask);
+void RemoveHeadEntities(gentity_t* skip);
+void FreeHeadEntity(gentity_t* ent);
+void UpdateHeadPosition(gentity_t *ent);
+qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod );
 
 // Macros
 //

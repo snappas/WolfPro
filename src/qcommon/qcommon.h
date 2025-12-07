@@ -1318,6 +1318,7 @@ int  submit_curlPost( char* jsonfile, char* matchid );
 #define DLF_NO_DISCONNECT 8
 
 int MDL_LerpTag(orientation_t* tag, const refEntity_t* refent, const char* tagNameIn, int startIndex, vmType_t vmType);
+int MDL_LerpTagExt( orientation_t *tag, lerpInfo_t *lerpInfo, const char *tagNameIn, int startIndex, vmType_t vmType );
 qhandle_t MDL_RegisterModel( const char *name, vmType_t vmType );
 void MDL_CalcBones(mdsHeader_t* header, const refEntity_t* refent, int* boneList, int numBones);
 

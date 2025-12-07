@@ -987,6 +987,26 @@ R_LerpTag
   returns the index of the tag it found, for cycling through tags with the same name
 ================
 */
+
+
+int MDL_LerpTagExt( orientation_t *tag, lerpInfo_t *lerpInfo, const char *tagNameIn, int startIndex, vmType_t vmType ){
+	refEntity_t re;
+	re.hModel = lerpInfo->modelHandle;
+	re.oldframe = lerpInfo->oldFrame;
+	re.frame = lerpInfo->frame;
+	re.backlerp = lerpInfo->backlerp;
+	re.torsoFrame = lerpInfo->torsoFrame;
+	re.oldTorsoFrame = lerpInfo->oldTorsoFrame;
+	re.torsoBacklerp = lerpInfo->torsoBacklerp;
+	for(int i = 0; i < 3; i++){
+		VectorCopy(lerpInfo->torsoAxis[i], re.torsoAxis[i]);
+		VectorCopy(lerpInfo->legsAxis[i], re.axis[i]);
+	}
+	
+
+	return MDL_LerpTag(tag, &re, tagNameIn, startIndex, vmType);
+}
+
 int MDL_LerpTag( orientation_t *tag, const refEntity_t *refent, const char *tagNameIn, int startIndex, vmType_t vmType ) {
 	md3Tag_t    *start, *end;
 	md3Tag_t ustart, uend;

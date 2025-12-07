@@ -300,7 +300,6 @@ void Weapon_Syringe( gentity_t *ent ) {
 	//VectorMA (muzzleTrace, -16, forward, muzzleTrace);	// DHM - Back up the start point in case medic is
 	// right on top of intended revivee.
 
-	trace_t trace;
 	int i, unlinked = 0;
 	gentity_t* traceEnt = 0;
 	gentity_t* unlinkedEntities[MAX_REVIVE_HITS];
@@ -1460,61 +1459,6 @@ void SP5_Fire( gentity_t *ent, float aimSpreadScale ) {
 }
 
 
-void RubbleFlagCheck( gentity_t *ent, trace_t tr ) {
-	qboolean is_valid = qfalse;
-	int type = 0;
-
-	// (SA) moving client-side
-
-	return;
-
-
-
-
-	if ( tr.surfaceFlags & SURF_RUBBLE || tr.surfaceFlags & SURF_GRAVEL ) {
-		is_valid = qtrue;
-		type = 4;
-	} else if ( tr.surfaceFlags & SURF_METAL )     {
-//----(SA)	removed
-//		is_valid = qtrue;
-//		type = 2;
-	} else if ( tr.surfaceFlags & SURF_WOOD )     {
-		is_valid = qtrue;
-		type = 1;
-	}
-
-	if ( is_valid && ent->client && ( ent->s.weapon == WP_VENOM
-									  || ent->client->ps.persistant[PERS_HWEAPON_USE] ) ) {
-		if ( rand() % 100 > 75 ) {
-			gentity_t   *sfx;
-			vec3_t start;
-			vec3_t dir;
-
-			sfx = G_Spawn();
-
-			sfx->s.density = type;
-
-			VectorCopy( tr.endpos, start );
-
-			VectorCopy( muzzleTrace, dir );
-			VectorNegate( dir, dir );
-
-			G_SetOrigin( sfx, start );
-			G_SetAngle( sfx, dir );
-
-			G_AddEvent( sfx, EV_SHARD, DirToByte( dir ) );
-
-			sfx->think = G_FreeEntity;
-			sfx->nextthink = level.time + 1000;
-
-			sfx->s.frame = 3 + ( rand() % 3 ) ;
-
-			trap_LinkEntity( sfx );
-
-		}
-	}
-
-}
 
 /*
 ==============
@@ -1584,6 +1528,71 @@ void Bullet_Endpos( gentity_t *ent, float spread, vec3_t *end ) {
 	}
 }
 
+void UpdateHeadPosition(gentity_t *ent){
+	gentity_t *head = ent->headBBox;
+	G_SetOrigin(head, ent->r.currentOrigin);
+	G_ComputeHeadPosition(ent, head);
+	vec3_t b1, b2;
+	VectorCopy( head->r.currentOrigin, b1 );
+	VectorCopy( head->r.currentOrigin, b2 );
+	VectorAdd( b1, head->r.mins, b1 );
+	VectorAdd( b2, head->r.maxs, b2 );
+	VectorCopy( b2, head->s.origin2 );
+	VectorCopy( b1, head->s.origin );
+}
+
+void AddHeadEntities(gentity_t* skip, int content, int mask){
+	gentity_t* ent;
+
+	for (int i = 0; i < level.numPlayingClients; ++i){
+		ent = g_entities + level.sortedClients[i];
+
+		if (ent == skip){
+			continue;
+		}
+		if(ent->headBBox){
+			UpdateHeadPosition(ent);
+			ent->headBBox->r.contents = content;
+			ent->headBBox->clipmask = mask;
+			trap_LinkEntity(ent->headBBox);
+		}
+		
+	}
+}
+
+void FreeHeadEntity(gentity_t* ent){
+	if (ent && ent->client && ent->headBBox)
+	{
+		G_FreeEntity(ent->headBBox);
+		ent->headBBox = NULL;
+	}
+}
+
+void RemoveHeadEntity(gentity_t* ent){
+	if (ent && ent->client && ent->headBBox)
+	{
+		if (ent->headBBox->r.linked)
+		{
+			ent->isHeadshot = qfalse;
+			trap_UnlinkEntity(ent->headBBox);
+		}
+	}
+}
+
+void RemoveHeadEntities(gentity_t* skip){
+	gentity_t* ent;
+
+	for (int i = 0; i < level.numPlayingClients; ++i){
+		ent = g_entities + level.sortedClients[i];
+
+		if (ent == skip){
+			continue;
+		}
+
+		RemoveHeadEntity(ent);
+	}
+}
+
 /*
 ==============
 Bullet_Fire
@@ -1596,6 +1605,7 @@ void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 	{
 		G_DoTimeShiftFor(ent);
 	}
+	AddHeadEntities(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
 
 	Bullet_Endpos( ent, spread, &end );
 	Bullet_Fire_Extended( ent, ent, muzzleTrace, end, spread, damage );
@@ -1604,6 +1614,7 @@ void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 	{
 		G_UndoTimeShiftFor(ent);
 	}
+	RemoveHeadEntities(ent);
 }
 
 qboolean LogAccuracyShot(gentity_t* target, gentity_t* attacker) {
@@ -1645,8 +1656,6 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	trace_t tr;
 	gentity_t   *tent;
 	gentity_t   *traceEnt;
-	vec3_t dir;
-	int res;
 	damage *= s_quadFactor;
 
 	trap_Trace( &tr, start, NULL, NULL, end, source->s.number, MASK_SHOT );
@@ -1658,19 +1667,12 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 		tent->s.otherEntityNum2 = attacker->s.number;
 	}
 
-
-//----(SA)	commented out
-//	if ( tr.surfaceFlags & SURF_NOIMPACT ) {
-//		if (attacker->s.weapon == WP_MAUSER && attacker->r.svFlags & SVF_CASTAI)
-//			SniperSoundEFX (tr.endpos);
-//
-//		return;
-//	}
-//----(SA)	end
-
-	RubbleFlagCheck( attacker, tr );
-
 	traceEnt = &g_entities[ tr.entityNum ];
+
+	if(traceEnt->s.eType == ET_TEMPHEAD){
+		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
+		traceEnt->isHeadshot = qtrue;
+	}
 
 	EmitterCheck( traceEnt, attacker, &tr );
 
@@ -1681,13 +1683,6 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 
 	// snap the endpos to integers, but nudged towards the line
 	SnapVectorTowards( tr.endpos, start );
-
-//----(SA)	commented out
-//	if (attacker->s.weapon == WP_MAUSER && attacker->r.svFlags & SVF_CASTAI)
-//	{
-//		SniperSoundEFX (tr.endpos);
-//	}
-//----(SA)	end
 
 	// send bullet impact
 	if ( traceEnt->takedamage && traceEnt->client && !( traceEnt->flags & FL_DEFENSE_GUARD ) ) {
@@ -1782,7 +1777,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 //----(SA)	end
 
 		} else {
-
+			traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, start, end, ammoTable[attacker->s.weapon].mod );
 			G_Damage( traceEnt, attacker, attacker, forward, tr.endpos, damage, 0, ammoTable[attacker->s.weapon].mod );
 
 			// allow bullets to "pass through" func_explosives if they break by taking another simultanious shot

@@ -1832,4 +1832,17 @@ typedef struct cvar_restrictions_s {
 	qboolean flagged;
 } cvar_rest_t;
 
+typedef struct lerpInfo_s {
+	qhandle_t modelHandle;
+	int oldFrame;
+	int frame;
+	float backlerp;
+	int torsoFrame;
+	int oldTorsoFrame;
+	float torsoBacklerp;
+	vec3_t torsoAxis[3];
+	vec3_t legsAxis[3];
+	vec3_t headAxis[3];
+} lerpInfo_t;
+
 #endif  // __Q_SHARED_H

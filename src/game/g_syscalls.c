@@ -237,8 +237,8 @@ void trap_SnapVector( float *v ) {
 	return;
 }
 
-qboolean trap_GetTag( int clientNum, char *tagName, orientation_t *or ) {
-	return syscall( G_GETTAG, clientNum, tagName, or );
+qboolean trap_GetTag( char *tagName, orientation_t* or, lerpInfo_t *li) {
+	return syscall( G_GETTAG, tagName, or, li );
 }
 
 // BotLib traps start here

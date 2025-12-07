@@ -442,7 +442,7 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 		Sys_SnapVector( VMA( 1 ) );
 		return 0;
 	case G_GETTAG:
-		return SV_GetTag( args[1], VMA( 2 ), VMA( 3 ) );
+		return MDL_LerpTagExt( VMA(2), VMA( 3 ), VMA( 1 ), 0, VM_QAGAME );
 
 		//====================================
 

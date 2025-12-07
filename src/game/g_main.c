@@ -2882,6 +2882,9 @@ void G_RunFrame( int levelTime ) {
 	int i;
 	gentity_t   *ent;
 	int worldspawnflags, gt;
+	if(g_debugBullets.integer > 0){
+		RemoveHeadEntities(NULL);
+	}
 
 	// if we are waiting for the level to restart, do nothing
 	if ( level.restarted ) {
@@ -2946,19 +2949,6 @@ void G_RunFrame( int levelTime ) {
 			} else {
 				ent->s.eFlags &= ~EF_NODRAW;
 			}
-		}
-
-		if(ent->headBBox && i < MAX_CLIENTS){
-			gentity_t *head = ent->headBBox;
-			VectorCopy( ent->s.origin, head->s.origin );
-			G_ComputeHeadPosition(ent, head);
-			vec3_t b1, b2;
-			VectorCopy( head->r.currentOrigin, b1 );
-			VectorCopy( head->r.currentOrigin, b2 );
-			VectorAdd( b1, head->r.mins, b1 );
-			VectorAdd( b2, head->r.maxs, b2 );
-			VectorCopy( b2, head->s.origin2 );
-			VectorCopy( b1, head->s.origin );
 		}
 
 		// RF, if this entity is attached to a parent, move it around with it, so the server thinks it's at least close to where the client will view it
@@ -3112,11 +3102,6 @@ void G_RunFrame( int levelTime ) {
 		trap_Cvar_Set( "g_listEntity", "0" );
 	}
 
-	// NERVE - SMF
-	if ( g_showHeadshotRatio.integer && level.missedHeadshots > 0 ) {
-		G_Printf( "Headshot Ratio = %2.2f percent, made = %i, missed = %i\n", ( float )level.totalHeadshots / level.missedHeadshots * 100.f, level.totalHeadshots, level.missedHeadshots );
-	}
-
 	// Ridah, check if we are reloading, and times have expired
 	CheckReloadStatus();
 
@@ -3127,6 +3112,10 @@ void G_RunFrame( int levelTime ) {
 		// L0 - Check Team Lock status..
 		HandleEmptyTeams();
 	}
+	if(g_debugBullets.integer > 0){
+		AddHeadEntities(NULL, CONTENTS_CORPSE, 0);
+	}
+	
 
 	level.frameStartTime = trap_Milliseconds();
 }

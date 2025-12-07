@@ -117,44 +117,6 @@ If you have questions concerning this license or the applicable additional terms
 #define LIMBO_3D_H  312
 // -NERVE - SMF
 
-//=================================================
-
-// player entities need to track more information
-// than any other type of entity.
-
-// note that not every player entity is a client entity,
-// because corpses after respawn are outside the normal
-// client numbering range
-
-// when changing animation, set animationTime to frameTime + lerping time
-// The current lerp will finish out, then it will lerp to the new animation
-typedef struct {
-	int oldFrame;
-	int oldFrameTime;               // time when ->oldFrame was exactly on
-
-	int frame;
-	int frameTime;                  // time when ->frame will be exactly on
-
-	float backlerp;
-
-	float yawAngle;
-	qboolean yawing;
-	float pitchAngle;
-	qboolean pitching;
-
-	int animationNumber;            // may include ANIM_TOGGLEBIT
-	int oldAnimationNumber;         // may include ANIM_TOGGLEBIT
-	animation_t *animation;
-	int animationTime;              // time when the first frame of the animation will be exact
-
-	// Ridah, variable speed anims
-	vec3_t oldFramePos;
-	float animSpeedScale;
-	int oldFrameSnapshotTime;
-	headAnimation_t *headAnim;
-	// done.
-
-} lerpFrame_t;
 
 // Ridah, effect defines
 #define MAX_ZOMBIE_SPIRITS          1 // JPW NERVE was 4
@@ -1678,7 +1640,6 @@ extern vmCvar_t cg_runroll;
 extern vmCvar_t cg_bobup;
 extern vmCvar_t cg_bobpitch;
 extern vmCvar_t cg_bobroll;
-extern vmCvar_t cg_swingSpeed;
 extern vmCvar_t cg_shadows;
 extern vmCvar_t cg_gibs;
 extern vmCvar_t cg_drawTimer;

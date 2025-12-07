@@ -1761,11 +1761,11 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	ent->headBBox = G_Spawn();
 	gentity_t *head = ent->headBBox;
 	head->s.eType = ET_TEMPHEAD;
-	head->r.contents = CONTENTS_DETAIL;
+	head->r.contents = CONTENTS_SOLID;
+	head->clipmask = CONTENTS_SOLID;
 	head->classname = "headbbox";
-	head->r.svFlags |= SVF_BROADCAST;
 	head->s.otherEntityNum = clientNum;
-	trap_LinkEntity(ent->headBBox);
+	head->r.ownerNum = clientNum;
 
 
 
@@ -2161,6 +2161,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	if ( ent->client->sess.sessionTeam != TEAM_SPECTATOR ) {
 		//G_KillBox( ent );
 		trap_LinkEntity( ent );
+		ent->client->animationInfo.lerpInfo.modelHandle = ent->client->sess.sessionTeam == TEAM_RED ? level.axisTorsoModel : level.alliesTorsoModel;
 	}
 
 	client->respawnTime = level.time;
@@ -2317,6 +2318,8 @@ void ClientDisconnect( int clientNum ) {
 	if (g_gameStatslog.integer && g_gamestate.integer == GS_PLAYING) {
         G_writeDisconnectEvent(ent);
     }
+
+	FreeHeadEntity(ent);
 
 	trap_UnlinkEntity( ent );
 	ent->s.modelindex = 0;

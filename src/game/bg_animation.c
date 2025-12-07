@@ -2019,3 +2019,301 @@ void BG_AnimUpdatePlayerStateConditions( pmove_t *pmove ) {
 		BG_UpdateConditionValue( ps->clientNum, ANIM_COND_FIRING, qfalse, qtrue );
 	}
 }
+
+
+void BG_SetLerpFrameAnimation(animModelInfo_t *modelInfo, lerpFrame_t *lf, int newAnimation){
+	if(!modelInfo){
+		return;
+	}
+	lf->animationNumber = newAnimation;
+	newAnimation &= ~ANIM_TOGGLEBIT;
+
+	if ( newAnimation < 0 || newAnimation >= modelInfo->numAnimations ) {
+		Com_Error(ERR_DROP, "Bad animation number (CG_SLFA): %i", newAnimation );
+	}
+	animation_t *anim = &modelInfo->animations[ newAnimation ];
+	lf->animation = anim;
+	lf->animationTime = lf->frameTime + anim->initialLerp;
+}
+
+#define LF_DEBUG 0
+void BG_RunLerpFrame(animModelInfo_t *modelInfo, lerpFrame_t *lf, int time, int newAnimation){
+	// see if the animation sequence is switching
+	if (modelInfo && ( newAnimation != lf->animationNumber || !lf->animation ) ) {  //----(SA)	modified
+		BG_SetLerpFrameAnimation(modelInfo, lf, newAnimation);
+	}
+
+	int f;
+	animation_t *anim;
+
+	// if we have passed the current frame, move it to
+	// oldFrame and calculate a new frame
+	if ( time >= lf->frameTime ) {
+		lf->oldFrame = lf->frame;
+		lf->oldFrameTime = lf->frameTime;
+
+		// get the next frame based on the animation
+		anim = lf->animation;
+		if ( !anim->frameLerp ) {
+			return;     // shouldn't happen
+		}
+		if ( time < lf->animationTime ) {
+			lf->frameTime = lf->animationTime;      // initial lerp
+		} else {
+			lf->frameTime = lf->oldFrameTime + anim->frameLerp;
+		}
+		f = ( lf->frameTime - lf->animationTime ) / anim->frameLerp;
+		if ( f >= anim->numFrames ) {
+			f -= anim->numFrames;
+			if ( anim->loopFrames ) {
+				f %= anim->loopFrames;
+				f += anim->numFrames - anim->loopFrames;
+			} else {
+				f = anim->numFrames - 1;
+				// the animation is stuck at the end, so it
+				// can immediately transition to another sequence
+				lf->frameTime = time;
+			}
+		}
+		lf->frame = anim->firstFrame + f;
+		if ( time > lf->frameTime ) {
+			lf->frameTime = time;
+			if ( LF_DEBUG ) {
+				Com_Printf( "Clamp lf->frameTime\n" );
+			}
+		}
+	}
+
+	if ( lf->frameTime > time + 200 ) {
+		lf->frameTime = time;
+	}
+
+	if ( lf->oldFrameTime > time ) {
+		lf->oldFrameTime = time;
+	}
+
+	// calculate current lerp value
+	if ( lf->frameTime == lf->oldFrameTime ) {
+		lf->backlerp = 0;
+	} else {
+		lf->backlerp = 1.0 - (float)( time - lf->oldFrameTime ) / ( lf->frameTime - lf->oldFrameTime );
+	}
+}
+
+
+
+void BG_SwingAngles( int frameTime, float destination, float swingTolerance, float clampTolerance,
+							float speed, float *angle, qboolean *swinging ) {
+	float swing;
+	float move;
+	float scale;
+
+	if ( !*swinging ) {
+		// see if a swing should be started
+		swing = AngleSubtract( *angle, destination );
+		if ( swing > swingTolerance || swing < -swingTolerance ) {
+			*swinging = qtrue;
+		}
+	}
+
+	if ( !*swinging ) {
+		return;
+	}
+
+	// modify the speed depending on the delta
+	// so it doesn't seem so linear
+	swing = AngleSubtract( destination, *angle );
+	scale = fabs( swing );
+	scale *= 0.05;
+	if ( scale < 0.5 ) {
+		scale = 0.5;
+	}
+
+	// swing towards the destination angle
+	if ( swing >= 0 ) {
+		move = frameTime * scale * speed;
+		if ( move >= swing ) {
+			move = swing;
+			*swinging = qfalse;
+		} else {
+			*swinging = SWING_LEFT;     // left
+		}
+		*angle = AngleMod( *angle + move );
+	} else if ( swing < 0 ) {
+		move = frameTime * scale * -speed;
+		if ( move <= swing ) {
+			move = swing;
+			*swinging = qfalse;
+		} else {
+			*swinging = SWING_RIGHT;    // right
+		}
+		*angle = AngleMod( *angle + move );
+	}
+
+	// clamp to no more than tolerance
+	swing = AngleSubtract( destination, *angle );
+	if ( swing > clampTolerance ) {
+		*angle = AngleMod( destination - ( clampTolerance - 1 ) );
+	} else if ( swing < -clampTolerance ) {
+		*angle = AngleMod( destination + ( clampTolerance - 1 ) );
+	}
+}
+
+
+/*
+===============
+BG_PlayerAngles
+
+Handles seperate torso motion
+
+  legs pivot based on direction of movement
+
+  head always looks exactly at cent->lerpAngles
+
+  if motion < 20 degrees, show in head only
+  if < 45 degrees, also show in torso
+===============
+*/
+
+#define SWING_SPEED 0.1f
+void BG_PlayerAngles(int entityNum, entityState_t *es, int frameTime, lerpFrame_t *torsoFrame, lerpFrame_t *legsFrame,  vec3_t lerpAngles, 
+					vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] ){
+	
+	float dest;
+//	static	int	movementOffsets[8] = { 0, 22, 45, -22, 0, 22, -45, -22 }; // TTimo: unused
+	vec3_t velocity;
+	float speed;
+	float clampTolerance;
+	int legsSet;
+	
+	legsSet = es->legsAnim & ~ANIM_TOGGLEBIT;
+
+	VectorCopy( lerpAngles, headAngles );
+	headAngles[YAW] = AngleMod( headAngles[YAW] );
+	VectorClear( legsAngles );
+	VectorClear( torsoAngles );
+
+	// --------- yaw -------------
+
+	// allow yaw to drift a bit, unless these conditions don't allow them
+	if (    !( BG_GetConditionValue( es->number, ANIM_COND_MOVETYPE, qfalse ) & ( ( 1 << ANIM_MT_IDLE ) | ( 1 << ANIM_MT_IDLECR ) ) )/*
+		||	 (BG_GetConditionValue( cent->currentState.number, ANIM_COND_MOVETYPE, qfalse ) & ((1<<ANIM_MT_STRAFELEFT) | (1<<ANIM_MT_STRAFERIGHT)) )*/) {
+
+		// always point all in the same direction
+		torsoFrame->yawing = qtrue;  // always center
+		torsoFrame->pitching = qtrue;    // always center
+		legsFrame->yawing = qtrue;   // always center
+
+		// if firing, make sure torso and head are always aligned
+	} else if ( BG_GetConditionValue( es->number, ANIM_COND_FIRING, qtrue ) ) {
+
+		torsoFrame->yawing = qtrue;  // always center
+		torsoFrame->pitching = qtrue;    // always center
+
+	}
+
+	// adjust legs for movement dir
+	if ( es->eFlags & EF_DEAD ) {
+		// don't let dead bodies twitch
+		legsAngles[YAW] = headAngles[YAW];
+		torsoAngles[YAW] = headAngles[YAW];
+	} else {
+		legsAngles[YAW] = headAngles[YAW] + es->angles2[YAW];
+
+		if ( es->eFlags & EF_NOSWINGANGLES ) {
+			legsAngles[YAW] = torsoAngles[YAW] = headAngles[YAW];   // always face firing direction
+			clampTolerance = 60;
+		} else if ( !( es->eFlags & EF_FIRING ) ) {
+			torsoAngles[YAW] = headAngles[YAW] + 0.35 * es->angles2[YAW];
+			clampTolerance = 90;
+		} else {    // must be firing
+			torsoAngles[YAW] = headAngles[YAW]; // always face firing direction
+			//if (fabs(cent->currentState.angles2[YAW]) > 30)
+			//	legsAngles[YAW] = headAngles[YAW];
+			clampTolerance = 60;
+		}
+
+		// torso
+		BG_SwingAngles( frameTime, torsoAngles[YAW], 25, clampTolerance, SWING_SPEED, &torsoFrame->yawAngle, &torsoFrame->yawing );
+
+		// if the legs are yawing (facing heading direction), allow them to rotate a bit, so we don't keep calling
+		// the legs_turn animation while an AI is firing, and therefore his angles will be randomizing according to their accuracy
+
+		clampTolerance = 150;
+
+		if  ( BG_GetConditionValue( entityNum, ANIM_COND_MOVETYPE, qfalse ) & ( 1 << ANIM_MT_IDLE ) ) {
+			legsFrame->yawing = qfalse; // set it if they really need to swing
+			BG_SwingAngles( frameTime, legsAngles[YAW], 20, clampTolerance, 0.5f * SWING_SPEED, &legsFrame->yawAngle, &legsFrame->yawing );
+		} else
+		//if	( BG_GetConditionValue( ci->clientNum, ANIM_COND_MOVETYPE, qfalse ) & ((1<<ANIM_MT_STRAFERIGHT)|(1<<ANIM_MT_STRAFELEFT)) )
+		if  ( strstr( BG_GetAnimString( entityNum, legsSet ), "strafe" ) ) {
+			legsFrame->yawing = qfalse; // set it if they really need to swing
+			legsAngles[YAW] = headAngles[YAW];
+			BG_SwingAngles( frameTime, legsAngles[YAW], 0, clampTolerance, SWING_SPEED, &legsFrame->yawAngle, &legsFrame->yawing );
+		} else
+		if ( legsFrame->yawing ) {
+			BG_SwingAngles( frameTime, legsAngles[YAW], 0, clampTolerance, SWING_SPEED, &legsFrame->yawAngle, &legsFrame->yawing );
+		} else
+		{
+			BG_SwingAngles( frameTime, legsAngles[YAW], 40, clampTolerance, SWING_SPEED, &legsFrame->yawAngle, &legsFrame->yawing );
+		}
+
+		torsoAngles[YAW] = torsoFrame->yawAngle;
+		legsAngles[YAW] = legsFrame->yawAngle;
+	}
+
+	// --------- pitch -------------
+
+	// only show a fraction of the pitch angle in the torso
+	if ( headAngles[PITCH] > 180 ) {
+		dest = ( -360 + headAngles[PITCH] ) * 0.75;
+	} else {
+		dest = headAngles[PITCH] * 0.75;
+	}
+	BG_SwingAngles( frameTime, dest, 15, 30, 0.1f, &torsoFrame->pitchAngle, &torsoFrame->pitching );
+	torsoAngles[PITCH] = torsoFrame->pitchAngle;
+
+	// --------- roll -------------
+
+
+	// lean towards the direction of travel
+	VectorCopy( es->pos.trDelta, velocity );
+	speed = VectorNormalize( velocity );
+	if ( speed ) {
+		vec3_t axis[3];
+		float side;
+
+		speed *= 0.05;
+
+		AnglesToAxis( legsAngles, axis );
+		side = speed * DotProduct( velocity, axis[1] );
+		legsAngles[ROLL] -= side;
+
+		side = speed * DotProduct( velocity, axis[0] );
+		legsAngles[PITCH] += side;
+	}
+
+}
+
+void BG_PlayerAnglesToAxis(vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] ){
+	// pull the angles back out of the hierarchial chain
+	AnglesSubtract( headAngles, torsoAngles, headAngles );
+	AnglesSubtract( torsoAngles, legsAngles, torsoAngles );
+	AnglesToAxis( legsAngles, legsAxis );
+	AnglesToAxis( torsoAngles, torsoAxis );
+	AnglesToAxis( headAngles, headAxis );
+
+}
+
+void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], vec3_t parentOrigin, vec3_t parentAxis[3], orientation_t *orientation){
+	vec3_t tempAxis[3];
+	// FIXME: allow origin offsets along tag?
+	VectorCopy( parentOrigin, entityOrigin );
+	for ( int i = 0 ; i < 3 ; i++ ) {
+		VectorMA( entityOrigin, orientation->origin[i], parentAxis[i], entityOrigin );
+	}
+
+	// had to cast away the const to avoid compiler problems...
+	MatrixMultiply( entityAxis, orientation->axis, tempAxis );
+	MatrixMultiply( tempAxis, parentAxis, entityAxis );
+}
