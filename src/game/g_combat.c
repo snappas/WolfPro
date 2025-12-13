@@ -703,11 +703,10 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 	orientation_t or;           // DHM - Nerve
 
-	if ( trap_GetTag( "tag_head", &or, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
+	if ( g_preciseHeadHitbox.integer && trap_GetTag( "tag_head", &or, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
 		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &or);
 		G_SetOrigin( head, head->r.currentOrigin);
 	} else {
-		/*
 		float height, dest;
 		vec3_t v, angles, forward, up, right;
 
@@ -735,7 +734,6 @@ void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 		VectorAdd( v, head->r.currentOrigin, head->r.currentOrigin );
 		head->r.currentOrigin[2] += height / 2;
 		// -NERVE - SMF
-		*/
 	}
 
 	VectorCopy( head->r.currentOrigin, head->s.origin );
