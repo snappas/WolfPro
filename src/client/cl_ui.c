@@ -861,7 +861,7 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 		return FS_GetFileList( VMA( 1 ), VMA( 2 ), VMA( 3 ), args[4] );
 
 	case UI_R_REGISTERMODEL:
-		return re.RegisterModel( VMA( 1 ) );
+		return MDL_RegisterModel( VMA( 1 ), VM_UI );
 
 	case UI_R_REGISTERSKIN:
 		return re.RegisterSkin( VMA( 1 ) );
@@ -916,7 +916,7 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 		return 0;
 
 	case UI_CM_LERPTAG:
-		return re.LerpTag( VMA( 1 ), VMA( 2 ), VMA( 3 ), args[4] );
+		return MDL_LerpTag(VMA(1), VMA(2), VMA(3), args[4], VM_UI);
 
 	case UI_S_REGISTERSOUND:
 #ifdef DOOMSOUND    ///// (SA) DOOMSOUND

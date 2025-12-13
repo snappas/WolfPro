@@ -206,6 +206,8 @@ vmCvar_t g_apiquery_curl_URL;
 vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
 
+vmCvar_t g_preciseHeadHitbox;
+
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
 	{ &g_cheats, "sv_cheats", "", 0, qfalse },
@@ -378,8 +380,10 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_apiquery_curl_URL, "g_apiquery_curl_URL", "https://rtcwproapi.donkanator.com/serverquery", CVAR_ARCHIVE, 0, qfalse  },
 
 	{ &g_disableDeadBodyFlagGrab, "g_disableDeadBodyFlagGrab", "1", CVAR_ARCHIVE, qtrue, qfalse },
-	{ &g_mapScriptDirectory, "g_mapScriptDirectory", "", 0, qfalse }
+	{ &g_mapScriptDirectory, "g_mapScriptDirectory", "", CVAR_ARCHIVE, 0, qfalse },
 
+
+	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
 
 };
 
@@ -1312,6 +1316,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	// RF, init the anim scripting
 	level.animScriptData.soundIndex = G_SoundIndex;
 	level.animScriptData.playSound = G_AnimScriptSound;
+
+	level.alliesTorsoModel = trap_RegisterModel("models/players/multi/body.mds");
+	level.axisTorsoModel = trap_RegisterModel("models/players/multi_axis/body.mds");
 
 	char mapName[64];
 	trap_Cvar_VariableStringBuffer( "mapname", mapName, sizeof(mapName) );
@@ -2876,9 +2883,13 @@ Advances the non-player objects in the world
 ================
 */
 void G_RunFrame( int levelTime ) {
+	level.frameStartTime = trap_Milliseconds();
 	int i;
 	gentity_t   *ent;
 	int worldspawnflags, gt;
+	if(g_debugBullets.integer > 0){
+		RemoveHeadEntities(NULL);
+	}
 
 	// if we are waiting for the level to restart, do nothing
 	if ( level.restarted ) {
@@ -3096,11 +3107,6 @@ void G_RunFrame( int levelTime ) {
 		trap_Cvar_Set( "g_listEntity", "0" );
 	}
 
-	// NERVE - SMF
-	if ( g_showHeadshotRatio.integer && level.missedHeadshots > 0 ) {
-		G_Printf( "Headshot Ratio = %2.2f percent, made = %i, missed = %i\n", ( float )level.totalHeadshots / level.missedHeadshots * 100.f, level.totalHeadshots, level.missedHeadshots );
-	}
-
 	// Ridah, check if we are reloading, and times have expired
 	CheckReloadStatus();
 
@@ -3111,8 +3117,11 @@ void G_RunFrame( int levelTime ) {
 		// L0 - Check Team Lock status..
 		HandleEmptyTeams();
 	}
+	if(g_debugBullets.integer > 0){
+		AddHeadEntities(NULL, CONTENTS_CORPSE, 0);
+	}
+	
 
-	level.frameStartTime = trap_Milliseconds();
 }
 
 

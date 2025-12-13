@@ -1091,6 +1091,50 @@ typedef struct headAnimation_s {
 } headAnimation_t;
 // done.
 
+
+//=================================================
+
+// player entities need to track more information
+// than any other type of entity.
+
+// note that not every player entity is a client entity,
+// because corpses after respawn are outside the normal
+// client numbering range
+
+// when changing animation, set animationTime to frameTime + lerping time
+// The current lerp will finish out, then it will lerp to the new animation
+typedef struct {
+	int oldFrame;
+	int oldFrameTime;               // time when ->oldFrame was exactly on
+
+	int frame;
+	int frameTime;                  // time when ->frame will be exactly on
+
+	float backlerp;
+
+	float yawAngle;
+	qboolean yawing;
+	float pitchAngle;
+	qboolean pitching;
+
+	int animationNumber;            // may include ANIM_TOGGLEBIT
+	int oldAnimationNumber;         // may include ANIM_TOGGLEBIT
+	animation_t *animation;
+	int animationTime;              // time when the first frame of the animation will be exact
+
+	// Ridah, variable speed anims
+	vec3_t oldFramePos;
+	float animSpeedScale;
+	int oldFrameSnapshotTime;
+	headAnimation_t *headAnim;
+	// done.
+
+} lerpFrame_t;
+
+#define SWING_RIGHT 1
+#define SWING_LEFT  2
+
+
 // flip the togglebit every time an animation
 // changes so a restart of the same anim can be detected
 #define ANIM_TOGGLEBIT      ( 1 << ( ANIM_BITS - 1 ) )
@@ -1733,6 +1777,14 @@ int BG_AnimationIndexForString( char *string, int client );
 animation_t *BG_AnimationForString( char *string, animModelInfo_t *modelInfo );
 animation_t *BG_GetAnimationForIndex( int client, int index );
 int BG_GetAnimScriptEvent( playerState_t *ps, scriptAnimEventTypes_t event );
+
+void BG_SetLerpFrameAnimation(animModelInfo_t *modelInfo, lerpFrame_t *lf, int newAnimation);
+void BG_RunLerpFrame(animModelInfo_t *modelInfo, lerpFrame_t *lf, int time, int newAnimation);
+void BG_PlayerAngles(int entityNum, entityState_t *es, int frameTime, lerpFrame_t *torsoFrame, lerpFrame_t *legsFrame,  vec3_t lerpAngles, 
+					vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] );
+void BG_PlayerAnglesToAxis(vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] );
+animModelInfo_t *BG_ModelInfoForClient( int client );
+void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], vec3_t parentOrigin, vec3_t parentAxis[3], orientation_t *orientation);
 
 extern animStringItem_t animStateStr[];
 extern animStringItem_t animBodyPartsStr[];

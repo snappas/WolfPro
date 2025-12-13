@@ -734,7 +734,7 @@ intptr_t CL_CgameSystemCalls(intptr_t *args ) {
 		re.LoadWorld( VMA( 1 ) );
 		return 0;
 	case CG_R_REGISTERMODEL:
-		return re.RegisterModel( VMA( 1 ) );
+		return MDL_RegisterModel( VMA( 1 ), VM_CGAME );
 	case CG_R_REGISTERSKIN:
 		return re.RegisterSkin( VMA( 1 ) );
 
@@ -798,7 +798,10 @@ intptr_t CL_CgameSystemCalls(intptr_t *args ) {
 		re.ModelBounds( args[1], VMA( 2 ), VMA( 3 ) );
 		return 0;
 	case CG_R_LERPTAG:
-		return re.LerpTag( VMA( 1 ), VMA( 2 ), VMA( 3 ), args[4] );
+	{
+		return MDL_LerpTag( VMA( 1 ), VMA( 2 ), VMA( 3 ), args[4], VM_CGAME );
+	}
+		
 	case CG_GETGLCONFIG:
 		CL_GetGlconfig( VMA( 1 ) );
 		return 0;

@@ -143,21 +143,12 @@ void CG_PositionRotatedEntityOnTag( refEntity_t *entity, const refEntity_t *pare
 									char *tagName ) {
 	int i;
 	orientation_t lerped;
-	vec3_t tempAxis[3];
 
 //AxisClear( entity->axis );
 	// lerp the tag
 	trap_R_LerpTag( &lerped, parent, tagName, 0 );
+	BG_PositionRotatedEntityOnTag(entity->origin, entity->axis, parent->origin, parent->axis, &lerped);
 
-	// FIXME: allow origin offsets along tag?
-	VectorCopy( parent->origin, entity->origin );
-	for ( i = 0 ; i < 3 ; i++ ) {
-		VectorMA( entity->origin, lerped.origin[i], parent->axis[i], entity->origin );
-	}
-
-	// had to cast away the const to avoid compiler problems...
-	MatrixMultiply( entity->axis, lerped.axis, tempAxis );
-	MatrixMultiply( tempAxis, ( (refEntity_t *)parent )->axis, entity->axis );
 }
 
 
@@ -1968,6 +1959,9 @@ static void CG_ProcessEntity( centity_t *cent ) {
 	case ET_CORPSE:
 	case ET_PLAYER:
 		CG_Player( cent );
+		break;
+	case ET_TEMPHEAD:
+		CG_DrawBBox(cent);
 		break;
 	case ET_ITEM:
 		CG_Item( cent );

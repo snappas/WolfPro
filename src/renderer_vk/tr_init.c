@@ -29,6 +29,9 @@ If you have questions concerning this license or the applicable additional terms
 // tr_init.c -- functions that are not called every frame
 
 #include "tr_local.h"
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 //#ifdef __USEA3D
 //// Defined in snd_a3dg_refcommon.c
@@ -145,7 +148,6 @@ cvar_t  *r_printShaders;
 cvar_t  *r_saveFontData;
 
 // Ridah
-cvar_t  *r_compressModels;
 cvar_t  *r_exportCompressedModels;
 
 cvar_t  *r_buildScript;
@@ -175,6 +177,12 @@ cvar_t *r_sleepThreshold;
 
 cvar_t *r_msaa;
 cvar_t *r_alphaboost;
+
+//-------------------------------------------------------------------------------
+// Ridah, mesh compression
+float r_anormals[NUMMDCVERTEXNORMALS][3] = {
+#include "anorms256.h"
+};
 
 
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral ) {
@@ -796,7 +804,6 @@ void R_Register( void ) {
 	r_saveFontData = ri.Cvar_Get( "r_saveFontData", "0", 0 );
 
 
-	r_compressModels = ri.Cvar_Get( "r_compressModels", "0", 0 );     // converts MD3 -> MDC at run-time
 	r_exportCompressedModels = ri.Cvar_Get( "r_exportCompressedModels", "0", 0 ); // saves compressed models
 	r_buildScript = ri.Cvar_Get( "com_buildscript", "0", 0 );
 	r_bonesDebug = ri.Cvar_Get( "r_bonesDebug", "0", CVAR_CHEAT );
@@ -864,7 +871,6 @@ void R_Register( void ) {
 	ri.Cmd_AddCommand( "screenshot", R_ScreenShot_f );
 	ri.Cmd_AddCommand( "screenshotJPEG", R_ScreenShotJPEG_f );
 	ri.Cmd_AddCommand( "gfxinfo", GfxInfo_f );
-	ri.Cmd_AddCommand( "taginfo", R_TagInfo_f );
 	ri.Cmd_AddCommand("printpools", RHI_PrintPools);
 	ri.Cmd_AddCommand("gpulist", R_Gpulist_f);
 
@@ -874,6 +880,80 @@ void R_Register( void ) {
 		ri.Cmd_AddCommand( "cropimages", R_CropImages_f );
 	}
 	// done.
+}
+
+
+//---------------------------------------------------------------------------
+// Virtual Memory, used for model caching, since we can't allocate them
+// in the main Hunk (since it gets cleared on level changes), and they're
+// too large to go into the Zone, we have a special memory chunk just for
+// caching models in between levels.
+//
+// Optimized for Win32 systems, so that they'll grow the swapfile at startup
+// if needed, but won't actually commit it until it's needed.
+//
+// GOAL: reserve a big chunk of virtual memory for the media cache, and only
+// use it when we actually need it. This will make sure the swap file grows
+// at startup if needed, rather than each allocation we make.
+byte    *membase = NULL;
+int hunkmaxsize;
+int cursize;
+
+#define R_HUNK_MEGS     24
+#define R_HUNK_SIZE     ( R_HUNK_MEGS*1024*1024 )
+
+void *R_Hunk_Begin( void ) {
+	int maxsize = R_HUNK_SIZE;
+
+	//Com_Printf("R_Hunk_Begin\n");
+
+	// reserve a huge chunk of memory, but don't commit any yet
+	cursize = 0;
+	hunkmaxsize = maxsize;
+
+#ifdef _WIN32
+
+	// this will "reserve" a chunk of memory for use by this application
+	// it will not be "committed" just yet, but the swap file will grow
+	// now if needed
+	membase = VirtualAlloc( NULL, maxsize, MEM_RESERVE, PAGE_NOACCESS );
+
+#else
+
+	// show_bug.cgi?id=440
+	// if not win32, then just allocate it now
+	// it is possible that we have been allocated already, in case we don't do anything
+	if ( !membase ) {
+		membase = malloc( maxsize );
+		// TTimo NOTE: initially, I was doing the memset even if we had an existing membase
+		// but this breaks some shaders (i.e. /map mp_beach, then go back to the main menu .. some shaders are missing)
+		// I assume the shader missing is because we don't clear memory either on win32
+		// meaning even on win32 we are using memory that is still reserved but was uncommited .. it works out of pure luck
+		memset( membase, 0, maxsize );
+	}
+
+#endif
+
+	if ( !membase ) {
+		ri.Error( ERR_DROP, "R_Hunk_Begin: reserve failed" );
+	}
+
+	return (void *)membase;
+}
+
+// this is only called when we shutdown GL
+void R_Hunk_End( void ) {
+	//Com_Printf("R_Hunk_End\n");
+
+	if ( membase ) {
+#ifdef _WIN32
+		VirtualFree( membase, 0, MEM_RELEASE );
+#else
+		free( membase );
+#endif
+	}
+
+	membase = NULL;
 }
 
 /*
@@ -1030,6 +1110,8 @@ void RE_Shutdown( qboolean destroyWindow ) {
 }
 
 
+
+
 /*
 =============
 RE_EndRegistration
@@ -1046,6 +1128,24 @@ void R_ComputeCursorPosition( int* x, int* y )
 		*x += (glConfig.vidWidth - glInfo.winWidth)/2;
 		*y += (glConfig.vidHeight - glInfo.winHeight)/2;
 	}
+}
+
+/*
+** RE_BeginRegistration
+*/
+void RE_BeginRegistration( glconfig_t *glconfigOut ) {
+	ri.Hunk_Clear();    // (SA) MEM NOTE: not in missionpack
+
+	R_Init();
+	*glconfigOut = glConfig;
+
+
+	tr.viewCluster = -1;        // force markleafs to regenerate
+	R_ClearFlares();
+	RE_ClearScene();
+
+	tr.registered = qtrue;
+
 }
 
 
@@ -1073,7 +1173,7 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.Shutdown = RE_Shutdown;
 
 	re.BeginRegistration = RE_BeginRegistration;
-	re.RegisterModel    = RE_RegisterModel;
+	//re.RegisterModel    = RE_RegisterModel;
 	re.RegisterSkin     = RE_RegisterSkin;
 //----(SA) added
 	re.GetSkinModel         = RE_GetSkinModel;
@@ -1089,7 +1189,7 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.EndFrame         = RE_EndFrame;
 
 	re.MarkFragments    = R_MarkFragments;
-	re.LerpTag          = R_LerpTag;
+	//re.LerpTag          = R_LerpTag;
 	re.ModelBounds      = R_ModelBounds;
 
 	re.ClearScene       = RE_ClearScene;
