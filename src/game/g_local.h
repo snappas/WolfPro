@@ -646,6 +646,12 @@ typedef struct {
 	int servertime;
 } clientMarker_t;
 
+typedef struct animationInfo_s {
+	lerpInfo_t lerpInfo;
+	lerpFrame_t torso;
+	lerpFrame_t legs;
+} animationInfo_t;
+
 #define MAX_CLIENT_MARKERS 10
 
 #define LT_SPECIAL_PICKUP_MOD   3       // JPW NERVE # of times (minus one for modulo) LT must drop ammo before scoring a point
@@ -660,7 +666,7 @@ typedef struct {
 	vec3_t		mins, maxs;
 	vec3_t		currentOrigin;
 	int			leveltime;
-	//clientAnimationInfo_t animInfo;
+	animationInfo_t animationInfo;
 } clientHistory_t;
 
 typedef struct unlagged_s {
@@ -686,11 +692,6 @@ typedef struct unlagged_s {
 	qboolean        spawnprotected;
 } unlagged_t;
 
-typedef struct animationInfo_s {
-	lerpInfo_t lerpInfo;
-	lerpFrame_t torso;
-	lerpFrame_t legs;
-} animationInfo_t;
 
 // this structure is cleared on each ClientSpawn(),
 // except for 'client->pers' and 'client->sess'

@@ -2879,6 +2879,7 @@ Advances the non-player objects in the world
 ================
 */
 void G_RunFrame( int levelTime ) {
+	level.frameStartTime = trap_Milliseconds();
 	int i;
 	gentity_t   *ent;
 	int worldspawnflags, gt;
@@ -3117,7 +3118,6 @@ void G_RunFrame( int levelTime ) {
 	}
 	
 
-	level.frameStartTime = trap_Milliseconds();
 }
 
 
