@@ -424,6 +424,8 @@ vmCvar_t cg_teamObituaryColorEnemyTK;
 vmCvar_t cg_fragsY;
 vmCvar_t cg_fragsWidth;
 
+vmCvar_t cg_predictJumps;
+
 typedef struct {
 	vmCvar_t    *vmCvar;
 	char        *cvarName;
@@ -743,6 +745,8 @@ cvarTable_t cvarTable[] = {
 
 	{ &cg_fragsY, "cg_fragsY", "0", CVAR_ARCHIVE },
 	{ &cg_fragsWidth, "cg_fragsWidth", "16", CVAR_ARCHIVE },
+
+	{ &cg_predictJumps, "cg_predictJumps", "1", CVAR_ARCHIVE },
 	
 };
 int cvarTableSize = sizeof( cvarTable ) / sizeof( cvarTable[0] );
