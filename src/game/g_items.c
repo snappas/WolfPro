@@ -882,7 +882,7 @@ gentity_t *LaunchItem( gitem_t *item, vec3_t origin, vec3_t velocity, int ownerN
 
 	trap_Trace( &tr, origin, dropped->r.mins, dropped->r.maxs, origin, ownerNum, MASK_SOLID );
 	if ( tr.startsolid ) {
-		VectorSubtract( g_entities[ownerNum].s.origin, origin, temp );
+		VectorSubtract( g_entities[ownerNum].r.currentOrigin, origin, temp ); // Fix document passing through walls #24 (was g_entities[ownerNum].s.origin)
 		VectorNormalize( temp );
 
 		for ( i = 16; i <= 48; i += 16 ) {
