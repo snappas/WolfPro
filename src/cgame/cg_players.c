@@ -73,25 +73,7 @@ qboolean CG_EntOnFire( centity_t *cent ) {
 	}
 }
 
-/*
-================
-CG_IsCrouchingAnim
-================
-*/
-qboolean CG_IsCrouchingAnim( clientInfo_t *ci, int animNum ) {
-	animation_t *anim;
 
-	// FIXME: make compatible with new scripting
-	animNum &= ~ANIM_TOGGLEBIT;
-	//
-	anim = BG_GetAnimationForIndex( ci->clientNum, animNum );
-	//
-	if ( anim->movetype & ( ( 1 << ANIM_MT_IDLECR ) | ( 1 << ANIM_MT_WALKCR ) | ( 1 << ANIM_MT_WALKCRBK ) ) ) {
-		return qtrue;
-	}
-	//
-	return qfalse;
-}
 
 /*
 ================
@@ -1131,21 +1113,6 @@ PLAYER ANIMATION
 
 /*
 ===============
-CG_SetLerpFrameAnimation
-
-may include ANIM_TOGGLEBIT
-===============
-*/
-static void CG_SetLerpFrameAnimation( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation ) {
-	BG_SetLerpFrameAnimation(ci->modelInfo, lf, newAnimation);
-	
-	if ( cg_debugAnim.integer == 1 ) {              // DHM - Nerve :: extra debug info
-		CG_Printf( "Anim: %i, %s\n", newAnimation, ci->modelInfo->animations[newAnimation].name );
-	}
-}
-
-/*
-===============
 CG_RunLerpFrame
 
 Sets cg.snap, cg.oldFrame, and cg.backlerp
@@ -1154,8 +1121,16 @@ cg.time should be between oldFrameTime and frameTime after exit
 */
 void CG_RunLerpFrame( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, float speedScale ) {
 	animModelInfo_t* modelInfo = NULL;
+	int clientNum = -1;
+	centity_t *cent = NULL;
+	lerpFrame_t *torsoLerpframe = NULL;
+	lerpFrame_t *legsLerpframe = NULL;
 	if(ci){
 		modelInfo = ci->modelInfo;
+		clientNum = ci->clientNum;
+		cent = &cg_entities[clientNum];
+		torsoLerpframe = &cent->pe.torso;
+	    legsLerpframe = &cent->pe.legs;
 	}
 
 	// debugging tool to get no animations
@@ -1164,7 +1139,7 @@ void CG_RunLerpFrame( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, float
 		return;
 	}
 
-	BG_RunLerpFrame(modelInfo, lf, cg.time, newAnimation);
+	BG_RunLerpFrame(clientNum, modelInfo, lf, cg.time, newAnimation, torsoLerpframe,  legsLerpframe);
 
 }
 
@@ -1176,11 +1151,27 @@ CG_ClearLerpFrame
 */
 static void CG_ClearLerpFrame( clientInfo_t *ci, lerpFrame_t *lf, int animationNumber ) {
 	lf->frameTime = lf->oldFrameTime = cg.time;
-	CG_SetLerpFrameAnimation( ci, lf, animationNumber );
+
+	animModelInfo_t* modelInfo = NULL;
+	int clientNum = -1;
+	centity_t *cent = NULL;
+	lerpFrame_t *torsoLerpframe = NULL;
+	lerpFrame_t *legsLerpframe = NULL;
+	if(ci){
+		modelInfo = ci->modelInfo;
+		clientNum = ci->clientNum;
+		cent = &cg_entities[clientNum];
+		torsoLerpframe = &cent->pe.torso;
+	    legsLerpframe = &cent->pe.legs;
+	}
+
+	BG_SetLerpFrameAnimation(cg.time, clientNum, modelInfo, lf, animationNumber, torsoLerpframe, legsLerpframe );
 	if ( lf->animation ) {
 		lf->oldFrame = lf->frame = lf->animation->firstFrame;
 	}
 }
+
+
 
 //------------------------------------------------------------------------------
 // Ridah, variable speed animations
@@ -1193,7 +1184,7 @@ may include ANIM_TOGGLEBIT
 */
 void CG_SetLerpFrameAnimationRate( centity_t *cent, clientInfo_t *ci, lerpFrame_t *lf, int newAnimation ) {
 	animation_t *anim, *oldanim;
-	int transitionMin = -1, oldAnimNum;
+	int oldAnimNum;
 	qboolean firstAnim = qfalse;
 
 	if ( !ci->modelInfo ) {
@@ -1219,33 +1210,7 @@ void CG_SetLerpFrameAnimationRate( centity_t *cent, clientInfo_t *ci, lerpFrame_
 	lf->animation = anim;
 	lf->animationTime = lf->frameTime + anim->initialLerp;
 
-	if ( !( anim->flags & ANIMFL_FIRINGANIM ) || ( lf != &cent->pe.torso ) ) {
-		if ( ( lf == &cent->pe.legs ) && ( CG_IsCrouchingAnim( ci, newAnimation ) != CG_IsCrouchingAnim( ci, oldAnimNum ) ) ) {
-			if ( anim->moveSpeed || ( anim->movetype & ( ( 1 << ANIM_MT_TURNLEFT ) | ( 1 << ANIM_MT_TURNRIGHT ) ) ) ) { // if unknown movetype, go there faster
-				transitionMin = lf->frameTime + 200;    // slowly raise/drop
-			} else {
-				transitionMin = lf->frameTime + 350;    // slowly raise/drop
-			}
-		} else if ( anim->moveSpeed ) {
-			transitionMin = lf->frameTime + 120;    // always do some lerping (?)
-		} else { // not moving, so take your time
-			transitionMin = lf->frameTime + 170;    // always do some lerping (?)
-
-		}
-		if ( oldanim && oldanim->animBlend ) { //transitionMin < lf->frameTime + oldanim->animBlend) {
-			transitionMin = lf->frameTime + oldanim->animBlend;
-			lf->animationTime = transitionMin;
-		} else {
-			// slow down transitions according to speed
-			if ( anim->moveSpeed && lf->animSpeedScale < 1.0 ) {
-				lf->animationTime += anim->initialLerp;
-			}
-
-			if ( lf->animationTime < transitionMin ) {
-				lf->animationTime = transitionMin;
-			}
-		}
-	}
+	BG_LerpCrouchingAnimation(ci->clientNum, lf, &cent->pe.torso, &cent->pe.legs, newAnimation, oldAnimNum, oldanim);
 
 	// if first anim, go immediately
 	if ( firstAnim ) {
@@ -1259,6 +1224,8 @@ void CG_SetLerpFrameAnimationRate( centity_t *cent, clientInfo_t *ci, lerpFrame_
 	}
 }
 
+
+
 /*
 ===============
 CG_RunLerpFrameRate
@@ -1268,197 +1235,7 @@ cg.time should be between oldFrameTime and frameTime after exit
 ===============
 */
 void CG_RunLerpFrameRate( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, centity_t *cent, int recursion ) {
-	int f;
-	animation_t *anim, *oldAnim;
-	animation_t *otherAnim = NULL;
-	qboolean isLadderAnim;
-
-#define ANIM_SCALEMAX_LOW   1.1
-#define ANIM_SCALEMAX_HIGH  1.6
-
-#define ANIM_SPEEDMAX_LOW   100
-#define ANIM_SPEEDMAX_HIGH  20
-
-	// debugging tool to get no animations
-	if ( cg_animSpeed.integer == 0 ) {
-		lf->oldFrame = lf->frame = lf->backlerp = 0;
-		return;
-	}
-
-	isLadderAnim = lf->animation && ( lf->animation->flags & ANIMFL_LADDERANIM );
-
-	oldAnim = lf->animation;
-
-	// see if the animation sequence is switching
-	if ( newAnimation != lf->animationNumber || !lf->animation ) {
-		CG_SetLerpFrameAnimationRate( cent, ci, lf, newAnimation );
-	}
-
-	// Ridah, make sure the animation speed is updated when possible
-	anim = lf->animation;
-	if ( anim->moveSpeed && lf->oldFrameSnapshotTime ) {
-		float moveSpeed;
-
-		// calculate the speed at which we moved over the last frame
-		if ( cg.latestSnapshotTime != lf->oldFrameSnapshotTime && cg.nextSnap ) {
-			if ( cent->currentState.number == cg.snap->ps.clientNum ) {
-				if ( isLadderAnim ) { // only use Z axis for speed
-					if ( cent->currentState.aiChar != AICHAR_FEMZOMBIE ) {    // femzombie has sideways climbing
-						lf->oldFramePos[0] = cent->lerpOrigin[0];
-						lf->oldFramePos[1] = cent->lerpOrigin[1];
-					}
-				} else {    // only use x/y axis
-					lf->oldFramePos[2] = cent->lerpOrigin[2];
-				}
-				moveSpeed = Distance( cent->lerpOrigin, lf->oldFramePos ) / ( (float)( cg.time - lf->oldFrameTime ) / 1000.0 );
-			} else {
-				if ( isLadderAnim ) { // only use Z axis for speed
-					lf->oldFramePos[0] = cent->currentState.pos.trBase[0];
-					lf->oldFramePos[1] = cent->currentState.pos.trBase[1];
-				}
-
-				moveSpeed = Distance( cent->lerpOrigin, lf->oldFramePos ) / ( (float)( cg.time - lf->oldFrameTime ) / 1000.0 );
-				
-			}
-			//
-			// convert it to a factor of this animation's movespeed
-			lf->animSpeedScale = moveSpeed / (float)anim->moveSpeed;
-			lf->oldFrameSnapshotTime = cg.latestSnapshotTime;
-		}
-	} else {
-		// move at normal speed
-		lf->animSpeedScale = 1.0;
-		lf->oldFrameSnapshotTime = cg.latestSnapshotTime;
-	}
-	// adjust with manual setting (pain anims)
-	lf->animSpeedScale *= cent->pe.animSpeed;
-
-	// if we have passed the current frame, move it to
-	// oldFrame and calculate a new frame
-	if ( cg.time >= lf->frameTime ) {
-
-		lf->oldFrame = lf->frame;
-		lf->oldFrameTime = lf->frameTime;
-		VectorCopy( cent->lerpOrigin, lf->oldFramePos );
-
-		// restrict the speed range
-		if ( lf->animSpeedScale < 0.25 ) {    // if it's too slow, then a really slow spped, combined with a sudden take-off, can leave them playing a really slow frame while they a moving really fast
-			if ( lf->animSpeedScale < 0.01 && isLadderAnim ) {
-				lf->animSpeedScale = 0.0;
-			} else {
-				lf->animSpeedScale = 0.25;
-			}
-		} else if ( lf->animSpeedScale > ANIM_SCALEMAX_LOW ) {
-
-			if ( !( anim->flags & ANIMFL_LADDERANIM ) ) {
-				// allow slower anims to speed up more than faster anims
-				if ( anim->moveSpeed > ANIM_SPEEDMAX_LOW ) {
-					lf->animSpeedScale = ANIM_SCALEMAX_LOW;
-				} else if ( anim->moveSpeed < ANIM_SPEEDMAX_HIGH ) {
-					if ( lf->animSpeedScale > ANIM_SCALEMAX_HIGH ) {
-						lf->animSpeedScale = ANIM_SCALEMAX_HIGH;
-					}
-				} else {
-					lf->animSpeedScale = ANIM_SCALEMAX_HIGH - ( ANIM_SCALEMAX_HIGH - ANIM_SCALEMAX_LOW ) * (float)( anim->moveSpeed - ANIM_SPEEDMAX_HIGH ) / (float)( ANIM_SPEEDMAX_LOW - ANIM_SPEEDMAX_HIGH );
-				}
-			} else if ( lf->animSpeedScale > 4.0 ) {
-				lf->animSpeedScale = 4.0;
-			}
-
-		}
-
-		if ( lf == &cent->pe.legs ) {
-			otherAnim = cent->pe.torso.animation;
-		} else if ( lf == &cent->pe.torso ) {
-			otherAnim = cent->pe.legs.animation;
-		}
-
-		// get the next frame based on the animation
-		if ( !lf->animSpeedScale ) {
-			// stopped on the ladder, so stay on the same frame
-			f = lf->frame - anim->firstFrame;
-			lf->frameTime += anim->frameLerp;       // don't wait too long before starting to move again
-		} else if ( lf->oldAnimationNumber != lf->animationNumber &&
-					( !anim->moveSpeed || lf->oldFrame < anim->firstFrame || lf->oldFrame >= anim->firstFrame + anim->numFrames ) ) { // Ridah, added this so walking frames don't always get reset to 0, which can happen in the middle of a walking anim, which looks wierd
-			lf->frameTime = lf->animationTime;      // initial lerp
-			if ( oldAnim && anim->moveSpeed ) {   // keep locomotions going continuously
-				f = ( lf->frame - oldAnim->firstFrame ) + 1;
-				while ( f < 0 ) {
-					f += anim->numFrames;
-				}
-			} else {
-				f = 0;
-			}
-		} else if ( ( lf == &cent->pe.legs ) && otherAnim && !( anim->flags & ANIMFL_FIRINGANIM ) && ( ( lf->animationNumber & ~ANIM_TOGGLEBIT ) == ( cent->pe.torso.animationNumber & ~ANIM_TOGGLEBIT ) ) && ( !anim->moveSpeed ) ) {
-			// legs should synch with torso
-			f = cent->pe.torso.frame - otherAnim->firstFrame;
-			if ( f >= anim->numFrames || f < 0 ) {
-				f = 0;  // wait at the start for the legs to catch up (assuming they are still in an old anim)
-			}
-			lf->frameTime = cent->pe.torso.frameTime;
-		} else if ( ( lf == &cent->pe.torso ) && otherAnim && !( anim->flags & ANIMFL_FIRINGANIM ) && ( ( lf->animationNumber & ~ANIM_TOGGLEBIT ) == ( cent->pe.legs.animationNumber & ~ANIM_TOGGLEBIT ) ) && ( otherAnim->moveSpeed ) ) {
-			// torso needs to sync with legs
-			f = cent->pe.legs.frame - otherAnim->firstFrame;
-			if ( f >= anim->numFrames || f < 0 ) {
-				f = 0;  // wait at the start for the legs to catch up (assuming they are still in an old anim)
-			}
-			lf->frameTime = cent->pe.legs.frameTime;
-		} else {
-			lf->frameTime = lf->oldFrameTime + (int)( (float)anim->frameLerp * ( 1.0 / lf->animSpeedScale ) );
-			if ( lf->frameTime < cg.time ) {
-				lf->frameTime = cg.time;
-			}
-
-			// check for skipping frames (eg. death anims play in slo-mo if low framerate)
-			if ( cg.time > lf->frameTime && !anim->moveSpeed ) {
-				f = ( lf->frame - anim->firstFrame ) + 1 + ( cg.time - lf->frameTime ) / anim->frameLerp;
-			} else {
-				f = ( lf->frame - anim->firstFrame ) + 1;
-			}
-
-			if ( f < 0 ) {
-				f = 0;
-			}
-		}
-		//f = ( lf->frameTime - lf->animationTime ) / anim->frameLerp;
-		if ( f >= anim->numFrames ) {
-			f -= anim->numFrames;
-			if ( anim->loopFrames ) {
-				f %= anim->loopFrames;
-				f += anim->numFrames - anim->loopFrames;
-			} else {
-				f = anim->numFrames - 1;
-				// the animation is stuck at the end, so it
-				// can immediately transition to another sequence
-				lf->frameTime = cg.time;
-			}
-		}
-		lf->frame = anim->firstFrame + f;
-		if ( cg.time > lf->frameTime ) {
-
-			// Ridah, run the frame again until we move ahead of the current time, fixes walking speeds for zombie
-			if ( /*!anim->moveSpeed ||*/ recursion > 4 ) {
-				lf->frameTime = cg.time;
-			} else {
-				CG_RunLerpFrameRate( ci, lf, newAnimation, cent, recursion + 1 );
-			}
-
-			if ( cg_debugAnim.integer > 3 ) {
-				CG_Printf( "Clamp lf->frameTime\n" );
-			}
-		}
-		lf->oldAnimationNumber = lf->animationNumber;
-	}
-
-	if ( lf->oldFrameTime > cg.time ) {
-		lf->oldFrameTime = cg.time;
-	}
-	// calculate current lerp value
-	if ( lf->frameTime == lf->oldFrameTime ) {
-		lf->backlerp = 0;
-	} else {
-		lf->backlerp = 1.0 - (float)( cg.time - lf->oldFrameTime ) / ( lf->frameTime - lf->oldFrameTime );
-	}
+	BG_RunLerpFrameRate(cg.latestSnapshotTime, cg.time, ci->clientNum, ci->modelInfo, lf, newAnimation, &cent->pe.torso, &cent->pe.legs, cent->currentState.pos.trBase, cent->pe.animSpeed, recursion);
 }
 
 /*
@@ -1468,7 +1245,19 @@ CG_ClearLerpFrameRate
 */
 void CG_ClearLerpFrameRate( clientInfo_t *ci, lerpFrame_t *lf, int animationNumber, centity_t *cent ) {
 	lf->frameTime = lf->oldFrameTime = cg.time;
-	CG_SetLerpFrameAnimationRate( cent, ci, lf, animationNumber );
+
+	animModelInfo_t* modelInfo = NULL;
+	int clientNum = -1;
+	lerpFrame_t *torsoLerpframe = NULL;
+	lerpFrame_t *legsLerpframe = NULL;
+	if(ci){
+		modelInfo = ci->modelInfo;
+		clientNum = ci->clientNum;
+		torsoLerpframe = &cent->pe.torso;
+	    legsLerpframe = &cent->pe.legs;
+	}
+
+	BG_SetLerpFrameAnimation(cg.time, clientNum, modelInfo, lf, animationNumber, torsoLerpframe, legsLerpframe );
 	if ( lf->animation ) {
 		lf->oldFrame = lf->frame = lf->animation->firstFrame;
 	}

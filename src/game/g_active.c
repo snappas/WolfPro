@@ -760,17 +760,17 @@ static void G_PlayerAnimation(gentity_t *ent){
 	if (!modelInfo) {
 		return;
 	}
-	BG_RunLerpFrame(modelInfo, &ent->client->animationInfo.legs, level.time, (ent->s.legsAnim & ~ANIM_TOGGLEBIT));
-	BG_RunLerpFrame(modelInfo, &ent->client->animationInfo.torso, level.time, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT));
+	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.legs, (ent->s.legsAnim & ~ANIM_TOGGLEBIT), &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, 1.0, 0);
+	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.torso, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT), &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, 1.0, 0);
 	lerpInfo_t *li = &ent->client->animationInfo.lerpInfo;
 	lerpFrame_t *lfTorso = &ent->client->animationInfo.torso;
 	lerpFrame_t* lfLegs = &ent->client->animationInfo.legs;
-	li->backlerp = 0.0f;
+	li->backlerp = lfLegs->backlerp;
 	li->frame = lfLegs->frame;
-	li->oldFrame = lfLegs->frame;
+	li->oldFrame = lfLegs->oldFrame;
 	li->torsoFrame = lfTorso->frame;
-	li->oldTorsoFrame = lfTorso->frame;
-	li->torsoBacklerp = 0.0f;
+	li->oldTorsoFrame = lfTorso->oldFrame;
+	li->torsoBacklerp = lfTorso->backlerp;
 }
 
 void limbo( gentity_t *ent, qboolean makeCorpse ); // JPW NERVE

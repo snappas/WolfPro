@@ -1560,15 +1560,7 @@ void AddHeadEntities(gentity_t* skip, int content, int mask){
 	}
 }
 
-void FreeHeadEntity(gentity_t* ent){
-	if (ent && ent->client && ent->headBBox)
-	{
-		G_FreeEntity(ent->headBBox);
-		ent->headBBox = NULL;
-	}
-}
-
-void RemoveHeadEntity(gentity_t* ent){
+void RemoveHeadEntity(gentity_t* ent) {
 	if (ent && ent->client && ent->headBBox)
 	{
 		if (ent->headBBox->r.linked)
@@ -1578,6 +1570,17 @@ void RemoveHeadEntity(gentity_t* ent){
 		}
 	}
 }
+
+void FreeHeadEntity(gentity_t* ent){
+	if (ent && ent->client && ent->headBBox)
+	{
+		RemoveHeadEntity(ent);
+		G_FreeEntity(ent->headBBox);
+		ent->headBBox = NULL;
+	}
+}
+
+
 
 void RemoveHeadEntities(gentity_t* skip){
 	gentity_t* ent;
