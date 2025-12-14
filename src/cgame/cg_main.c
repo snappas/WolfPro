@@ -746,7 +746,7 @@ cvarTable_t cvarTable[] = {
 	{ &cg_fragsY, "cg_fragsY", "0", CVAR_ARCHIVE },
 	{ &cg_fragsWidth, "cg_fragsWidth", "16", CVAR_ARCHIVE },
 
-	{ &cg_predictJumps, "cg_predictJumps", "1", CVAR_ARCHIVE },
+	{ &cg_predictJumps, "cg_predictJumps", "0", CVAR_ARCHIVE },
 	
 };
 int cvarTableSize = sizeof( cvarTable ) / sizeof( cvarTable[0] );

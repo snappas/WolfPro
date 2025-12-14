@@ -1166,8 +1166,6 @@ void R_AddBeamSurfaces( trRefEntity_t *e );
 void R_AddRailSurfaces( trRefEntity_t *e, qboolean isUnderwater );
 void R_AddLightningBoltSurfaces( trRefEntity_t *e );
 
-void R_TagInfo_f( void );
-
 void R_AddPolygonSurfaces( void );
 
 void R_DecomposeSort( unsigned sort, int *entityNum, shader_t **shader,
@@ -1241,7 +1239,6 @@ void        RE_BeginFrame( stereoFrame_t stereoFrame );
 void        RE_BeginRegistration( glconfig_t *glconfig );
 void        RE_LoadWorldMap( const char *mapname );
 void        RE_SetWorldVisData( const byte *vis );
-qhandle_t   RE_RegisterModel( const char *name );
 qhandle_t   RE_RegisterSkin( const char *name );
 void        RE_Shutdown( qboolean destroyWindow );
 
@@ -1695,8 +1692,6 @@ void R_InitTexnumImages( qboolean force );
 
 void *R_CacheModelAlloc( int size );
 void R_CacheModelFree( void *ptr );
-void R_PurgeModels( int count );
-void R_BackupModels( void );
 qboolean R_FindCachedModel( const char *name, model_t *newmod );
 void R_LoadCacheModels( void );
 

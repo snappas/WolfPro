@@ -1772,7 +1772,6 @@ void R_RenderView( viewParms_t *parms ) {
 			R_FreeImageBuffer();    // clear all image buffers
 			R_PurgeShaders( 10 );
 			R_PurgeBackupImages( 1 );
-			R_PurgeModels( 1 );
 			lastTime = tr.refdef.time;
 		}
 	}
