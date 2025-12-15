@@ -740,6 +740,39 @@ void WolfFindMedic( gentity_t *self ) {
 	}
 }
 
+static void G_PlayerAngles( gentity_t *ent ) {
+	vec3_t legsAngles;
+	vec3_t torsoAngles;
+	vec3_t headAngles;
+
+	lerpInfo_t *li = &ent->client->animationInfo.lerpInfo;
+	BG_PlayerAngles(ent->s.number, &ent->s, level.frameTime, &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->client->ps.viewangles,
+					 legsAngles, torsoAngles, headAngles,
+					 li->legsAxis, li->torsoAxis, li->headAxis);
+	BG_PlayerAnglesToAxis(legsAngles, torsoAngles, headAngles,
+							 li->legsAxis, li->torsoAxis, li->headAxis);
+}
+
+static void G_PlayerAnimation(gentity_t *ent){
+	animModelInfo_t* modelInfo = NULL;
+
+	modelInfo = BG_ModelInfoForClient(ent->s.number);
+	if (!modelInfo) {
+		return;
+	}
+	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.legs, (ent->s.legsAnim & ~ANIM_TOGGLEBIT), &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, 1.0, 0);
+	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.torso, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT), &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, 1.0, 0);
+	lerpInfo_t *li = &ent->client->animationInfo.lerpInfo;
+	lerpFrame_t *lfTorso = &ent->client->animationInfo.torso;
+	lerpFrame_t* lfLegs = &ent->client->animationInfo.legs;
+	li->backlerp = lfLegs->backlerp;
+	li->frame = lfLegs->frame;
+	li->oldFrame = lfLegs->oldFrame;
+	li->torsoFrame = lfTorso->frame;
+	li->oldTorsoFrame = lfTorso->oldFrame;
+	li->torsoBacklerp = lfTorso->backlerp;
+}
+
 void limbo( gentity_t *ent, qboolean makeCorpse ); // JPW NERVE
 void reinforce( gentity_t *ent ); // JPW NERVE
 
@@ -1119,6 +1152,10 @@ void ClientThink_real( gentity_t *ent ) {
 	ent->waterlevel = pm.waterlevel;
 	ent->watertype = pm.watertype;
 
+	
+	G_PlayerAngles(ent);
+	G_PlayerAnimation(ent);
+	
 	// execute client events
 	if ( level.paused == PAUSE_NONE ) {
 		ClientEvents( ent, oldEventSequence );

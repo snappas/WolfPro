@@ -643,10 +643,9 @@ qboolean IsHeadShotWeapon( int mod, qboolean aicharacter ) {
 	return qfalse;
 }
 
-qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod ) {
+qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3_t end, int mod ) {
 	gentity_t   *head;
 	trace_t tr;
-	vec3_t start, end;
 	gentity_t   *traceEnt;
 	orientation_t or;           // DHM - Nerve
 
@@ -664,55 +663,20 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t
 	head_shot_weapon = IsHeadShotWeapon( mod, isAICharacter );
 
 	if ( head_shot_weapon ) {
-		head = G_Spawn();
-
-		if ( trap_GetTag( targ->s.number, "tag_head", &or ) ) {
-			G_SetOrigin( head, or.origin );
-		} else {
-			float height, dest;
-			vec3_t v, angles, forward, up, right;
-
-			G_SetOrigin( head, targ->r.currentOrigin );
-
-			if ( targ->client->ps.pm_flags & PMF_DUCKED ) { // closer fake offset for 'head' box when crouching
-				height = targ->client->ps.crouchViewHeight - 12;
-			} else {
-				height = targ->client->ps.viewheight;
-			}
-
-			// NERVE - SMF - this matches more closely with WolfMP models
-			VectorCopy( targ->client->ps.viewangles, angles );
-			if ( angles[PITCH] > 180 ) {
-				dest = ( -360 + angles[PITCH] ) * 0.75;
-			} else {
-				dest = angles[PITCH] * 0.75;
-			}
-			angles[PITCH] = dest;
-
-			AngleVectors( angles, forward, right, up );
-			VectorScale( forward, 5, v );
-			VectorMA( v, 18, up, v );
-
-			VectorAdd( v, head->r.currentOrigin, head->r.currentOrigin );
-			head->r.currentOrigin[2] += height / 2;
-			// -NERVE - SMF
+		if(targ->isHeadshot){
+			return qtrue;
 		}
 
-		VectorCopy( head->r.currentOrigin, head->s.origin );
-		VectorCopy( targ->r.currentAngles, head->s.angles );
-		VectorCopy( head->s.angles, head->s.apos.trBase );
-		VectorCopy( head->s.angles, head->s.apos.trDelta );
-		VectorSet( head->r.mins, -6, -6, -2 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
-		VectorSet( head->r.maxs, 6, 6, 10 ); // changed this z from 0 to 6
-		head->clipmask = CONTENTS_SOLID;
-		head->r.contents = CONTENTS_SOLID;
+		head = targ->headBBox;
 
-		trap_LinkEntity( head );
+		//remove owner so the trace doesn't ignore it
+		int oldOwner = head->r.ownerNum;
+		head->r.ownerNum = ENTITYNUM_NONE;
 
 		// trace another shot see if we hit the head
-		VectorCopy( point, start );
-		VectorMA( start, 64, dir, end );
 		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
+
+		head->r.ownerNum = oldOwner;
 
 		traceEnt = &g_entities[ tr.entityNum ];
 
@@ -726,38 +690,22 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t
 			tent = G_TempEntity( b1, EV_RAILTRAIL );
 			VectorCopy( b2, tent->s.origin2 );
 			tent->s.dmgFlags = 1;
-
-			// show headshot trace
-			// end the headshot trace at the head box if it hits
-			if ( tr.fraction != 1 ) {
-				VectorMA( start, ( tr.fraction * 64 ), dir, end );
-			}
-			tent = G_TempEntity( start, EV_RAILTRAIL );
-			VectorCopy( end, tent->s.origin2 );
-			tent->s.dmgFlags = 0;
 		}
 
-		G_FreeEntity( head );
-
 		if ( traceEnt == head ) {
-			level.totalHeadshots++;         // NERVE - SMF
 			return qtrue;
-		} else {
-			level.missedHeadshots++;    // NERVE - SMF
 		}
 	}
 
 	return qfalse;
 }
 
-gentity_t* G_BuildHead( gentity_t *ent ) {
-	gentity_t* head;
+void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 	orientation_t or;           // DHM - Nerve
 
-	head = G_Spawn();
-
-	if ( trap_GetTag( ent->s.number, "tag_head", &or ) ) {
-		G_SetOrigin( head, or.origin );
+	if ( g_preciseHeadHitbox.integer && trap_GetTag( "tag_head", &or, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
+		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &or);
+		G_SetOrigin( head, head->r.currentOrigin);
 	} else {
 		float height, dest;
 		vec3_t v, angles, forward, up, right;
@@ -796,8 +744,15 @@ gentity_t* G_BuildHead( gentity_t *ent ) {
 	VectorSet( head->r.maxs, 6, 6, 10 ); // changed this z from 0 to 6
 	head->clipmask = CONTENTS_SOLID;
 	head->r.contents = CONTENTS_SOLID;
-	head->parent = ent;
 	head->s.eType = ET_TEMPHEAD;
+}
+
+gentity_t* G_BuildHead( gentity_t *ent ) {
+	gentity_t* head;
+
+	head = G_Spawn();
+
+	G_ComputeHeadPosition(ent, head);
 
 	trap_LinkEntity( head );
 
@@ -1105,7 +1060,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	asave = CheckArmor( targ, take, dflags );
 	take -= asave;
 
-	qboolean isHeadshot = IsHeadShot( targ, qfalse, dir, point, mod );
+	qboolean isHeadshot = targ->isHeadshot;
 	if ( isHeadshot ) {
 
 		if ( take * 2 < 50 ) { // head shots, all weapons, do minimum 50 points damage

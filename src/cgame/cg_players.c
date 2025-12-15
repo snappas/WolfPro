@@ -37,8 +37,6 @@ static char text[100000];
 
 #include "cg_local.h"
 
-#define SWING_RIGHT 1
-#define SWING_LEFT  2
 
 char    *cg_customSoundNames[MAX_CUSTOM_SOUNDS] = {
 	"*death1.wav",
@@ -75,25 +73,7 @@ qboolean CG_EntOnFire( centity_t *cent ) {
 	}
 }
 
-/*
-================
-CG_IsCrouchingAnim
-================
-*/
-qboolean CG_IsCrouchingAnim( clientInfo_t *ci, int animNum ) {
-	animation_t *anim;
 
-	// FIXME: make compatible with new scripting
-	animNum &= ~ANIM_TOGGLEBIT;
-	//
-	anim = BG_GetAnimationForIndex( ci->clientNum, animNum );
-	//
-	if ( anim->movetype & ( ( 1 << ANIM_MT_IDLECR ) | ( 1 << ANIM_MT_WALKCR ) | ( 1 << ANIM_MT_WALKCRBK ) ) ) {
-		return qtrue;
-	}
-	//
-	return qfalse;
-}
 
 /*
 ================
@@ -1133,37 +1113,6 @@ PLAYER ANIMATION
 
 /*
 ===============
-CG_SetLerpFrameAnimation
-
-may include ANIM_TOGGLEBIT
-===============
-*/
-static void CG_SetLerpFrameAnimation( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation ) {
-	animation_t *anim;
-
-	if ( !ci->modelInfo ) {
-		return;
-	}
-
-	lf->animationNumber = newAnimation;
-	newAnimation &= ~ANIM_TOGGLEBIT;
-
-	if ( newAnimation < 0 || newAnimation >= ci->modelInfo->numAnimations ) {
-		CG_Error( "Bad animation number (CG_SLFA): %i", newAnimation );
-	}
-
-	anim = &ci->modelInfo->animations[ newAnimation ];
-
-	lf->animation = anim;
-	lf->animationTime = lf->frameTime + anim->initialLerp;
-
-	if ( cg_debugAnim.integer == 1 ) {              // DHM - Nerve :: extra debug info
-		CG_Printf( "Anim: %i, %s\n", newAnimation, ci->modelInfo->animations[newAnimation].name );
-	}
-}
-
-/*
-===============
 CG_RunLerpFrame
 
 Sets cg.snap, cg.oldFrame, and cg.backlerp
@@ -1171,8 +1120,18 @@ cg.time should be between oldFrameTime and frameTime after exit
 ===============
 */
 void CG_RunLerpFrame( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, float speedScale ) {
-	int f;
-	animation_t *anim;
+	animModelInfo_t* modelInfo = NULL;
+	int clientNum = -1;
+	centity_t *cent = NULL;
+	lerpFrame_t *torsoLerpframe = NULL;
+	lerpFrame_t *legsLerpframe = NULL;
+	if(ci){
+		modelInfo = ci->modelInfo;
+		clientNum = ci->clientNum;
+		cent = &cg_entities[clientNum];
+		torsoLerpframe = &cent->pe.torso;
+	    legsLerpframe = &cent->pe.legs;
+	}
 
 	// debugging tool to get no animations
 	if ( cg_animSpeed.integer == 0 ) {
@@ -1180,63 +1139,8 @@ void CG_RunLerpFrame( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, float
 		return;
 	}
 
-	// see if the animation sequence is switching
-	if ( ci && ( newAnimation != lf->animationNumber || !lf->animation ) ) {  //----(SA)	modified
-		CG_SetLerpFrameAnimation( ci, lf, newAnimation );
-	}
+	BG_RunLerpFrame(clientNum, modelInfo, lf, cg.time, newAnimation, torsoLerpframe,  legsLerpframe);
 
-	// if we have passed the current frame, move it to
-	// oldFrame and calculate a new frame
-	if ( cg.time >= lf->frameTime ) {
-		lf->oldFrame = lf->frame;
-		lf->oldFrameTime = lf->frameTime;
-
-		// get the next frame based on the animation
-		anim = lf->animation;
-		if ( !anim->frameLerp ) {
-			return;     // shouldn't happen
-		}
-		if ( cg.time < lf->animationTime ) {
-			lf->frameTime = lf->animationTime;      // initial lerp
-		} else {
-			lf->frameTime = lf->oldFrameTime + anim->frameLerp;
-		}
-		f = ( lf->frameTime - lf->animationTime ) / anim->frameLerp;
-		f *= speedScale;        // adjust for haste, etc
-		if ( f >= anim->numFrames ) {
-			f -= anim->numFrames;
-			if ( anim->loopFrames ) {
-				f %= anim->loopFrames;
-				f += anim->numFrames - anim->loopFrames;
-			} else {
-				f = anim->numFrames - 1;
-				// the animation is stuck at the end, so it
-				// can immediately transition to another sequence
-				lf->frameTime = cg.time;
-			}
-		}
-		lf->frame = anim->firstFrame + f;
-		if ( cg.time > lf->frameTime ) {
-			lf->frameTime = cg.time;
-			if ( cg_debugAnim.integer ) {
-				CG_Printf( "Clamp lf->frameTime\n" );
-			}
-		}
-	}
-
-	if ( lf->frameTime > cg.time + 200 ) {
-		lf->frameTime = cg.time;
-	}
-
-	if ( lf->oldFrameTime > cg.time ) {
-		lf->oldFrameTime = cg.time;
-	}
-	// calculate current lerp value
-	if ( lf->frameTime == lf->oldFrameTime ) {
-		lf->backlerp = 0;
-	} else {
-		lf->backlerp = 1.0 - (float)( cg.time - lf->oldFrameTime ) / ( lf->frameTime - lf->oldFrameTime );
-	}
 }
 
 
@@ -1247,11 +1151,27 @@ CG_ClearLerpFrame
 */
 static void CG_ClearLerpFrame( clientInfo_t *ci, lerpFrame_t *lf, int animationNumber ) {
 	lf->frameTime = lf->oldFrameTime = cg.time;
-	CG_SetLerpFrameAnimation( ci, lf, animationNumber );
+
+	animModelInfo_t* modelInfo = NULL;
+	int clientNum = -1;
+	centity_t *cent = NULL;
+	lerpFrame_t *torsoLerpframe = NULL;
+	lerpFrame_t *legsLerpframe = NULL;
+	if(ci){
+		modelInfo = ci->modelInfo;
+		clientNum = ci->clientNum;
+		cent = &cg_entities[clientNum];
+		torsoLerpframe = &cent->pe.torso;
+	    legsLerpframe = &cent->pe.legs;
+	}
+
+	BG_SetLerpFrameAnimation(cg.time, clientNum, modelInfo, lf, animationNumber, torsoLerpframe, legsLerpframe );
 	if ( lf->animation ) {
 		lf->oldFrame = lf->frame = lf->animation->firstFrame;
 	}
 }
+
+
 
 //------------------------------------------------------------------------------
 // Ridah, variable speed animations
@@ -1264,7 +1184,7 @@ may include ANIM_TOGGLEBIT
 */
 void CG_SetLerpFrameAnimationRate( centity_t *cent, clientInfo_t *ci, lerpFrame_t *lf, int newAnimation ) {
 	animation_t *anim, *oldanim;
-	int transitionMin = -1, oldAnimNum;
+	int oldAnimNum;
 	qboolean firstAnim = qfalse;
 
 	if ( !ci->modelInfo ) {
@@ -1290,33 +1210,7 @@ void CG_SetLerpFrameAnimationRate( centity_t *cent, clientInfo_t *ci, lerpFrame_
 	lf->animation = anim;
 	lf->animationTime = lf->frameTime + anim->initialLerp;
 
-	if ( !( anim->flags & ANIMFL_FIRINGANIM ) || ( lf != &cent->pe.torso ) ) {
-		if ( ( lf == &cent->pe.legs ) && ( CG_IsCrouchingAnim( ci, newAnimation ) != CG_IsCrouchingAnim( ci, oldAnimNum ) ) ) {
-			if ( anim->moveSpeed || ( anim->movetype & ( ( 1 << ANIM_MT_TURNLEFT ) | ( 1 << ANIM_MT_TURNRIGHT ) ) ) ) { // if unknown movetype, go there faster
-				transitionMin = lf->frameTime + 200;    // slowly raise/drop
-			} else {
-				transitionMin = lf->frameTime + 350;    // slowly raise/drop
-			}
-		} else if ( anim->moveSpeed ) {
-			transitionMin = lf->frameTime + 120;    // always do some lerping (?)
-		} else { // not moving, so take your time
-			transitionMin = lf->frameTime + 170;    // always do some lerping (?)
-
-		}
-		if ( oldanim && oldanim->animBlend ) { //transitionMin < lf->frameTime + oldanim->animBlend) {
-			transitionMin = lf->frameTime + oldanim->animBlend;
-			lf->animationTime = transitionMin;
-		} else {
-			// slow down transitions according to speed
-			if ( anim->moveSpeed && lf->animSpeedScale < 1.0 ) {
-				lf->animationTime += anim->initialLerp;
-			}
-
-			if ( lf->animationTime < transitionMin ) {
-				lf->animationTime = transitionMin;
-			}
-		}
-	}
+	BG_LerpCrouchingAnimation(ci->clientNum, lf, &cent->pe.torso, &cent->pe.legs, newAnimation, oldAnimNum, oldanim);
 
 	// if first anim, go immediately
 	if ( firstAnim ) {
@@ -1330,6 +1224,8 @@ void CG_SetLerpFrameAnimationRate( centity_t *cent, clientInfo_t *ci, lerpFrame_
 	}
 }
 
+
+
 /*
 ===============
 CG_RunLerpFrameRate
@@ -1339,197 +1235,7 @@ cg.time should be between oldFrameTime and frameTime after exit
 ===============
 */
 void CG_RunLerpFrameRate( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, centity_t *cent, int recursion ) {
-	int f;
-	animation_t *anim, *oldAnim;
-	animation_t *otherAnim = NULL;
-	qboolean isLadderAnim;
-
-#define ANIM_SCALEMAX_LOW   1.1
-#define ANIM_SCALEMAX_HIGH  1.6
-
-#define ANIM_SPEEDMAX_LOW   100
-#define ANIM_SPEEDMAX_HIGH  20
-
-	// debugging tool to get no animations
-	if ( cg_animSpeed.integer == 0 ) {
-		lf->oldFrame = lf->frame = lf->backlerp = 0;
-		return;
-	}
-
-	isLadderAnim = lf->animation && ( lf->animation->flags & ANIMFL_LADDERANIM );
-
-	oldAnim = lf->animation;
-
-	// see if the animation sequence is switching
-	if ( newAnimation != lf->animationNumber || !lf->animation ) {
-		CG_SetLerpFrameAnimationRate( cent, ci, lf, newAnimation );
-	}
-
-	// Ridah, make sure the animation speed is updated when possible
-	anim = lf->animation;
-	if ( anim->moveSpeed && lf->oldFrameSnapshotTime ) {
-		float moveSpeed;
-
-		// calculate the speed at which we moved over the last frame
-		if ( cg.latestSnapshotTime != lf->oldFrameSnapshotTime && cg.nextSnap ) {
-			if ( cent->currentState.number == cg.snap->ps.clientNum ) {
-				if ( isLadderAnim ) { // only use Z axis for speed
-					if ( cent->currentState.aiChar != AICHAR_FEMZOMBIE ) {    // femzombie has sideways climbing
-						lf->oldFramePos[0] = cent->lerpOrigin[0];
-						lf->oldFramePos[1] = cent->lerpOrigin[1];
-					}
-				} else {    // only use x/y axis
-					lf->oldFramePos[2] = cent->lerpOrigin[2];
-				}
-				moveSpeed = Distance( cent->lerpOrigin, lf->oldFramePos ) / ( (float)( cg.time - lf->oldFrameTime ) / 1000.0 );
-			} else {
-				if ( isLadderAnim ) { // only use Z axis for speed
-					lf->oldFramePos[0] = cent->currentState.pos.trBase[0];
-					lf->oldFramePos[1] = cent->currentState.pos.trBase[1];
-				}
-
-				moveSpeed = Distance( cent->lerpOrigin, lf->oldFramePos ) / ( (float)( cg.time - lf->oldFrameTime ) / 1000.0 );
-				
-			}
-			//
-			// convert it to a factor of this animation's movespeed
-			lf->animSpeedScale = moveSpeed / (float)anim->moveSpeed;
-			lf->oldFrameSnapshotTime = cg.latestSnapshotTime;
-		}
-	} else {
-		// move at normal speed
-		lf->animSpeedScale = 1.0;
-		lf->oldFrameSnapshotTime = cg.latestSnapshotTime;
-	}
-	// adjust with manual setting (pain anims)
-	lf->animSpeedScale *= cent->pe.animSpeed;
-
-	// if we have passed the current frame, move it to
-	// oldFrame and calculate a new frame
-	if ( cg.time >= lf->frameTime ) {
-
-		lf->oldFrame = lf->frame;
-		lf->oldFrameTime = lf->frameTime;
-		VectorCopy( cent->lerpOrigin, lf->oldFramePos );
-
-		// restrict the speed range
-		if ( lf->animSpeedScale < 0.25 ) {    // if it's too slow, then a really slow spped, combined with a sudden take-off, can leave them playing a really slow frame while they a moving really fast
-			if ( lf->animSpeedScale < 0.01 && isLadderAnim ) {
-				lf->animSpeedScale = 0.0;
-			} else {
-				lf->animSpeedScale = 0.25;
-			}
-		} else if ( lf->animSpeedScale > ANIM_SCALEMAX_LOW ) {
-
-			if ( !( anim->flags & ANIMFL_LADDERANIM ) ) {
-				// allow slower anims to speed up more than faster anims
-				if ( anim->moveSpeed > ANIM_SPEEDMAX_LOW ) {
-					lf->animSpeedScale = ANIM_SCALEMAX_LOW;
-				} else if ( anim->moveSpeed < ANIM_SPEEDMAX_HIGH ) {
-					if ( lf->animSpeedScale > ANIM_SCALEMAX_HIGH ) {
-						lf->animSpeedScale = ANIM_SCALEMAX_HIGH;
-					}
-				} else {
-					lf->animSpeedScale = ANIM_SCALEMAX_HIGH - ( ANIM_SCALEMAX_HIGH - ANIM_SCALEMAX_LOW ) * (float)( anim->moveSpeed - ANIM_SPEEDMAX_HIGH ) / (float)( ANIM_SPEEDMAX_LOW - ANIM_SPEEDMAX_HIGH );
-				}
-			} else if ( lf->animSpeedScale > 4.0 ) {
-				lf->animSpeedScale = 4.0;
-			}
-
-		}
-
-		if ( lf == &cent->pe.legs ) {
-			otherAnim = cent->pe.torso.animation;
-		} else if ( lf == &cent->pe.torso ) {
-			otherAnim = cent->pe.legs.animation;
-		}
-
-		// get the next frame based on the animation
-		if ( !lf->animSpeedScale ) {
-			// stopped on the ladder, so stay on the same frame
-			f = lf->frame - anim->firstFrame;
-			lf->frameTime += anim->frameLerp;       // don't wait too long before starting to move again
-		} else if ( lf->oldAnimationNumber != lf->animationNumber &&
-					( !anim->moveSpeed || lf->oldFrame < anim->firstFrame || lf->oldFrame >= anim->firstFrame + anim->numFrames ) ) { // Ridah, added this so walking frames don't always get reset to 0, which can happen in the middle of a walking anim, which looks wierd
-			lf->frameTime = lf->animationTime;      // initial lerp
-			if ( oldAnim && anim->moveSpeed ) {   // keep locomotions going continuously
-				f = ( lf->frame - oldAnim->firstFrame ) + 1;
-				while ( f < 0 ) {
-					f += anim->numFrames;
-				}
-			} else {
-				f = 0;
-			}
-		} else if ( ( lf == &cent->pe.legs ) && otherAnim && !( anim->flags & ANIMFL_FIRINGANIM ) && ( ( lf->animationNumber & ~ANIM_TOGGLEBIT ) == ( cent->pe.torso.animationNumber & ~ANIM_TOGGLEBIT ) ) && ( !anim->moveSpeed ) ) {
-			// legs should synch with torso
-			f = cent->pe.torso.frame - otherAnim->firstFrame;
-			if ( f >= anim->numFrames || f < 0 ) {
-				f = 0;  // wait at the start for the legs to catch up (assuming they are still in an old anim)
-			}
-			lf->frameTime = cent->pe.torso.frameTime;
-		} else if ( ( lf == &cent->pe.torso ) && otherAnim && !( anim->flags & ANIMFL_FIRINGANIM ) && ( ( lf->animationNumber & ~ANIM_TOGGLEBIT ) == ( cent->pe.legs.animationNumber & ~ANIM_TOGGLEBIT ) ) && ( otherAnim->moveSpeed ) ) {
-			// torso needs to sync with legs
-			f = cent->pe.legs.frame - otherAnim->firstFrame;
-			if ( f >= anim->numFrames || f < 0 ) {
-				f = 0;  // wait at the start for the legs to catch up (assuming they are still in an old anim)
-			}
-			lf->frameTime = cent->pe.legs.frameTime;
-		} else {
-			lf->frameTime = lf->oldFrameTime + (int)( (float)anim->frameLerp * ( 1.0 / lf->animSpeedScale ) );
-			if ( lf->frameTime < cg.time ) {
-				lf->frameTime = cg.time;
-			}
-
-			// check for skipping frames (eg. death anims play in slo-mo if low framerate)
-			if ( cg.time > lf->frameTime && !anim->moveSpeed ) {
-				f = ( lf->frame - anim->firstFrame ) + 1 + ( cg.time - lf->frameTime ) / anim->frameLerp;
-			} else {
-				f = ( lf->frame - anim->firstFrame ) + 1;
-			}
-
-			if ( f < 0 ) {
-				f = 0;
-			}
-		}
-		//f = ( lf->frameTime - lf->animationTime ) / anim->frameLerp;
-		if ( f >= anim->numFrames ) {
-			f -= anim->numFrames;
-			if ( anim->loopFrames ) {
-				f %= anim->loopFrames;
-				f += anim->numFrames - anim->loopFrames;
-			} else {
-				f = anim->numFrames - 1;
-				// the animation is stuck at the end, so it
-				// can immediately transition to another sequence
-				lf->frameTime = cg.time;
-			}
-		}
-		lf->frame = anim->firstFrame + f;
-		if ( cg.time > lf->frameTime ) {
-
-			// Ridah, run the frame again until we move ahead of the current time, fixes walking speeds for zombie
-			if ( /*!anim->moveSpeed ||*/ recursion > 4 ) {
-				lf->frameTime = cg.time;
-			} else {
-				CG_RunLerpFrameRate( ci, lf, newAnimation, cent, recursion + 1 );
-			}
-
-			if ( cg_debugAnim.integer > 3 ) {
-				CG_Printf( "Clamp lf->frameTime\n" );
-			}
-		}
-		lf->oldAnimationNumber = lf->animationNumber;
-	}
-
-	if ( lf->oldFrameTime > cg.time ) {
-		lf->oldFrameTime = cg.time;
-	}
-	// calculate current lerp value
-	if ( lf->frameTime == lf->oldFrameTime ) {
-		lf->backlerp = 0;
-	} else {
-		lf->backlerp = 1.0 - (float)( cg.time - lf->oldFrameTime ) / ( lf->frameTime - lf->oldFrameTime );
-	}
+	BG_RunLerpFrameRate(cg.latestSnapshotTime, cg.time, ci->clientNum, ci->modelInfo, lf, newAnimation, &cent->pe.torso, &cent->pe.legs, cent->currentState.pos.trBase, cent->pe.animSpeed, recursion);
 }
 
 /*
@@ -1539,7 +1245,19 @@ CG_ClearLerpFrameRate
 */
 void CG_ClearLerpFrameRate( clientInfo_t *ci, lerpFrame_t *lf, int animationNumber, centity_t *cent ) {
 	lf->frameTime = lf->oldFrameTime = cg.time;
-	CG_SetLerpFrameAnimationRate( cent, ci, lf, animationNumber );
+
+	animModelInfo_t* modelInfo = NULL;
+	int clientNum = -1;
+	lerpFrame_t *torsoLerpframe = NULL;
+	lerpFrame_t *legsLerpframe = NULL;
+	if(ci){
+		modelInfo = ci->modelInfo;
+		clientNum = ci->clientNum;
+		torsoLerpframe = &cent->pe.torso;
+	    legsLerpframe = &cent->pe.legs;
+	}
+
+	BG_SetLerpFrameAnimation(cg.time, clientNum, modelInfo, lf, animationNumber, torsoLerpframe, legsLerpframe );
 	if ( lf->animation ) {
 		lf->oldFrame = lf->frame = lf->animation->firstFrame;
 	}
@@ -1608,62 +1326,7 @@ PLAYER ANGLES
 CG_SwingAngles
 ==================
 */
-static void CG_SwingAngles( float destination, float swingTolerance, float clampTolerance,
-							float speed, float *angle, qboolean *swinging ) {
-	float swing;
-	float move;
-	float scale;
 
-	if ( !*swinging ) {
-		// see if a swing should be started
-		swing = AngleSubtract( *angle, destination );
-		if ( swing > swingTolerance || swing < -swingTolerance ) {
-			*swinging = qtrue;
-		}
-	}
-
-	if ( !*swinging ) {
-		return;
-	}
-
-	// modify the speed depending on the delta
-	// so it doesn't seem so linear
-	swing = AngleSubtract( destination, *angle );
-	scale = fabs( swing );
-	scale *= 0.05;
-	if ( scale < 0.5 ) {
-		scale = 0.5;
-	}
-
-	// swing towards the destination angle
-	if ( swing >= 0 ) {
-		move = cg.frametime * scale * speed;
-		if ( move >= swing ) {
-			move = swing;
-			*swinging = qfalse;
-		} else {
-			*swinging = SWING_LEFT;     // left
-		}
-		*angle = AngleMod( *angle + move );
-	} else if ( swing < 0 ) {
-		move = cg.frametime * scale * -speed;
-		if ( move <= swing ) {
-			move = swing;
-			*swinging = qfalse;
-		} else {
-			*swinging = SWING_RIGHT;    // right
-		}
-		*angle = AngleMod( *angle + move );
-	}
-
-	// clamp to no more than tolerance
-	swing = AngleSubtract( destination, *angle );
-	if ( swing > clampTolerance ) {
-		*angle = AngleMod( destination - ( clampTolerance - 1 ) );
-	} else if ( swing < -clampTolerance ) {
-		*angle = AngleMod( destination + ( clampTolerance - 1 ) );
-	}
-}
 
 /*
 =================
@@ -1744,157 +1407,21 @@ static void CG_AddPainTwitch( centity_t *cent, vec3_t torsoAngles ) {
 	
 }
 
-/*
-===============
-CG_PlayerAngles
 
-Handles seperate torso motion
 
-  legs pivot based on direction of movement
-
-  head always looks exactly at cent->lerpAngles
-
-  if motion < 20 degrees, show in head only
-  if < 45 degrees, also show in torso
-===============
-*/
-static void CG_PlayerAngles( centity_t *cent, vec3_t legs[3], vec3_t torso[3], vec3_t head[3] ) {
-	vec3_t legsAngles, torsoAngles, headAngles;
-	float dest;
-//	static	int	movementOffsets[8] = { 0, 22, 45, -22, 0, 22, -45, -22 }; // TTimo: unused
-	vec3_t velocity;
-	float speed;
-	float clampTolerance;
-	int legsSet;
+static void CG_PlayerAngles( centity_t *cent, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] ) {
+	vec3_t legsAngles;
+	vec3_t torsoAngles;
+	vec3_t headAngles;
 	clientInfo_t *ci;
 	ci = &cgs.clientinfo[ cent->currentState.number ];
-
-	// special case (female zombie while climbing wall)
-	if ( cent->currentState.eFlags & EF_FORCED_ANGLES ) {
-		// torso & legs parts should turn to face the given angles
-		VectorCopy( cent->lerpAngles, legsAngles );
-		AnglesToAxis( legsAngles, legs );
-		AnglesToAxis( vec3_origin, torso );
-		AnglesToAxis( vec3_origin, head );
-		return;
-	}
-
-	legsSet = cent->currentState.legsAnim & ~ANIM_TOGGLEBIT;
-
-	VectorCopy( cent->lerpAngles, headAngles );
-	headAngles[YAW] = AngleMod( headAngles[YAW] );
-	VectorClear( legsAngles );
-	VectorClear( torsoAngles );
-
-	// --------- yaw -------------
-
-	// allow yaw to drift a bit, unless these conditions don't allow them
-	if (    !( BG_GetConditionValue( cent->currentState.number, ANIM_COND_MOVETYPE, qfalse ) & ( ( 1 << ANIM_MT_IDLE ) | ( 1 << ANIM_MT_IDLECR ) ) )/*
-		||	 (BG_GetConditionValue( cent->currentState.number, ANIM_COND_MOVETYPE, qfalse ) & ((1<<ANIM_MT_STRAFELEFT) | (1<<ANIM_MT_STRAFERIGHT)) )*/) {
-
-		// always point all in the same direction
-		cent->pe.torso.yawing = qtrue;  // always center
-		cent->pe.torso.pitching = qtrue;    // always center
-		cent->pe.legs.yawing = qtrue;   // always center
-
-		// if firing, make sure torso and head are always aligned
-	} else if ( BG_GetConditionValue( cent->currentState.number, ANIM_COND_FIRING, qtrue ) ) {
-
-		cent->pe.torso.yawing = qtrue;  // always center
-		cent->pe.torso.pitching = qtrue;    // always center
-
-	}
-
-	// adjust legs for movement dir
-	if ( cent->currentState.eFlags & EF_DEAD ) {
-		// don't let dead bodies twitch
-		legsAngles[YAW] = headAngles[YAW];
-		torsoAngles[YAW] = headAngles[YAW];
-	} else {
-		legsAngles[YAW] = headAngles[YAW] + cent->currentState.angles2[YAW];
-
-		if ( cent->currentState.eFlags & EF_NOSWINGANGLES ) {
-			legsAngles[YAW] = torsoAngles[YAW] = headAngles[YAW];   // always face firing direction
-			clampTolerance = 60;
-		} else if ( !( cent->currentState.eFlags & EF_FIRING ) ) {
-			torsoAngles[YAW] = headAngles[YAW] + 0.35 * cent->currentState.angles2[YAW];
-			clampTolerance = 90;
-		} else {    // must be firing
-			torsoAngles[YAW] = headAngles[YAW]; // always face firing direction
-			//if (fabs(cent->currentState.angles2[YAW]) > 30)
-			//	legsAngles[YAW] = headAngles[YAW];
-			clampTolerance = 60;
-		}
-
-		// torso
-		CG_SwingAngles( torsoAngles[YAW], 25, clampTolerance, cg_swingSpeed.value, &cent->pe.torso.yawAngle, &cent->pe.torso.yawing );
-
-		// if the legs are yawing (facing heading direction), allow them to rotate a bit, so we don't keep calling
-		// the legs_turn animation while an AI is firing, and therefore his angles will be randomizing according to their accuracy
-
-		clampTolerance = 150;
-
-		if  ( BG_GetConditionValue( ci->clientNum, ANIM_COND_MOVETYPE, qfalse ) & ( 1 << ANIM_MT_IDLE ) ) {
-			cent->pe.legs.yawing = qfalse; // set it if they really need to swing
-			CG_SwingAngles( legsAngles[YAW], 20, clampTolerance, 0.5 * cg_swingSpeed.value, &cent->pe.legs.yawAngle, &cent->pe.legs.yawing );
-		} else
-		//if	( BG_GetConditionValue( ci->clientNum, ANIM_COND_MOVETYPE, qfalse ) & ((1<<ANIM_MT_STRAFERIGHT)|(1<<ANIM_MT_STRAFELEFT)) )
-		if  ( strstr( BG_GetAnimString( ci->clientNum, legsSet ), "strafe" ) ) {
-			cent->pe.legs.yawing = qfalse; // set it if they really need to swing
-			legsAngles[YAW] = headAngles[YAW];
-			CG_SwingAngles( legsAngles[YAW], 0, clampTolerance, cg_swingSpeed.value, &cent->pe.legs.yawAngle, &cent->pe.legs.yawing );
-		} else
-		if ( cent->pe.legs.yawing ) {
-			CG_SwingAngles( legsAngles[YAW], 0, clampTolerance, cg_swingSpeed.value, &cent->pe.legs.yawAngle, &cent->pe.legs.yawing );
-		} else
-		{
-			CG_SwingAngles( legsAngles[YAW], 40, clampTolerance, cg_swingSpeed.value, &cent->pe.legs.yawAngle, &cent->pe.legs.yawing );
-		}
-
-		torsoAngles[YAW] = cent->pe.torso.yawAngle;
-		legsAngles[YAW] = cent->pe.legs.yawAngle;
-	}
-
-	// --------- pitch -------------
-
-	// only show a fraction of the pitch angle in the torso
-	if ( headAngles[PITCH] > 180 ) {
-		dest = ( -360 + headAngles[PITCH] ) * 0.75;
-	} else {
-		dest = headAngles[PITCH] * 0.75;
-	}
-	CG_SwingAngles( dest, 15, 30, 0.1, &cent->pe.torso.pitchAngle, &cent->pe.torso.pitching );
-	torsoAngles[PITCH] = cent->pe.torso.pitchAngle;
-
-	// --------- roll -------------
-
-
-	// lean towards the direction of travel
-	VectorCopy( cent->currentState.pos.trDelta, velocity );
-	speed = VectorNormalize( velocity );
-	if ( speed ) {
-		vec3_t axis[3];
-		float side;
-
-		speed *= 0.05;
-
-		AnglesToAxis( legsAngles, axis );
-		side = speed * DotProduct( velocity, axis[1] );
-		legsAngles[ROLL] -= side;
-
-		side = speed * DotProduct( velocity, axis[0] );
-		legsAngles[PITCH] += side;
-	}
+	
+	BG_PlayerAngles(ci->clientNum, &cent->currentState, cg.frametime, &cent->pe.torso, &cent->pe.legs, cent->lerpAngles, legsAngles, torsoAngles, headAngles, legsAxis, torsoAxis, headAxis);
 
 	// pain twitch
 	CG_AddPainTwitch( cent, torsoAngles );
 
-	// pull the angles back out of the hierarchial chain
-	AnglesSubtract( headAngles, torsoAngles, headAngles );
-	AnglesSubtract( torsoAngles, legsAngles, torsoAngles );
-	AnglesToAxis( legsAngles, legs );
-	AnglesToAxis( torsoAngles, torso );
-	AnglesToAxis( headAngles, head );
+	BG_PlayerAnglesToAxis(legsAngles, torsoAngles, headAngles, legsAxis, torsoAxis, headAxis);
 }
 
 
@@ -2050,10 +1577,6 @@ CG_PlayerPowerups
 */
 static void CG_PlayerPowerups( centity_t *cent ) {
 	int powerups;
-
-	if ( cent->pe.teslaDamagedTime > cg.time - 400 ) {
-		trap_R_AddLightToScene( cent->lerpOrigin, 128 + 128 * sin( cg.time * cg.time ), 0.2, 0.6, 1, 0 );
-	}
 
 	// RF, AI don't use these effects, they are generally added manually by the game
 	if ( cent->currentState.aiChar ) {
@@ -2458,23 +1981,6 @@ void CG_AddRefEntityWithPowerups( refEntity_t *ent, int powerups, int team, enti
 		}
 	}
 
-	// tesla effect
-	if ( cg_entities[es->number].pe.teslaDamagedTime > cg.time - 400 ) {
-		float alpha;
-
-		alpha = ( 400.0 - (float)( cg.time - cg_entities[es->number].pe.teslaDamagedTime ) ) / 400.0;
-
-		ent->shaderRGBA[0] = ( unsigned char )( 50.0 * alpha );
-		ent->shaderRGBA[1] = ( unsigned char )( 130.0 * alpha );
-		ent->shaderRGBA[2] = ( unsigned char )( 255.0 * alpha );
-
-		if ( ( cg.time / 50 ) % ( 2 + ( cg.time % 2 ) ) == 0 ) {
-			ent->customShader = cgs.media.teslaAltDamageEffectShader;
-		} else {
-			ent->customShader = cgs.media.teslaDamageEffectShader;
-		}
-		trap_R_AddRefEntityToScene( ent );
-	}
 
 	*ent = backupRefEnt;
 }

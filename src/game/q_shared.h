@@ -843,6 +843,11 @@ void AnglesToAxis( const vec3_t angles, vec3_t axis[3] );
 // see unix/const-arg.c
 void AxisToAngles( /*const*/ vec3_t axis[3], vec3_t angles );
 float VectorDistance( vec3_t v1, vec3_t v2 );
+void Matrix4MultiplyInto3x3AndTranslation( /*const*/ vec4_t a[4], /*const*/ vec4_t b[4], vec3_t dst[3], vec3_t t );
+void LocalScaledMatrixTransformVector( vec3_t in, float s, vec3_t mat[ 3 ], vec3_t out );
+void Matrix3Transpose( const vec3_t matrix[3], vec3_t transpose[3] );
+void Matrix4FromScaledAxisPlusTranslation( /*const*/ vec3_t axis[3], const float scale, const vec3_t t, vec4_t dst[4] );
+void Matrix4FromAxisPlusTranslation( /*const*/ vec3_t axis[3], const vec3_t t, vec4_t dst[4] );
 
 void AxisClear( vec3_t axis[3] );
 void AxisCopy( vec3_t in[3], vec3_t out[3] );
@@ -1826,5 +1831,18 @@ typedef struct cvar_restrictions_s {
 	struct cvar_restrictions_s* hashNext;
 	qboolean flagged;
 } cvar_rest_t;
+
+typedef struct lerpInfo_s {
+	qhandle_t modelHandle;
+	int oldFrame;
+	int frame;
+	float backlerp;
+	int torsoFrame;
+	int oldTorsoFrame;
+	float torsoBacklerp;
+	vec3_t torsoAxis[3];
+	vec3_t legsAxis[3];
+	vec3_t headAxis[3];
+} lerpInfo_t;
 
 #endif  // __Q_SHARED_H

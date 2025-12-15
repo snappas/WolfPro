@@ -424,7 +424,8 @@ typedef enum {
 
 	G_CMD_ARGSFROM,
 	G_SUBMIT_STATS_CURL,
-	G_FS_FILE_EXIST
+	G_FS_FILE_EXIST,
+	G_REGISTER_MODEL
 
 } gameImport_t;
 

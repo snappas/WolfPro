@@ -1328,7 +1328,7 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.Shutdown = RE_Shutdown;
 
 	re.BeginRegistration = RE_BeginRegistration;
-	re.RegisterModel    = RE_RegisterModel;
+	//re.RegisterModel    = RE_RegisterModel;
 	re.RegisterSkin     = RE_RegisterSkin;
 //----(SA) added
 	re.GetSkinModel         = RE_GetSkinModel;
@@ -1344,7 +1344,7 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.EndFrame         = RE_EndFrame;
 
 	re.MarkFragments    = R_MarkFragments;
-	re.LerpTag          = R_LerpTag;
+	//re.LerpTag          = R_LerpTag;
 	re.ModelBounds      = R_ModelBounds;
 
 	re.ClearScene       = RE_ClearScene;
