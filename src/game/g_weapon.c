@@ -834,10 +834,10 @@ void weapon_callAirStrike( gentity_t *ent ) {
 		bomb->s.weapon      = WP_ARTY; // might wanna change this
 		bomb->r.ownerNum    = ent->s.number;
 		bomb->parent        = ent->parent;
-		bomb->damage        = 400; // maybe should un-hard-code these?
-		bomb->splashDamage  = 400;
+		bomb->damage        = 0; // WolfPro set to 0 to fix rogue bombs
+		bomb->splashDamage  = 0; // WolfPro set to 0 to fix rogue bombs
+		bomb->splashRadius	= 0; // WolfPro set to 0 to fix rogue bombs
 		bomb->classname             = "air strike";
-		bomb->splashRadius          = 400;
 		bomb->methodOfDeath         = MOD_AIRSTRIKE;
 		bomb->splashMethodOfDeath   = MOD_AIRSTRIKE;
 		bomb->clipmask = MASK_MISSILESHOT;
