@@ -3314,43 +3314,7 @@ shader_t *R_FindCachedShader( const char *name, int lightmapIndex, int hash ) {
 	return NULL;
 }
 
-/*
-===============
-R_LoadCacheShaders
-===============
-*/
-void R_LoadCacheShaders( void ) {
-	int len;
-	byte *buf;
-	char    *token, *pString;
-	char name[MAX_QPATH];
 
-	if ( !r_cacheShaders->integer ) {
-		return;
-	}
-
-	// don't load the cache list in between level loads, only on startup, or after a vid_restart
-	if ( numBackupShaders > 0 ) {
-		return;
-	}
-
-	len = ri.FS_ReadFile( "shader.cache", NULL );
-
-	if ( len <= 0 ) {
-		return;
-	}
-
-	buf = (byte *)ri.Hunk_AllocateTempMemory( len );
-	ri.FS_ReadFile( "shader.cache", (void **)&buf );
-	pString = (char *)buf;
-
-	while ( ( token = COM_ParseExt( &pString, qtrue ) ) && token[0] ) {
-		Q_strncpyz( name, token, sizeof( name ) );
-		RE_RegisterModel( name );
-	}
-
-	ri.Hunk_FreeTempMemory( buf );
-}
 // done.
 //=============================================================================
 
@@ -3374,6 +3338,5 @@ void R_InitShaders( void ) {
 
 	CreateExternalShaders();
 
-	// Ridah
-	R_LoadCacheShaders();
+
 }
