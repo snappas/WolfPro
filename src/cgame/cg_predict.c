@@ -662,7 +662,7 @@ void CG_PredictPlayerState( void ) {
 
 	// run cmds
 	moved = qfalse;
-	qboolean jumped = qfalse;
+	// qboolean jumped = qfalse;
 	for ( cmdNum = current - CMD_BACKUP + 1 ; cmdNum <= current ; cmdNum++ ) {
 		// get the command
 		trap_GetUserCmd( cmdNum, &cg_pmove.cmd );
@@ -771,14 +771,14 @@ void CG_PredictPlayerState( void ) {
 		cg_pmove.medicChargeTime = cg_medicChargeTime.integer;
 		// -NERVE - SMF
 
-		if(cg_pmove.cmd.serverTime - cg_pmove.ps->jumpTime >= 850){
-			jumped = qfalse;
-		}
+		// if(cg_pmove.cmd.serverTime - cg_pmove.ps->jumpTime >= 850){
+		// 	jumped = qfalse;
+		// }
 		
-		if(cg_predictJumps.integer && !jumped && cg_pmove.cmd.upmove != 0){
-			cg_pmove.ps->jumpTime = cg_pmove.cmd.serverTime;
-			jumped = qtrue;
-		}
+		// if(cg_predictJumps.integer && !jumped && cg_pmove.cmd.upmove != 0){
+		// 	cg_pmove.ps->jumpTime = cg_pmove.cmd.serverTime;
+		// 	jumped = qtrue;
+		// }
 
 		Pmove( &cg_pmove );
 

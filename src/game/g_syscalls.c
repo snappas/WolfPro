@@ -237,7 +237,7 @@ void trap_SnapVector( float *v ) {
 	return;
 }
 
-qboolean trap_GetTag( char *tagName, orientation_t* or, lerpInfo_t *li) {
+int trap_GetTag( char *tagName, orientation_t* or, lerpInfo_t *li) {
 	return syscall( G_GETTAG, tagName, or, li );
 }
 
