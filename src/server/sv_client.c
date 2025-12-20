@@ -1220,43 +1220,20 @@ void SV_UserinfoChanged( client_t *cl ) {
 
 	// if the client is on the same subnet as the server and we aren't running an
 	// internet public server, assume they don't need a rate choke
-	if ( Sys_IsLANAddress( cl->netchan.remoteAddress ) && com_dedicated->integer != 2 && sv_lanForceRate->integer == 1 ) {
-		cl->rate = 99999;   // lans should not rate limit
+	val = Info_ValueForKey( cl->userinfo, "rate" );
+	if (val[0]) {
+		cl->rate = Com_ClampInt( 4000, 99999, atoi(val) );
 	} else {
-		val = Info_ValueForKey( cl->userinfo, "rate" );
-		if ( strlen( val ) ) {
-			i = atoi( val );
-			cl->rate = i;
-			if ( cl->rate < 1000 ) {
-				cl->rate = 1000;
-			} else if ( cl->rate > 90000 ) {
-				cl->rate = 90000;
-			}
-		} else {
-			cl->rate = 5000;
-		}
-	}
-	val = Info_ValueForKey( cl->userinfo, "handicap" );
-	if ( strlen( val ) ) {
-		i = atoi( val );
-		if ( i <= 0 || i > 100 || strlen( val ) > 4 ) {
-			Info_SetValueForKey( cl->userinfo, "handicap", "100" );
-		}
+		cl->rate = 25000;
 	}
 
-	// snaps command
 	val = Info_ValueForKey( cl->userinfo, "snaps" );
-	if ( strlen( val ) ) {
-		i = atoi( val );
-		if ( i < 1 ) {
-			i = 1;
-		} else if ( i > 30 ) {
-			i = 30;
-		}
-		cl->snapshotMsec = 1000 / i;
+	if (val[0]) {
+		i = Com_ClampInt( 10, sv_fps->integer, atoi(val) );
 	} else {
-		cl->snapshotMsec = 50;
+		i = sv_fps->integer;
 	}
+	cl->snapshotMsec = 1000 / i;
 
 	// TTimo
 	// maintain the IP information

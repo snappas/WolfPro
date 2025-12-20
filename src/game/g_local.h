@@ -650,6 +650,7 @@ typedef struct animationInfo_s {
 	lerpInfo_t lerpInfo;
 	lerpFrame_t torso;
 	lerpFrame_t legs;
+	vec3_t lerpOrigin;
 } animationInfo_t;
 
 #define MAX_CLIENT_MARKERS 10

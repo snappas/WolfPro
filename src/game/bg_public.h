@@ -1788,7 +1788,7 @@ void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], ve
 void BG_LerpCrouchingAnimation(int clientNum, lerpFrame_t *lf, lerpFrame_t *torsoLerpframe, lerpFrame_t *legsLerpFrame, int newAnimation, int oldAnimNum, animation_t *oldanim);
 void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 						 int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame,
-						 vec3_t currentOrigin, float manualAnimSpeed, int recursion);
+						 vec3_t currentOrigin, vec3_t lerpOrigin, float manualAnimSpeed, int recursion);
 
 extern animStringItem_t animStateStr[];
 extern animStringItem_t animBodyPartsStr[];

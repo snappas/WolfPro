@@ -2184,7 +2184,7 @@ void BG_RunLerpFrame(int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 
 void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 						 int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame,
-						 vec3_t currentOrigin, float manualAnimSpeed, int recursion){
+						 vec3_t currentOrigin, vec3_t lerpOrigin, float manualAnimSpeed, int recursion){
 		int f;
 	animation_t *anim, *oldAnim;
 	animation_t *otherAnim = NULL;
@@ -2234,7 +2234,7 @@ void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInf
 					lf->oldFramePos[1] = currentOrigin[1];
 				}
 
-				moveSpeed = Distance( currentOrigin, lf->oldFramePos ) / ( (float)( time - lf->oldFrameTime ) / 1000.0 );
+				moveSpeed = Distance( lerpOrigin, lf->oldFramePos ) / ( (float)( time - lf->oldFrameTime ) / 1000.0 );
 				
 			// }
 			//
@@ -2357,7 +2357,7 @@ void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInf
 			if ( /*!anim->moveSpeed ||*/ recursion > 4 ) {
 				lf->frameTime = time;
 			} else {
-				BG_RunLerpFrameRate(snapshotTime, time, clientNum, modelInfo, lf, newAnimation, torsoLerpFrame, legsLerpFrame, currentOrigin, manualAnimSpeed, recursion + 1 );
+				BG_RunLerpFrameRate(snapshotTime, time, clientNum, modelInfo, lf, newAnimation, torsoLerpFrame, legsLerpFrame, currentOrigin, lerpOrigin, manualAnimSpeed, recursion + 1 );
 			}
 
 			if ( 0 ) {

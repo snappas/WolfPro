@@ -30,6 +30,10 @@ static void CopyAnimationInfo(animationInfo_t *dst, animationInfo_t *src){
 		VectorCopy(src->lerpInfo.torsoAxis[i], dst->lerpInfo.torsoAxis[i]);
 		VectorCopy(src->lerpInfo.headAxis[i], dst->lerpInfo.headAxis[i]);
 		VectorCopy(src->lerpInfo.legsAxis[i], dst->lerpInfo.legsAxis[i]);
+		VectorCopy(src->lerpOrigin, dst->lerpOrigin);
+		VectorCopy(src->legs.oldFramePos, dst->legs.oldFramePos);
+		VectorCopy(src->torso.oldFramePos, dst->torso.oldFramePos);
+		
 	}
 }
 
