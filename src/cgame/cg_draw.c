@@ -372,6 +372,66 @@ void CG_Draw3DModel( float x, float y, float w, float h, qhandle_t model, qhandl
 	trap_R_RenderScene( &refdef );
 }
 
+
+void CG_DrawBBox(centity_t *cent){
+	if(cg.snap && cent->currentState.otherEntityNum == cg.snap->ps.clientNum){
+		return;
+	}
+
+	if(cent->currentState.eType != ET_TEMPHEAD){
+		return;
+	}
+
+	//CG_RailTrail2(NULL, cent->currentState.origin, cent->currentState.origin2);
+	vec3_t start, end, v1, v2, v3, v4, v5, v6, diff;
+	VectorCopy(cent->currentState.origin, start);
+	VectorCopy(cent->currentState.origin2, end);
+
+	// refEntity_t ent;
+	// memset( &ent, 0, sizeof( ent ) );
+	// ent.shaderRGBA[0] = 255;
+	// ent.shaderRGBA[3] = 255;
+	// ent.shaderTime = cg.time / 1000.0f;
+	// ent.reType = RT_RAIL_CORE;
+	// ent.customShader = cgs.media.railCoreShader;
+
+	// VectorCopy( cent->currentState.origin, ent.origin );
+	// VectorCopy( cent->currentState.origin2, ent.oldorigin );
+	clientInfo_t *ci = NULL;
+	VectorSubtract( start, end, diff );
+
+	VectorCopy( start, v1 );
+	VectorCopy( start, v2 );
+	VectorCopy( start, v3 );
+	v1[0] -= diff[0];
+	v2[1] -= diff[1];
+	v3[2] -= diff[2];
+	CG_RailTrail2( ci, start, v1 );
+	CG_RailTrail2( ci, start, v2 );
+	CG_RailTrail2( ci, start, v3 );
+
+	VectorCopy( end, v4 );
+	VectorCopy( end, v5 );
+	VectorCopy( end, v6 );
+	v4[0] += diff[0];
+	v5[1] += diff[1];
+	v6[2] += diff[2];
+	CG_RailTrail2( ci, end, v4 );
+	CG_RailTrail2( ci, end, v5 );
+	CG_RailTrail2( ci, end, v6 );
+
+	CG_RailTrail2( ci, v2, v6 );
+	CG_RailTrail2( ci, v6, v1 );
+	CG_RailTrail2( ci, v1, v5 );
+
+	CG_RailTrail2( ci, v2, v4 );
+	CG_RailTrail2( ci, v4, v3 );
+	CG_RailTrail2( ci, v3, v5 );
+
+
+	// trap_R_AddRefEntityToScene( &ent );
+}
+
 /*
 ================
 CG_DrawHead
@@ -3438,46 +3498,6 @@ static void CG_DrawFlashFire( void ) {
 	}
 }
 
-/*
-=================
-CG_DrawFlashLightning
-=================
-*/
-static void CG_DrawFlashLightning( void ) {
-	float alpha;
-	centity_t *cent;
-	qhandle_t shader;
-
-	if ( !cg.snap ) {
-		return;
-	}
-
-	if ( cg_thirdPerson.integer ) {
-		return;
-	}
-
-	cent = &cg_entities[cg.snap->ps.clientNum];
-
-	if ( !cent->pe.teslaDamagedTime || ( cent->pe.teslaDamagedTime > cg.time ) ) {
-		return;
-	}
-
-	alpha = 1.0 - (float)( cg.time - cent->pe.teslaDamagedTime ) / LIGHTNING_FLASH_TIME;
-	if ( alpha > 0 ) {
-		if ( alpha >= 1.0 ) {
-			alpha = 1.0;
-		}
-
-		if ( ( cg.time / 50 ) % ( 2 + ( cg.time % 2 ) ) == 0 ) {
-			shader = cgs.media.viewTeslaAltDamageEffectShader;
-		} else {
-			shader = cgs.media.viewTeslaDamageEffectShader;
-		}
-
-		CG_DrawPic( -10, -10, 650, 490, shader );
-	}
-}
-
 
 
 /*
@@ -3498,7 +3518,6 @@ CG_DrawFlashBlend
 =================
 */
 static void CG_DrawFlashBlend( void ) {
-	CG_DrawFlashLightning();
 	CG_DrawFlashFire();
 	CG_DrawFlashDamage();
 	CG_DrawFlashFade();

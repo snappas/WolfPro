@@ -416,6 +416,9 @@ struct gentity_s {
 	void		(*more)(gentity_t *ent);
 	int			moreCalls;
 	qboolean	moreCalled;
+
+	gentity_t *headBBox;
+	qboolean isHeadshot;
 };
 
 // Ridah
@@ -643,6 +646,13 @@ typedef struct {
 	int servertime;
 } clientMarker_t;
 
+typedef struct animationInfo_s {
+	lerpInfo_t lerpInfo;
+	lerpFrame_t torso;
+	lerpFrame_t legs;
+	vec3_t lerpOrigin;
+} animationInfo_t;
+
 #define MAX_CLIENT_MARKERS 10
 
 #define LT_SPECIAL_PICKUP_MOD   3       // JPW NERVE # of times (minus one for modulo) LT must drop ammo before scoring a point
@@ -657,7 +667,7 @@ typedef struct {
 	vec3_t		mins, maxs;
 	vec3_t		currentOrigin;
 	int			leveltime;
-	//clientAnimationInfo_t animInfo;
+	animationInfo_t animationInfo;
 } clientHistory_t;
 
 typedef struct unlagged_s {
@@ -785,6 +795,8 @@ struct gclient_s {
 
 	unlagged_t unlag;
 	int lastRevivePushTime;
+
+	animationInfo_t animationInfo;
 };
 
 
@@ -965,8 +977,6 @@ typedef struct {
 	animScriptData_t animScriptData;
 
 	// NERVE - SMF - debugging/profiling info
-	int totalHeadshots;
-	int missedHeadshots;
 	qboolean lastRestartTime;
 	// -NERVE - SMF
 
@@ -1031,6 +1041,9 @@ typedef struct {
 
 	char maplist[MAX_NUM_MAPS][MAX_MAP_NAMELEN];
 	int mapcount;
+
+	qhandle_t alliesTorsoModel;
+	qhandle_t axisTorsoModel;
 } level_locals_t;
 
 extern qboolean reloading;                  // loading up a savegame
@@ -1149,6 +1162,7 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 void body_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int meansOfDeath );
 void TossClientItems( gentity_t *self );
 gentity_t* G_BuildHead( gentity_t *ent );
+void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head );
 void limbo( gentity_t *ent, qboolean makeCorpse );
 
 // damage flags
@@ -1578,6 +1592,8 @@ extern vmCvar_t g_apiquery_curl_URL;
 extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
 
+extern vmCvar_t g_preciseHeadHitbox;
+
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );
@@ -1623,7 +1639,7 @@ int     trap_BotAllocateClient( void );
 void    trap_BotFreeClient( int clientNum );
 void    trap_GetUsercmd( int clientNum, usercmd_t *cmd );
 qboolean    trap_GetEntityToken( char *buffer, int bufferSize );
-qboolean trap_GetTag( int clientNum, char *tagName, orientation_t * or );
+int trap_GetTag( char *tagName, orientation_t *or, lerpInfo_t *li);
 
 int     trap_DebugPolygonCreate( int color, int numPoints, vec3_t *points );
 void    trap_DebugPolygonDelete( int id );
@@ -1794,6 +1810,7 @@ void    trap_SnapVector( float *v );
 void    trap_Cmd_ArgsFrom(int arg, char *buffer, int buffersize);
 int trap_RealTime( qtime_t *qtime );
 int     trap_submit_curlPost( char* jsonfile, char* matchid );
+qhandle_t trap_RegisterModel( char* name );
 
 typedef enum
 {
@@ -1886,6 +1903,12 @@ void G_PredictPlayerMove(gentity_t* ent, float frametime);
 // g_referee.c
 qboolean G_refCommandCheck(void);
 void G_refSpeclockTeams_cmd( gentity_t *ent, qboolean fLock );
+
+void AddHeadEntities(gentity_t* skip, int content, int mask);
+void RemoveHeadEntities(gentity_t* skip);
+void FreeHeadEntity(gentity_t* ent);
+void UpdateHeadPosition(gentity_t *ent);
+qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod );
 
 // Macros
 //

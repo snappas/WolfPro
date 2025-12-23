@@ -169,7 +169,7 @@ int R_ComputeLOD( trRefEntity_t *ent ) {
 	float radius;
 	float flod, lodscale;
 	float projectedRadius;
-	md3Frame_t *frame;
+	md3Frame_t *md3Frame;
 	int lod;
 
 	if ( tr.currentModel->numLods < 2 ) {
@@ -185,11 +185,11 @@ int R_ComputeLOD( trRefEntity_t *ent ) {
 			return ( tr.currentModel->numLods - 1 );
 		}
 
-		frame = ( md3Frame_t * )( ( ( unsigned char * ) tr.currentModel->md3[0] ) + tr.currentModel->md3[0]->ofsFrames );
+		md3Frame = ( md3Frame_t * )( ( ( unsigned char * ) tr.currentModel->md3[0] ) + tr.currentModel->md3[0]->ofsFrames );
 
-		frame += ent->e.frame;
+		md3Frame += ent->e.frame;
 
-		radius = RadiusFromBounds( frame->bounds[0], frame->bounds[1] );
+		radius = RadiusFromBounds( md3Frame->bounds[0], md3Frame->bounds[1] );
 
 		//----(SA)	testing
 		if ( ent->e.reFlags & REFLAG_ORIENT_LOD ) {

@@ -246,7 +246,9 @@ MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI	GetIntegerv Z+		1											-
 
 */
 //----(SA)	end
-
+float r_anormals[NUMMDCVERTEXNORMALS][3] = {
+#include "anorms256.h"
+};
 
 static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean shouldBeIntegral ) {
 	if ( shouldBeIntegral ) {
@@ -1111,7 +1113,6 @@ void R_Register( void ) {
 	ri.Cmd_AddCommand( "screenshot", R_ScreenShot_f );
 	ri.Cmd_AddCommand( "screenshotJPEG", R_ScreenShotJPEG_f );
 	ri.Cmd_AddCommand( "gfxinfo", GfxInfo_f );
-	ri.Cmd_AddCommand( "taginfo", R_TagInfo_f );
 
 	// Ridah
 	{
@@ -1120,6 +1121,81 @@ void R_Register( void ) {
 	}
 	// done.
 }
+
+
+//---------------------------------------------------------------------------
+// Virtual Memory, used for model caching, since we can't allocate them
+// in the main Hunk (since it gets cleared on level changes), and they're
+// too large to go into the Zone, we have a special memory chunk just for
+// caching models in between levels.
+//
+// Optimized for Win32 systems, so that they'll grow the swapfile at startup
+// if needed, but won't actually commit it until it's needed.
+//
+// GOAL: reserve a big chunk of virtual memory for the media cache, and only
+// use it when we actually need it. This will make sure the swap file grows
+// at startup if needed, rather than each allocation we make.
+byte    *membase = NULL;
+int hunkmaxsize;
+int cursize;
+
+#define R_HUNK_MEGS     24
+#define R_HUNK_SIZE     ( R_HUNK_MEGS*1024*1024 )
+
+void *R_Hunk_Begin( void ) {
+	int maxsize = R_HUNK_SIZE;
+
+	//Com_Printf("R_Hunk_Begin\n");
+
+	// reserve a huge chunk of memory, but don't commit any yet
+	cursize = 0;
+	hunkmaxsize = maxsize;
+
+#ifdef _WIN32
+
+	// this will "reserve" a chunk of memory for use by this application
+	// it will not be "committed" just yet, but the swap file will grow
+	// now if needed
+	membase = VirtualAlloc( NULL, maxsize, MEM_RESERVE, PAGE_NOACCESS );
+
+#else
+
+	// show_bug.cgi?id=440
+	// if not win32, then just allocate it now
+	// it is possible that we have been allocated already, in case we don't do anything
+	if ( !membase ) {
+		membase = malloc( maxsize );
+		// TTimo NOTE: initially, I was doing the memset even if we had an existing membase
+		// but this breaks some shaders (i.e. /map mp_beach, then go back to the main menu .. some shaders are missing)
+		// I assume the shader missing is because we don't clear memory either on win32
+		// meaning even on win32 we are using memory that is still reserved but was uncommited .. it works out of pure luck
+		memset( membase, 0, maxsize );
+	}
+
+#endif
+
+	if ( !membase ) {
+		ri.Error( ERR_DROP, "R_Hunk_Begin: reserve failed" );
+	}
+
+	return (void *)membase;
+}
+
+// this is only called when we shutdown GL
+void R_Hunk_End( void ) {
+	//Com_Printf("R_Hunk_End\n");
+
+	if ( membase ) {
+#ifdef _WIN32
+		VirtualFree( membase, 0, MEM_RELEASE );
+#else
+		free( membase );
+#endif
+	}
+
+	membase = NULL;
+}
+
 
 /*
 ===============
@@ -1246,7 +1322,6 @@ void RE_Shutdown( qboolean destroyWindow ) {
 	// clean out any remaining unused media from the last backup
 	R_PurgeShaders( 9999999 );
 	R_PurgeBackupImages( 9999999 );
-	R_PurgeModels( 9999999 );
 
 	if ( r_cache->integer ) {
 		if ( tr.registered ) {
@@ -1258,7 +1333,6 @@ void RE_Shutdown( qboolean destroyWindow ) {
 				// backup the current media
 				R_ShutdownCommandBuffers();
 
-				R_BackupModels();
 				R_BackupShaders();
 				R_BackupImages();
 			}
@@ -1303,6 +1377,29 @@ qboolean RE_IsFrameSleepEnabled(void){
 	return qtrue;
 }
 
+/*
+** RE_BeginRegistration
+*/
+void RE_BeginRegistration( glconfig_t *glconfigOut ) {
+	ri.Hunk_Clear();    // (SA) MEM NOTE: not in missionpack
+
+	R_Init();
+	*glconfigOut = glConfig;
+
+	R_SyncRenderThread();
+
+	tr.viewCluster = -1;        // force markleafs to regenerate
+	R_ClearFlares();
+	RE_ClearScene();
+
+	tr.registered = qtrue;
+
+	// NOTE: this sucks, for some reason the first stretch pic is never drawn
+	// without this we'd see a white flash on a level load because the very
+	// first time the level shot would not be drawn
+	RE_StretchPic( 0, 0, 0, 0, 0, 0, 1, 1, 0 );
+}
+
 
 /*
 @@@@@@@@@@@@@@@@@@@@@
@@ -1328,7 +1425,6 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.Shutdown = RE_Shutdown;
 
 	re.BeginRegistration = RE_BeginRegistration;
-	re.RegisterModel    = RE_RegisterModel;
 	re.RegisterSkin     = RE_RegisterSkin;
 //----(SA) added
 	re.GetSkinModel         = RE_GetSkinModel;
@@ -1344,7 +1440,7 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.EndFrame         = RE_EndFrame;
 
 	re.MarkFragments    = R_MarkFragments;
-	re.LerpTag          = R_LerpTag;
+	//re.LerpTag          = R_LerpTag;
 	re.ModelBounds      = R_ModelBounds;
 
 	re.ClearScene       = RE_ClearScene;

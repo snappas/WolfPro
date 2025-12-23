@@ -23,6 +23,20 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //Sago: For some reason the Niels version must use a different char set.
 #include "g_local.h"
 
+
+static void CopyAnimationInfo(animationInfo_t *dst, animationInfo_t *src){
+	*dst = *src;
+	for(int i = 0; i < 3; i++){
+		VectorCopy(src->lerpInfo.torsoAxis[i], dst->lerpInfo.torsoAxis[i]);
+		VectorCopy(src->lerpInfo.headAxis[i], dst->lerpInfo.headAxis[i]);
+		VectorCopy(src->lerpInfo.legsAxis[i], dst->lerpInfo.legsAxis[i]);
+		VectorCopy(src->lerpOrigin, dst->lerpOrigin);
+		VectorCopy(src->legs.oldFramePos, dst->legs.oldFramePos);
+		VectorCopy(src->torso.oldFramePos, dst->torso.oldFramePos);
+		
+	}
+}
+
 /*
 ============
 G_ResetHistory
@@ -38,7 +52,7 @@ void G_ResetHistory( gentity_t *ent ) {
 		VectorCopy( ent->r.maxs, ent->client->unlag.history[i].maxs );
 		VectorCopy( ent->r.currentOrigin, ent->client->unlag.history[i].currentOrigin );
 		ent->client->unlag.history[i].leveltime = time;
-		//ent->client->unlag.history[i].animInfo = ent->client->unlag.animationInfo;
+		CopyAnimationInfo(&ent->client->unlag.history[i].animationInfo, &ent->client->animationInfo);
 	}
 }
 
@@ -64,7 +78,7 @@ void G_StoreHistory( gentity_t *ent ) {
 	VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
 	SnapVector( ent->client->unlag.history[head].currentOrigin );
 	ent->client->unlag.history[head].leveltime = level.time;
-	//ent->client->unlag.history[head].animInfo = ent->client->unlag.animationInfo;
+	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->animationInfo);
 }
 
 
@@ -130,7 +144,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			VectorCopy( ent->r.maxs, ent->client->unlag.saved.maxs );
 			VectorCopy( ent->r.currentOrigin, ent->client->unlag.saved.currentOrigin );
 			ent->client->unlag.saved.leveltime = level.time;
-			//ent->client->unlag.saved.animInfo = ent->client->unlag.animationInfo;
+			CopyAnimationInfo(&ent->client->unlag.saved.animationInfo, &ent->client->animationInfo);
 		}
 
 		// if we haven't wrapped back to the head, we've sandwiched, so
@@ -153,29 +167,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 				ent->client->unlag.history[j].maxs, ent->client->unlag.history[k].maxs,
 				ent->r.maxs );
 
-			/*if ( debug && debugger != NULL ) {
-				// print some debugging stuff exactly like what the client does
-
-				// it starts with "Rec:" to let you know it backward-reconciled
-				Com_sprintf( msg, sizeof(msg),
-					"print \"^1Rec: time: %d, j: %d, k: %d, origin: %0.2f %0.2f %0.2f\n"
-					"^2frac: %0.4f, origin1: %0.2f %0.2f %0.2f, origin2: %0.2f %0.2f %0.2f\n"
-					"^7level.time: %d, est time: %d, level.time delta: %d, est real ping: %d\n\"",
-					time, ent->client->history[j].leveltime, ent->client->history[k].leveltime,
-					ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
-					frac,
-					ent->client->history[j].currentOrigin[0],
-					ent->client->history[j].currentOrigin[1],
-					ent->client->history[j].currentOrigin[2], 
-					ent->client->history[k].currentOrigin[0],
-					ent->client->history[k].currentOrigin[1],
-					ent->client->history[k].currentOrigin[2],
-					level.time, level.time + debugger->client->frameOffset,
-					level.time - time, level.time + debugger->client->frameOffset - time);
-
-				trap_SendServerCommand( debugger - g_entities, msg );
-			}*/
-
+			CopyAnimationInfo(&ent->client->unlag.history[j].animationInfo, &ent->client->animationInfo);
 			// ported from nobo antilag for custom head animations
 			// find the "best" origin between the sandwiching trail nodes via interpolation
 			//Interpolate(frac, ent->client->history[j].currentOrigin, ent->client->history[k].currentOrigin, ent->r.currentOrigin);
@@ -195,11 +187,10 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			VectorCopy( ent->client->unlag.history[k].currentOrigin, ent->r.currentOrigin );
 			VectorCopy( ent->client->unlag.history[k].mins, ent->r.mins );
 			VectorCopy( ent->client->unlag.history[k].maxs, ent->r.maxs );
+			CopyAnimationInfo(&ent->client->unlag.history[k].animationInfo, &ent->client->animationInfo);
 
 			// this will recalculate absmin and absmax
 			trap_LinkEntity( ent );
-
-			//ent->client->unlag.animationInfo = ent->client->unlag.history[k].animInfo;
 		}
 	}
 	else {
@@ -319,7 +310,7 @@ void G_UnTimeShiftClient( gentity_t *ent ) {
 		VectorCopy( ent->client->unlag.saved.maxs, ent->r.maxs );
 		VectorCopy( ent->client->unlag.saved.currentOrigin, ent->r.currentOrigin );
 		ent->client->unlag.saved.leveltime = 0;
-		//ent->client->unlag.animationInfo = ent->client->unlag.saved.animInfo;
+		CopyAnimationInfo(&ent->client->animationInfo, &ent->client->unlag.saved.animationInfo);
 
 		// this will recalculate absmin and absmax
 		trap_LinkEntity( ent );

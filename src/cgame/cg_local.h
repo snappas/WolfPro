@@ -117,44 +117,6 @@ If you have questions concerning this license or the applicable additional terms
 #define LIMBO_3D_H  312
 // -NERVE - SMF
 
-//=================================================
-
-// player entities need to track more information
-// than any other type of entity.
-
-// note that not every player entity is a client entity,
-// because corpses after respawn are outside the normal
-// client numbering range
-
-// when changing animation, set animationTime to frameTime + lerping time
-// The current lerp will finish out, then it will lerp to the new animation
-typedef struct {
-	int oldFrame;
-	int oldFrameTime;               // time when ->oldFrame was exactly on
-
-	int frame;
-	int frameTime;                  // time when ->frame will be exactly on
-
-	float backlerp;
-
-	float yawAngle;
-	qboolean yawing;
-	float pitchAngle;
-	qboolean pitching;
-
-	int animationNumber;            // may include ANIM_TOGGLEBIT
-	int oldAnimationNumber;         // may include ANIM_TOGGLEBIT
-	animation_t *animation;
-	int animationTime;              // time when the first frame of the animation will be exact
-
-	// Ridah, variable speed anims
-	vec3_t oldFramePos;
-	float animSpeedScale;
-	int oldFrameSnapshotTime;
-	headAnimation_t *headAnim;
-	// done.
-
-} lerpFrame_t;
 
 // Ridah, effect defines
 #define MAX_ZOMBIE_SPIRITS          1 // JPW NERVE was 4
@@ -208,55 +170,6 @@ typedef struct {
 	int gunRefEntFrame;
 
 	float animSpeed;            // for manual adjustment
-
-	// Zombie spirit effect
-	// !!FIXME: these effects will be restarted by a *_restart command, can we save this data somehow?
-	qboolean cueZombieSpirit;               // if this is qfalse, and the zombie effect flag is set, then we need to start a new attack
-	int zombieSpiritStartTime;              // time the effect was started, so we can fade things in
-	int zombieSpiritTrailHead[MAX_ZOMBIE_SPIRITS];
-	int zombieSpiritRotationTimes[MAX_ZOMBIE_SPIRITS];
-	int zombieSpiritRadiusCycleTimes[MAX_ZOMBIE_SPIRITS];
-	int lastZombieSpirit;
-	int nextZombieSpiritSound;
-	int zombieSpiritEndTime;                // time the effect was disabled
-	vec3_t zombieSpiritPos[MAX_ZOMBIE_SPIRITS];
-	vec3_t zombieSpiritDir[MAX_ZOMBIE_SPIRITS];
-	float zombieSpiritSpeed[MAX_ZOMBIE_SPIRITS];
-	int zombieSpiritStartTimes[MAX_ZOMBIE_SPIRITS];
-
-	// Zombie death effect
-	// !!FIXME: these effects will be restarted by a *_restart command, can we save this data somehow?
-	qboolean cueZombieDeath;            // if this is qfalse, and the zombie effect flag is set, then we need to start a new attack
-	int zombieDeathStartTime;               // time the effect was started, so we can fade things in
-	int zombieDeathEndTime;             // time the effect was disabled
-	int lastZombieDeath;
-	int zombieDeathFadeStart;
-	int zombieDeathFadeEnd;
-	int zombieDeathTrailHead[MAX_ZOMBIE_DEATH_TRAILS];
-	int zombieDeathRotationTimes[MAX_ZOMBIE_DEATH_TRAILS];
-	int zombieDeathRadiusCycleTimes[MAX_ZOMBIE_DEATH_TRAILS];
-
-	// loper effects
-	int loperLastGroundChargeTime;
-	byte loperGroundChargeToggle;
-	int loperGroundValidTime;
-
-	vec3_t headLookIdeal;
-	vec3_t headLookOffset;
-	float headLookSpeed;
-	int headLookStopTime;
-	float headLookSpeedMax;
-
-	// tesla coil effects
-	vec3_t teslaEndPoints[MAX_TESLA_BOLTS];
-	int teslaEndPointTimes[MAX_TESLA_BOLTS];            // time the bolt stays valid
-	vec3_t teslaOffsetDirs[MAX_TESLA_BOLTS];            // bending direction from center or direct beam
-	float teslaOffsets[MAX_TESLA_BOLTS];                // amount to offset from center
-	int teslaOffsetTimes[MAX_TESLA_BOLTS];              // time the offset stays valid
-	int teslaEnemy[MAX_TESLA_BOLTS];
-	int teslaDamageApplyTime;
-
-	int teslaDamagedTime;                   // time we were last hit by a tesla bolt
 
 	// misc effects
 	int effectEnts[MAX_EFFECT_ENTS];
@@ -1727,7 +1640,6 @@ extern vmCvar_t cg_runroll;
 extern vmCvar_t cg_bobup;
 extern vmCvar_t cg_bobpitch;
 extern vmCvar_t cg_bobroll;
-extern vmCvar_t cg_swingSpeed;
 extern vmCvar_t cg_shadows;
 extern vmCvar_t cg_gibs;
 extern vmCvar_t cg_drawTimer;
@@ -1977,6 +1889,8 @@ extern vmCvar_t cg_teamObituaryColorEnemyTK;	// enemy team TK color
 extern vmCvar_t cg_fragsY;
 extern vmCvar_t cg_fragsWidth;
 
+extern vmCvar_t cg_predictJumps;
+
 //
 // cg_main.c
 //
@@ -2139,6 +2053,8 @@ void Com_ParseHexColor( float* c, const char* text, qbool hasAlpha );
 //
 qboolean CG_EntOnFire( centity_t *cent );    // Ridah
 void CG_Player( centity_t *cent );
+void CG_DrawBBox( centity_t *cent );
+void CG_RailTrail2( clientInfo_t *ci, vec3_t start, vec3_t end );
 void CG_ResetPlayerEntity( centity_t *cent );
 void CG_AddRefEntityWithPowerups( refEntity_t *ent, int powerups, int team, entityState_t *es, const vec3_t fireRiseDir );
 void CG_NewClientInfo( int clientNum );

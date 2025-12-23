@@ -259,16 +259,16 @@ qboolean AICast_CheckVisibility( gentity_t *srcent, gentity_t *destent ) {
 	VectorAdd( destent->client->ps.origin, middle, middle );
 	// calculate eye position
 	if ( srcent->r.svFlags & SVF_CASTAI ) {
-		if ( trap_GetTag( srcent->s.number, "tag_head", &or ) ) {
-			// use the actual direction the head is facing
-			vectoangles( or.axis[0], viewangles );
-			// and the actual position of the head
-			VectorCopy( or.origin, eye );
-		} else {
-			VectorCopy( srcent->client->ps.origin, eye );
-			eye[2] += srcent->client->ps.viewheight;
-			VectorCopy( srcent->client->ps.viewangles, viewangles );
-		}
+		//if ( trap_GetTag( srcent->s.number, "tag_head", &or ) ) {
+		//	// use the actual direction the head is facing
+		//	vectoangles( or.axis[0], viewangles );
+		//	// and the actual position of the head
+		//	VectorCopy( or.origin, eye );
+		//} else {
+		//	VectorCopy( srcent->client->ps.origin, eye );
+		//	eye[2] += srcent->client->ps.viewheight;
+		//	VectorCopy( srcent->client->ps.viewangles, viewangles );
+		//}
 	} else {
 		VectorCopy( srcent->client->ps.origin, eye );
 		eye[2] += srcent->client->ps.viewheight;

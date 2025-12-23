@@ -559,23 +559,7 @@ SURFACES
 
 // any changes in surfaceType must be mirrored in rb_surfaceTable[]
 // NOTE: also mirror changes to max2skl.c
-typedef enum {
-	SF_BAD,
-	SF_SKIP,                // ignore
-	SF_FACE,
-	SF_GRID,
-	SF_TRIANGLES,
-	SF_POLY,
-	SF_MD3,
-	SF_MDC,
-	SF_MDS,
-	SF_FLARE,
-	SF_ENTITY,              // beams, rails, lightning, etc that can be determined by entity
-	SF_DISPLAY_LIST,
 
-	SF_NUM_SURFACE_TYPES,
-	SF_MAX = 0xffffffff         // ensures that sizeof( surfaceType_t ) == sizeof( int )
-} surfaceType_t;
 
 typedef struct drawSurf_s {
 	unsigned sort;                      // bit combination for fast compares
@@ -695,13 +679,7 @@ BRUSH MODELS
 #define SIDE_BACK   1
 #define SIDE_ON     2
 
-typedef struct msurface_s {
-	int viewCount;                      // if == tr.viewCount, already added
-	struct shader_s     *shader;
-	int fogIndex;
 
-	surfaceType_t       *data;          // any of srf*_t
-} msurface_t;
 
 
 
@@ -725,11 +703,7 @@ typedef struct mnode_s {
 	int nummarksurfaces;
 } mnode_t;
 
-typedef struct {
-	vec3_t bounds[2];           // for culling
-	msurface_t  *firstSurface;
-	int numSurfaces;
-} bmodel_t;
+
 
 typedef struct {
 	char name[MAX_QPATH];               // ie: maps/tim_dm2.bsp
@@ -776,27 +750,7 @@ typedef struct {
 
 //======================================================================
 
-typedef enum {
-	MOD_BAD,
-	MOD_BRUSH,
-	MOD_MESH,
-	MOD_MDS,
-	MOD_MDC // Ridah
-} modtype_t;
 
-typedef struct model_s {
-	char name[MAX_QPATH];
-	modtype_t type;
-	int index;                      // model = tr.models[model->index]
-
-	int dataSize;                   // just for listing purposes
-	bmodel_t    *bmodel;            // only if type == MOD_BRUSH
-	md3Header_t *md3[MD3_MAX_LODS]; // only if type == MOD_MESH
-	mdsHeader_t *mds;               // only if type == MOD_MDS
-	mdcHeader_t *mdc[MD3_MAX_LODS]; // only if type == MOD_MDC
-
-	int numLods;
-} model_t;
 
 
 #define MAX_MOD_KNOWN   2048
@@ -1212,8 +1166,6 @@ void R_AddBeamSurfaces( trRefEntity_t *e );
 void R_AddRailSurfaces( trRefEntity_t *e, qboolean isUnderwater );
 void R_AddLightningBoltSurfaces( trRefEntity_t *e );
 
-void R_TagInfo_f( void );
-
 void R_AddPolygonSurfaces( void );
 
 void R_DecomposeSort( unsigned sort, int *entityNum, shader_t **shader,
@@ -1287,7 +1239,6 @@ void        RE_BeginFrame( stereoFrame_t stereoFrame );
 void        RE_BeginRegistration( glconfig_t *glconfig );
 void        RE_LoadWorldMap( const char *mapname );
 void        RE_SetWorldVisData( const byte *vis );
-qhandle_t   RE_RegisterModel( const char *name );
 qhandle_t   RE_RegisterSkin( const char *name );
 void        RE_Shutdown( qboolean destroyWindow );
 
@@ -1741,8 +1692,6 @@ void R_InitTexnumImages( qboolean force );
 
 void *R_CacheModelAlloc( int size );
 void R_CacheModelFree( void *ptr );
-void R_PurgeModels( int count );
-void R_BackupModels( void );
 qboolean R_FindCachedModel( const char *name, model_t *newmod );
 void R_LoadCacheModels( void );
 

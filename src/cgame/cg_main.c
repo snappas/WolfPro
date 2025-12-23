@@ -142,7 +142,6 @@ vmCvar_t cg_runroll;
 vmCvar_t cg_bobup;
 vmCvar_t cg_bobpitch;
 vmCvar_t cg_bobroll;
-vmCvar_t cg_swingSpeed;
 vmCvar_t cg_shadows;
 vmCvar_t cg_gibs;
 vmCvar_t cg_drawTimer;
@@ -425,6 +424,8 @@ vmCvar_t cg_teamObituaryColorEnemyTK;
 vmCvar_t cg_fragsY;
 vmCvar_t cg_fragsWidth;
 
+vmCvar_t cg_predictJumps;
+
 typedef struct {
 	vmCvar_t    *vmCvar;
 	char        *cvarName;
@@ -503,7 +504,6 @@ cvarTable_t cvarTable[] = {
 	// END JOSEPH
 
 	// Ridah, more fluid rotations
-	{ &cg_swingSpeed, "cg_swingSpeed", "0.1", CVAR_CHEAT },   // was 0.3 for Q3
 	{ &cg_bloodTime, "cg_bloodTime", "120", CVAR_ARCHIVE },
 	{ &cg_hunkUsed, "com_hunkUsed", "0", 0 },
 	{ &cg_soundAdjust, "hunk_soundadjust", "0", 0 },
@@ -745,6 +745,8 @@ cvarTable_t cvarTable[] = {
 
 	{ &cg_fragsY, "cg_fragsY", "0", CVAR_ARCHIVE },
 	{ &cg_fragsWidth, "cg_fragsWidth", "16", CVAR_ARCHIVE },
+
+	{ &cg_predictJumps, "cg_predictJumps", "0", CVAR_ARCHIVE },
 	
 };
 int cvarTableSize = sizeof( cvarTable ) / sizeof( cvarTable[0] );

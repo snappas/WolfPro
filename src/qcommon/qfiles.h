@@ -728,4 +728,59 @@ typedef struct {
 } drsurfaceInternal_t;
 //----(SA) end
 
+
+typedef enum {
+	SF_BAD,
+	SF_SKIP,                // ignore
+	SF_FACE,
+	SF_GRID,
+	SF_TRIANGLES,
+	SF_POLY,
+	SF_MD3,
+	SF_MDC,
+	SF_MDS,
+	SF_FLARE,
+	SF_ENTITY,              // beams, rails, lightning, etc that can be determined by entity
+	SF_DISPLAY_LIST,
+
+	SF_NUM_SURFACE_TYPES,
+	SF_MAX = 0xffffffff         // ensures that sizeof( surfaceType_t ) == sizeof( int )
+} surfaceType_t;
+
+typedef struct msurface_s {
+	int viewCount;                      // if == tr.viewCount, already added
+	struct shader_s     *shader;
+	int fogIndex;
+
+	surfaceType_t       *data;          // any of srf*_t
+} msurface_t;
+
+typedef struct {
+	vec3_t bounds[2];           // for culling
+	msurface_t  *firstSurface;
+	int numSurfaces;
+} bmodel_t;
+
+typedef enum {
+	MOD_BAD,
+	MOD_BRUSH,
+	MOD_MESH,
+	MOD_MDS,
+	MOD_MDC // Ridah
+} modtype_t;
+
+typedef struct model_s {
+	char name[MAX_QPATH];
+	modtype_t type;
+	int index;                      // model = tr.models[model->index]
+
+	int dataSize;                   // just for listing purposes
+	bmodel_t    *bmodel;            // only if type == MOD_BRUSH
+	md3Header_t *md3[MD3_MAX_LODS]; // only if type == MOD_MESH
+	mdsHeader_t *mds;               // only if type == MOD_MDS
+	mdcHeader_t *mdc[MD3_MAX_LODS]; // only if type == MOD_MDC
+
+	int numLods;
+} model_t;
+
 #endif
