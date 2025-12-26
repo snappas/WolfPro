@@ -505,7 +505,15 @@ static void CG_TouchTriggerPrediction( void ) {
 	}
 }
 
-
+/**
+ * We need to keep pmext around for old frames, because Pmove()
+ * fills in some values when it does prediction. This in itself is fine,
+ * but the prediction loop starts in the past and predicts from the
+ * snapshot time up to the current time, and having things like jumpTime
+ * appear to be set for prediction runs where they previously weren't
+ * is a Bad Thing.
+ */
+pmoveExt_t oldpmext[CMD_BACKUP];
 
 /*
 =================
@@ -541,6 +549,7 @@ void CG_PredictPlayerState( void ) {
 	usercmd_t oldestCmd;
 	usercmd_t latestCmd;
 	vec3_t deltaAngles;
+	pmoveExt_t pmext;
 
 	cg.hyperspace = qfalse; // will be set if touching a trigger_teleport
 
@@ -560,22 +569,24 @@ void CG_PredictPlayerState( void ) {
 
 	// non-predicting local movement will grab the latest angles
 	if ( cg_nopredict.integer || cg_synchronousClients.integer ) {
+		cg_pmove.ps = &cg.predictedPlayerState;
+		cg_pmove.pmext = &cg.pmext;
 		CG_InterpolatePlayerState( qtrue );
 		return;
 	}
 
 	// prepare for pmove
 	cg_pmove.ps = &cg.predictedPlayerState;
-	cg_pmove.pmext = &cg.pmext;
+	cg_pmove.pmext = &pmext; // &cg.pmext;
 
 	// Arnout: are we using an mg42?
 	if ( cg_pmove.ps->eFlags & EF_MG42_ACTIVE ) {
-		cg_pmove.pmext->harc = cg_entities[cg_pmove.ps->viewlocked_entNum].currentState.origin2[0];
-		cg_pmove.pmext->varc = cg_entities[cg_pmove.ps->viewlocked_entNum].currentState.origin2[1];
-		VectorCopy( cg_entities[cg_pmove.ps->viewlocked_entNum].currentState.angles2, cg_pmove.pmext->centerangles );
-		cg_pmove.pmext->centerangles[PITCH] = AngleNormalize180( cg_pmove.pmext->centerangles[PITCH] );
-		cg_pmove.pmext->centerangles[YAW] = AngleNormalize180( cg_pmove.pmext->centerangles[YAW] );
-		cg_pmove.pmext->centerangles[ROLL] = AngleNormalize180( cg_pmove.pmext->centerangles[ROLL] );
+		cg.pmext.harc = cg_entities[cg_pmove.ps->viewlocked_entNum].currentState.origin2[0];
+		cg.pmext.varc = cg_entities[cg_pmove.ps->viewlocked_entNum].currentState.origin2[1];
+		VectorCopy( cg_entities[cg_pmove.ps->viewlocked_entNum].currentState.angles2, cg.pmext.centerangles );
+		cg.pmext.centerangles[PITCH] = AngleNormalize180( cg.pmext.centerangles[PITCH] );
+		cg.pmext.centerangles[YAW] = AngleNormalize180( cg.pmext.centerangles[YAW] );
+		cg.pmext.centerangles[ROLL] = AngleNormalize180( cg.pmext.centerangles[ROLL] );
 	}
 
 	//DHM - Nerve :: We've gone back to using normal bbox traces
@@ -608,6 +619,9 @@ void CG_PredictPlayerState( void ) {
 	oldPlayerState = cg.predictedPlayerState;
 
 	current = trap_GetCurrentCmdNumber();
+
+	// fill in the current cmd with the latest prediction from cg.pmext 
+	Com_Memcpy(&oldpmext[current & CMD_MASK], &cg.pmext, sizeof(pmoveExt_t));
 
 	// if we don't have the commands right after the snapshot, we
 	// can't accurately predict a current position, so just freeze at
@@ -675,6 +689,7 @@ void CG_PredictPlayerState( void ) {
 
 		// don't do anything if the time is before the snapshot player time
 		if ( cg_pmove.cmd.serverTime <= cg.predictedPlayerState.commandTime ) {
+			Com_Memcpy(&pmext, &oldpmext[cmdNum & CMD_MASK], sizeof(pmoveExt_t));
 			continue;
 		}
 
@@ -771,14 +786,7 @@ void CG_PredictPlayerState( void ) {
 		cg_pmove.medicChargeTime = cg_medicChargeTime.integer;
 		// -NERVE - SMF
 
-		// if(cg_pmove.cmd.serverTime - cg_pmove.ps->jumpTime >= 850){
-		// 	jumped = qfalse;
-		// }
-		
-		// if(cg_predictJumps.integer && !jumped && cg_pmove.cmd.upmove != 0){
-		// 	cg_pmove.ps->jumpTime = cg_pmove.cmd.serverTime;
-		// 	jumped = qtrue;
-		// }
+		Com_Memcpy(&pmext, &oldpmext[cmdNum & CMD_MASK], sizeof(pmoveExt_t));
 
 		Pmove( &cg_pmove );
 
@@ -798,6 +806,9 @@ void CG_PredictPlayerState( void ) {
 		}
 		return;
 	}
+
+	// restore pmext
+	Com_Memcpy(&cg.pmext, &pmext, sizeof(pmoveExt_t));
 
 	// adjust for the movement of the groundentity
 	CG_AdjustPositionForMover( cg.predictedPlayerState.origin,
