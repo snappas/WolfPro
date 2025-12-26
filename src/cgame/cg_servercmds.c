@@ -771,6 +771,9 @@ static void CG_MapRestart( void ) {
 	cg.zoomedFOV = qfalse;
 	cg.zoomedTime = 0;
 
+	// clear pmext
+	Com_Memset(&cg.pmext, 0, sizeof(cg.pmext));
+
 	// reset fog to world fog (if present)
 	trap_R_SetFog( FOG_CMD_SWITCHFOG, FOG_MAP,20,0,0,0,0 );
 

@@ -287,6 +287,7 @@ typedef struct {
 	// Arnout: MG42 aiming
 	float varc, harc;
 	vec3_t centerangles;
+	int jumpTime;
 
 } pmoveExt_t;   // data used both in client and server - store it here
 // generally useful for data you want to manipulate in bg_* and cgame, or bg_* and game

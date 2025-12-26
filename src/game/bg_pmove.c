@@ -507,7 +507,7 @@ static qboolean PM_CheckJump( void ) {
 	// JPW NERVE -- jumping in multiplayer uses and requires sprint juice (to prevent turbo skating, sprint + jumps)
 	
 	// don't allow jump accel
-	if ( pm->cmd.serverTime - pm->ps->jumpTime < 850 ) {
+	if ( pm->cmd.serverTime - pm->pmext->jumpTime < 850 ) {
 		return qfalse;
 	}
 	
@@ -864,7 +864,7 @@ static void PM_WalkMove( void ) {
 
 		// JPW NERVE
 		
-		pm->ps->jumpTime = pm->cmd.serverTime;
+		pm->pmext->jumpTime = pm->cmd.serverTime;
 		pm->ps->sprintTime -= 2500;
 		if ( pm->ps->sprintTime < 0 ) {
 			pm->ps->sprintTime = 0;
