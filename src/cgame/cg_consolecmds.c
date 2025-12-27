@@ -628,6 +628,34 @@ static void CG_EditHud_f(void){
 	
 }
 
+char *CG_generateFilename(void){
+	static char fullFilename[MAX_OSPATH];
+	char        prefix[MAX_QPATH];
+	qtime_t     ct;
+	const char  *serverInfo = CG_ConfigString(CS_SERVERINFO);
+
+	trap_RealTime(&ct);
+	fullFilename[0] = '\0';
+	prefix[0]       = '\0';
+
+
+	Com_sprintf(prefix, sizeof(prefix), "%d-%02d/", 1900 + ct.tm_year, ct.tm_mon + 1);
+
+
+	Com_sprintf(fullFilename, sizeof(fullFilename), "%s%d-%02d-%02d-%02d%02d%02d-%s%s", prefix,
+	            1900 + ct.tm_year, ct.tm_mon + 1, ct.tm_mday,
+	            ct.tm_hour, ct.tm_min, ct.tm_sec,
+	            Info_ValueForKey(serverInfo, "mapname"),
+	            ""
+	            );
+
+	return fullFilename;
+}
+
+void CG_autoRecord_f(void){
+	trap_SendConsoleCommand(va("g_synchronousclients 0;g_synchronousclients 1;record %s;g_synchronousclients 0\n", CG_generateFilename()));
+}
+
 
 typedef struct {
 	char    *cmd;

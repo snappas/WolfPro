@@ -2103,6 +2103,7 @@ void CG_PrevItem_f( void );
 void CG_Item_f( void );
 //----(SA)	end
 
+void CG_autoRecord_f(void);
 
 //
 // cg_weapons.c
