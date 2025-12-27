@@ -3203,6 +3203,10 @@ static void CG_DrawWarmup( void ) {
 		if(cg_announcer.integer){
 			trap_S_StartLocalSound(CG_CustomSound(cg.clientNum, "sound/match/prepare.wav"), CHAN_LOCAL_SOUND);
 		}
+		if (!cg.demoPlayback && (cg_autoAction.integer & AA_DEMORECORD))
+		{
+			CG_autoRecord_f();
+		}
 	}
 	if(sec < 5 && sec <= nextSec){
 		if (sec < nextSec) {
