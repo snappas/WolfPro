@@ -178,6 +178,8 @@ cvar_t *r_sleepThreshold;
 cvar_t *r_msaa;
 cvar_t *r_alphaboost;
 
+cvar_t	*r_noborder;
+
 //-------------------------------------------------------------------------------
 // Ridah, mesh compression
 float r_anormals[NUMMDCVERTEXNORMALS][3] = {
@@ -861,6 +863,8 @@ void R_Register( void ) {
 
 	r_msaa = ri.Cvar_Get("r_msaa", "8", CVAR_ARCHIVE | CVAR_LATCH);
 	r_alphaboost = ri.Cvar_Get("r_alphaboost", "1.0", CVAR_ARCHIVE);
+
+	r_noborder = ri.Cvar_Get("r_noborder", "0", CVAR_ARCHIVE | CVAR_LATCH);
 
 	// make sure all the commands added here are also
 	// removed in R_Shutdown
