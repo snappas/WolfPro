@@ -106,7 +106,7 @@ endif()
 endfunction()
 
 if(WOLF_64BITS)
-	#setup_client(wolfmp_gl_x64 FALSE)
+	setup_client(wolfmp_gl_x64 FALSE)
 	setup_client(wolfmp_vk_x64 TRUE)
 else()
 	setup_client(wolfmp_gl_x86 FALSE)

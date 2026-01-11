@@ -374,6 +374,43 @@ LRESULT CALLBACK MainWndProc(
 	}
 	break;
 
+	case WM_WINDOWPOSCHANGING:
+		if (g_wv.noborder)
+		{
+			WINDOWPOS* pos = (LPWINDOWPOS)lParam;
+			const int threshold = 10;
+			HMONITOR hMonitor;
+			MONITORINFO mi;
+			const RECT* r;
+			RECT rr;
+
+			rr.left = pos->x;
+			rr.right = pos->x + pos->cx;
+			rr.top = pos->y;
+			rr.bottom = pos->y + pos->cy;
+			hMonitor = MonitorFromRect(&rr, MONITOR_DEFAULTTOPRIMARY);
+
+			if (hMonitor)
+			{
+				mi.cbSize = sizeof(mi);
+				GetMonitorInfo(hMonitor, &mi);
+				r = &mi.rcWork;
+
+				if (pos->x >= (r->left - threshold) && pos->x <= (r->left + threshold))
+					pos->x = r->left;
+				else if ((pos->x + pos->cx) >= (r->right - threshold) && (pos->x + pos->cx) <= (r->right + threshold))
+					pos->x = (r->right - pos->cx);
+
+				if (pos->y >= (r->top - threshold) && pos->y <= (r->top + threshold))
+					pos->y = r->top;
+				else if ((pos->y + pos->cy) >= (r->bottom - threshold) && (pos->y + pos->cy) <= (r->bottom + threshold))
+					pos->y = (r->bottom - pos->cy);
+
+				return 0;
+			}
+		}
+		break;
+
 	case WM_MOVE:
 	{
 		int xPos, yPos;
@@ -467,6 +504,13 @@ LRESULT CALLBACK MainWndProc(
 
 	case WM_CHAR:
 		Sys_QueEvent( g_wv.sysMsgTime, SE_CHAR, wParam, 0, 0, NULL );
+		break;
+
+	case WM_NCHITTEST:
+		if (g_wv.noborder && GetKeyState(VK_CONTROL) & (1 << 15))
+		{
+			return HTCAPTION;
+		}
 		break;
 	}
 

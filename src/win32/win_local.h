@@ -120,7 +120,7 @@ typedef struct
 
 	qbool		inputInitialized;
 	qbool		duringCreateWindow;	// qtrue during the call to CreateWindow
-
+	qbool       noborder;
 } WinVars_t;
 
 extern WinVars_t g_wv;

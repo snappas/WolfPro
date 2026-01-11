@@ -126,7 +126,13 @@ static qbool VKW_CreateWindow()
 		}
 		else
 		{
-			style |= WS_OVERLAPPED | WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+			g_wv.noborder = r_noborder->integer;
+			if (g_wv.noborder){
+				style |= WS_POPUP;
+			}else{
+				style |= WS_BORDER | WS_OVERLAPPED | WS_CAPTION | WS_MINIMIZEBOX;
+			}
+			style |=  WS_VISIBLE | WS_SYSMENU;
 			AdjustWindowRect( &r, style, FALSE );
 		}
 

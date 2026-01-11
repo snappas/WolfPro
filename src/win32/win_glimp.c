@@ -524,7 +524,7 @@ static qboolean GLW_InitDriver( const char *drivername, int colorbits ) {
 static qboolean GLW_CreateWindow( const char *drivername, int width, int height, int colorbits, qboolean cdsFullscreen ) {
 	RECT r;
 	cvar_t          *vid_xpos, *vid_ypos;
-	int stylebits;
+	unsigned long stylebits = WS_VISIBLE | WS_CLIPCHILDREN;
 	int x, y, w, h;
 	int exstyle;
 
@@ -572,7 +572,13 @@ static qboolean GLW_CreateWindow( const char *drivername, int width, int height,
 		} else
 		{
 			exstyle = 0;
-			stylebits = WINDOW_STYLE | WS_SYSMENU;
+			g_wv.noborder = r_noborder->integer;
+			if (g_wv.noborder){
+				stylebits |= WS_POPUP;
+			}else{
+				stylebits |= (WS_BORDER | WS_OVERLAPPED | WS_CAPTION | WS_MINIMIZEBOX);
+			}
+			stylebits |=  WS_VISIBLE | WS_SYSMENU;
 			AdjustWindowRect( &r, stylebits, FALSE );
 		}
 

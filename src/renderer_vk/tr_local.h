@@ -1205,6 +1205,8 @@ extern cvar_t	*r_sleepThreshold;		// time cushion in us for a call to Sleep(1+)
 
 extern cvar_t *r_msaa;
 extern cvar_t *r_alphaboost;
+
+extern cvar_t *r_noborder;
 //====================================================================
 
 float R_NoiseGet4f( float x, float y, float z, float t );
