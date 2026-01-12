@@ -1224,6 +1224,8 @@ static float CG_DrawProRespawnTimer(float y) {
 	}
 	else if (cgs.clientinfo[cg.snap->ps.clientNum].team == TEAM_BLUE) {
 		val = CG_CalculateReinfTime();
+	}else if (cgs.clientinfo[cg.snap->ps.clientNum].team == TEAM_SPECTATOR){
+		return y;
 	}
 
 	BG_ParseColorCvar(cg_reinforcementTimeColor.string, color, cg_hudAlpha.value);
