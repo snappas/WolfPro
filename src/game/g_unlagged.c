@@ -123,7 +123,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 	if (time < level.time - g_maxLagCompensation.integer) {
 		time = level.time - g_maxLagCompensation.integer;
     }
-    // Elver: commenting this out for test
+    // Elver: commenting this out for testing 
 	/*
 	//Clamp max backward reconcilation time 
 	if (level.time - time > g_maxLagCompensation.integer) {
@@ -195,7 +195,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 				ent->client->unlag.history[j].currentOrigin, ent->client->unlag.history[k].currentOrigin,
 				ent->r.currentOrigin);
 
-			// Elver come back here and check for accuracy on the nearest record (might validate k over j instead of default k) and also the interpolation of max & mins
+			// Elver check for accuracy on the nearest record (validate k over j instead of default k) and also avoid the interpolation of max & mins.
 			// lerp these too, just for fun (and ducking)
 
 			// Elver comment out the mins and max interpolation for testing
@@ -209,7 +209,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 				ent->r.maxs );
 			*/
 
-			// Elver replace it for nearest record
+			// Elver replace it for nearest instead of interpolation that might cause stand-crouch artificial hit windows in between
 			int nearestrecord;
 
 			if (frac < 0.5f) {
