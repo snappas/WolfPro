@@ -136,7 +136,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 	int head = ent->client->unlag.historyHead;
 	int oldest = (head + 1) % NUM_CLIENT_HISTORY;
 
-	// Elver requeste time older than oldest record → no unlag/rewind
+	// Elver request time older than oldest record → no unlag/rewind
 	if (hist[oldest].leveltime == 0 || time < hist[oldest].leveltime) {
     	return; 
 	}
@@ -237,9 +237,8 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			trap_LinkEntity(ent);
 
 		} 
-		//Elver commenting out 
-		/*else {
-			// Elver come back here and check if this is necesary
+		//Elver reverting, this must stay
+		else {
 			// we wrapped, so grab the earliest
 			VectorCopy( ent->client->unlag.history[k].currentOrigin, ent->r.currentOrigin );
 			VectorCopy( ent->client->unlag.history[k].mins, ent->r.mins );
@@ -250,7 +249,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			trap_LinkEntity( ent );
 
 		}
-		*/
+		
 	}
 	else {
 		// this only happens when the client is using a negative timenudge, because that
