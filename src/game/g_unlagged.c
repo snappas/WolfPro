@@ -115,38 +115,13 @@ Move a client back to where he was at the specified "time"
 void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *debugger ) {
 	int		j, k;
 
-    //Elver: suggestion to avoid possible moving into  future, to avoid artificial hit window opportunities, this might reduce some "forgiveness".
-	// hard clamp rewind time
-	if (time > level.time) {
-		return; // validation, no rewind into the future
-	}
-	if (time < level.time - g_maxLagCompensation.integer) {
-		time = level.time - g_maxLagCompensation.integer;
-    }
-    // Elver: commenting this out for test
-	/*
 	//Clamp max backward reconcilation time 
 	if (level.time - time > g_maxLagCompensation.integer) {
 		time = level.time + g_maxLagCompensation.integer;
 	}
-	*/
-
-	//Elver validation in attempt to avoid extrapolation "abuse" ported this from old code from LCSDM
-	clientHistory_t *hist = ent->client->unlag.history;
-	int head = ent->client->unlag.historyHead;
-	int oldest = (head + 1) % NUM_CLIENT_HISTORY;
-
-	// Elver requeste time older than oldest record → no unlag/rewind
-	if (hist[oldest].leveltime == 0 || time < hist[oldest].leveltime) {
-    	return; 
-	}
 
 	// find two entries in the history whose times sandwich "time"
 	// assumes no two adjacent records have the same timestamp
-
-	//Elver for sandwich searh validation
-	qboolean histfound = qfalse;
-
 	j = k = ent->client->unlag.historyHead;
 	do {
 		if ( ent->client->unlag.history[j].leveltime <= time )
@@ -159,11 +134,6 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 		}
 	}
 	while ( j != ent->client->unlag.historyHead );
-
-	//Elver for sandwich searh validation
-	if (!histfound || j ==  k) {
-		return; //No valid sandwich = no unlag rewind
-	}
 
 	// if we got past the first iteration above, we've sandwiched (or wrapped)
 	if ( j != k ) {
@@ -179,27 +149,16 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 
 		// if we haven't wrapped back to the head, we've sandwiched, so
 		// we shift the client's position back to where he was at "time"
-		if (j != ent->client->unlag.historyHead) {
-
-			// Elver attempt to reduce the change of extrapolated hitboxes.
-			if (ent->client->unlag.history[k].leveltime <= ent->client->unlag.history[j].leveltime) {
-				return;
-			}
+		if ( j != ent->client->unlag.historyHead ) {
 			float	frac = (float)(time - ent->client->unlag.history[j].leveltime) /
 				(float)(ent->client->unlag.history[k].leveltime - ent->client->unlag.history[j].leveltime);
-			// Elver attempt to reduce the change of extrapolated hitboxes, might break it too.
-			frac = Com_Clamp(0.0f, 1.0f, frac);
 
 			// interpolate between the two origins to give position at time index "time"
-			TimeShiftLerp(frac,
+			TimeShiftLerp( frac,
 				ent->client->unlag.history[j].currentOrigin, ent->client->unlag.history[k].currentOrigin,
-				ent->r.currentOrigin);
+				ent->r.currentOrigin );
 
-			// Elver come back here and check for accuracy on the nearest record (might validate k over j instead of default k) and also the interpolation of max & mins
 			// lerp these too, just for fun (and ducking)
-
-			// Elver comment out the mins and max interpolation for testing
-			/*
 			TimeShiftLerp( frac,
 				ent->client->unlag.history[j].mins, ent->client->unlag.history[k].mins,
 				ent->r.mins );
@@ -207,27 +166,14 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			TimeShiftLerp( frac,
 				ent->client->unlag.history[j].maxs, ent->client->unlag.history[k].maxs,
 				ent->r.maxs );
-			*/
 
-			// Elver replace it for nearest record
-			int nearestrecord;
-
-			if (frac < 0.5f) {
-				nearestrecord = j;
-			}
-			else {
-				nearestrecord = k;
-			}
-			VectorCopy(ent->client->unlag.history[nearestrecord].mins, ent->r.mins);
-			VectorCopy(ent->client->unlag.history[nearestrecord].maxs, ent->r.maxs);
-
-			CopyAnimationInfo(&ent->client->unlag.history[nearestrecord].animationInfo, &ent->client->animationInfo);
+			CopyAnimationInfo(&ent->client->unlag.history[j].animationInfo, &ent->client->animationInfo);
 			// ported from nobo antilag for custom head animations
 			// find the "best" origin between the sandwiching trail nodes via interpolation
 			//Interpolate(frac, ent->client->history[j].currentOrigin, ent->client->history[k].currentOrigin, ent->r.currentOrigin);
 			// find the "best" mins & maxs (crouching/standing).
-			// it doesn't make sense to interpolate mins and maxs. the server either thinks the client 
-			// is crouching or not, and updates the mins & maxs immediately. there's no inbetween. // Elver check this with snappas, for crouch - stand desync hit artificial oportunities
+			// it doesn't make sense to interpolate mins and maxs. the server either thinks the client
+			// is crouching or not, and updates the mins & maxs immediately. there's no inbetween.
 			// use the trail node's animation info that's nearest "time" (for head hitbox).
 			// the current server animation code used for head hitboxes doesn't support interpolating
 			// between two different animation frames (i.e. crouch -> standing animation), so can't interpolate here either.
@@ -236,10 +182,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			// this will recalculate absmin and absmax
 			trap_LinkEntity(ent);
 
-		} 
-		//Elver commenting out 
-		/*else {
-			// Elver come back here and check if this is necesary
+		} else {
 			// we wrapped, so grab the earliest
 			VectorCopy( ent->client->unlag.history[k].currentOrigin, ent->r.currentOrigin );
 			VectorCopy( ent->client->unlag.history[k].mins, ent->r.mins );
@@ -248,9 +191,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 
 			// this will recalculate absmin and absmax
 			trap_LinkEntity( ent );
-
 		}
-		*/
 	}
 	else {
 		// this only happens when the client is using a negative timenudge, because that
