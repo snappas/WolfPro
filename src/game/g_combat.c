@@ -507,7 +507,16 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 // JPW NERVE -- only corpse in SP; in MP, need CONTENTS_BODY so medic can operate
 	self->client->limboDropWeapon = self->s.weapon; // store this so it can be dropped in limbo
 	
-	self->client->pers.deathYaw = SHORT2ANGLE(self->client->pers.cmd.angles[YAW] + self->client->ps.delta_angles[YAW]);
+	//Elver this stays for later usage after player gets revived, so they don't twist on revive anim.
+	 self->client->pers.deathYaw = SHORT2ANGLE(self->client->pers.cmd.angles[YAW] + self->client->ps.delta_angles[YAW]);
+
+	// Elver, this keeps the angle you were looking before playing die anim, so it doens't reset to a fixed position when getting killed.
+	vec3_t new_angles;
+	VectorCopy(self->client->ps.viewangles, new_angles);
+	new_angles[PITCH] = 0;
+	new_angles[ROLL] = 0;
+	SetClientViewAngle(self, new_angles);
+
 	
 	self->s.angles[2] = 0;
 	LookAtKiller( self, inflictor, attacker );
