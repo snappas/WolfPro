@@ -85,6 +85,8 @@ for mapscript in "${GAME_BASE}/wolfpro/maps/"*.script; do
     rm -rf "${mapscript}"
 done
 
+mkdir -p "${GAME_BASE}/wolfpro/maps/"
+
 for mapscript in "${SETTINGS_BASE}/mapscripts/"*.script; do
     [ -f "${mapscript}" ] || break
     cp "${mapscript}" "${GAME_BASE}/wolfpro/maps/"
