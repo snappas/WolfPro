@@ -1626,7 +1626,7 @@ static void CalculatePlayerStats(gentity_t *ent){
 
 			}
 
-
+			VectorCopy(ent->client->ps.origin, ent->client->sess.prevOrigin);
 		}
 }
 void ClientEndFrame( gentity_t *ent ) {

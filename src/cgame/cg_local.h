@@ -946,6 +946,8 @@ typedef struct {
 	qboolean hudeditor;
 	int prevHudGenTime;
 
+	int lastCvarCheck;
+
 } cg_t;
 
 #define NUM_FUNNEL_SPRITES  21
@@ -1918,6 +1920,9 @@ qboolean CG_CheckCenterView();
 void CG_printConsoleString( char *str );
 
 qboolean CG_execFile(char* filename); // RTCWPro - autoexec
+
+void CG_PrintRestrictions(void);
+void CG_CheckAndApplyRestrictions(void);
 
 //
 // cg_view.c

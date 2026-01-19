@@ -81,12 +81,12 @@ void BuildPlayerStats(gclient_t *client, qboolean clientDisconnected)
         {
             cl = client; // used passed in client
 
-            DecolorString(cl->pers.netname, n1);
+            DecolorString(cl->pers.username, n1);
             SanitizeString(n1, n2);
             Q_CleanStr(n2);
             n2[15] = 0;
 
-            Q_strncpyz(level.disconnectStats[dc].aliasColored, cl->pers.netname, sizeof(level.disconnectStats[dc].aliasColored));
+            Q_strncpyz(level.disconnectStats[dc].aliasColored, cl->pers.username, sizeof(level.disconnectStats[dc].aliasColored));
             Q_strncpyz(level.disconnectStats[dc].alias, n2, sizeof(level.disconnectStats[dc].alias));
 
             eff = (cl->sess.stats.deaths + cl->sess.stats.kills == 0) ? 0 : 100 * cl->sess.stats.kills / (cl->sess.stats.deaths + cl->sess.stats.kills);
@@ -160,12 +160,12 @@ void BuildPlayerStats(gclient_t *client, qboolean clientDisconnected)
             if (cl->pers.connected != CON_CONNECTED)
                 continue;
 
-            DecolorString(cl->pers.netname, n1);
+            DecolorString(cl->pers.username, n1);
             SanitizeString(n1, n2);
             Q_CleanStr(n2);
             n2[15] = 0;
 
-            Q_strncpyz(level.playerStats[i].aliasColored, cl->pers.netname, sizeof(level.playerStats[i].aliasColored));
+            Q_strncpyz(level.playerStats[i].aliasColored, cl->pers.username, sizeof(level.playerStats[i].aliasColored));
             Q_strncpyz(level.playerStats[i].alias, n2, sizeof(level.playerStats[i].alias));
 
             eff = (cl->sess.stats.deaths + cl->sess.stats.kills == 0) ? 0 : 100 * cl->sess.stats.kills / (cl->sess.stats.deaths + cl->sess.stats.kills);
@@ -1039,7 +1039,7 @@ void G_jstatsByTeam(qboolean wstats) {
 			if ( cl->pers.connected != CON_CONNECTED || cl->sess.sessionTeam != i ) {
 				continue;
 			}
-			DecolorString(cl->pers.netname, n1);
+			DecolorString(cl->pers.username, n1);
 			SanitizeString(n1, n2);
 			Q_CleanStr(n2);
 			n2[15] = 0;
@@ -1592,7 +1592,7 @@ void G_writeGeneralEvent (gentity_t* agent,gentity_t* other, char* weapon, int e
 		    json_object_set_new(jdata, "group",    json_string("player"));
             json_object_set_new(jdata, "label",   json_string("name_change"));
             json_object_set_new(jdata, "agent",  json_string(va("%s",agent->client->sess.guid)));
-            json_object_set_new(jdata, "other",  json_string(va("%s",agent->client->pers.netname)));
+            json_object_set_new(jdata, "other",  json_string(va("%s",agent->client->pers.username)));
             break;
         default:
             json_object_set_new(jdata, "group",    json_string("server"));

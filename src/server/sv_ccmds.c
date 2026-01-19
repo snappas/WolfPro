@@ -963,7 +963,8 @@ void SV_SetCvarRestrictions(void) {
 			Cmd_TokenizeString(line);
 
 			if (!Q_stricmp(Cmd_Argv(0), "sv_cvar")) {
-				//Cvar_SetRestricted(Cmd_Argv(1), RestrictedTypeToInt(Cmd_Argv(2)), Cmd_Argv(3), Cmd_Argv(4));
+				SV_SetConfigstring(CS_CVARRESTRICTS + i, Cmd_Argv(1));
+				SV_SetConfigstring(CS_CVARRESTRICTVALS + i, Cmd_ArgsFrom(2));
 				i++;
 			}
 			else if (!Q_stricmp(Cmd_Argv(0), "set") || !Q_stricmp(Cmd_Argv(0), "seta")) {
