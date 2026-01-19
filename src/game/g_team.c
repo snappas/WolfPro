@@ -506,6 +506,7 @@ int Team_TouchOurFlag( gentity_t *ent, gentity_t *other, int team ) {
 				if ( gm ) {
 					G_Script_ScriptEvent( gm, "trigger", "axis_object_returned" );
 				}
+				G_matchPrintInfo("^5Axis have returned the objective!",qfalse);
 				G_writeObjectiveEvent(other, objReturned  );
 				cl->sess.stats.obj_returned++;
 			} else {
@@ -515,6 +516,7 @@ int Team_TouchOurFlag( gentity_t *ent, gentity_t *other, int team ) {
 				if ( gm ) {
 					G_Script_ScriptEvent( gm, "trigger", "allied_object_returned" );
 				}
+				G_matchPrintInfo("^5Allies have returned the objective!",qfalse);
 				G_writeObjectiveEvent(other, objReturned  );
 				cl->sess.stats.obj_returned++;
 			}

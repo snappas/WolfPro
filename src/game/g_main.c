@@ -2224,7 +2224,7 @@ void LogExit( const char *string ) {
 				trap_Cvar_Set( "g_nextTimeLimit", va( "%f", g_timelimit.value ) );
 			} else {
 				// use remaining time as next timer
-				trap_Cvar_Set( "g_nextTimeLimit", va( "%f", ( level.time - level.startTime ) / 60000.f ) );
+				trap_Cvar_Set( "g_nextTimeLimit", va( "%f", ( level.timeCurrent - level.startTime ) / 60000.f ) );
 			}
 		} else {
 			// reset timer

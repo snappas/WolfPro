@@ -838,5 +838,20 @@ void CG_InitConsoleCommands( void ) {
 	trap_AddCommand("notready");
 	trap_AddCommand("lock");		// Locks team
 	trap_AddCommand("unlock");		// Unlocks team
-	
+
+	trap_AddCommand("pause");
+	trap_AddCommand("unpause");
+	trap_AddCommand("players");
+
+	trap_AddCommand("wstats");
+	trap_AddCommand("cstats");
+	trap_AddCommand("stats");
+	trap_AddCommand("gamestats");
+	trap_AddCommand("sgstats");
+	trap_AddCommand("stshots");
+	trap_AddCommand("scores");
+	trap_AddCommand("bottomshots");
+	trap_AddCommand("statsall");
+	trap_AddCommand("topshots");
+	trap_AddCommand("weaponstats");
 }

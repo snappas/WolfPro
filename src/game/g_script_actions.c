@@ -1473,6 +1473,7 @@ qboolean G_ScriptAction_Announce( gentity_t *ent, char *params ) {
 	}
 
 	trap_SendServerCommand( -1, va( "cp \"%s\" 2", token ) );
+	G_matchPrintInfo(va("^5%s", token), qfalse);
 
 	return qtrue;
 }
