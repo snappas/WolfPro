@@ -114,6 +114,8 @@ typedef enum {
 // RF
 #define MAX_TAGCONNECTS     32
 
+#define MAX_CVARRESTRICTS   128
+
 // (SA) zoom sway values
 #define ZOOM_PITCH_AMPLITUDE        0.13f
 #define ZOOM_PITCH_FREQUENCY        0.24f
@@ -195,7 +197,10 @@ typedef enum {
 #define CS_SPLINES              ( CS_CLIPBOARDS + MAX_CLIPBOARD_CONFIGSTRINGS )
 #define CS_TAGCONNECTS          ( CS_SPLINES + MAX_SPLINE_CONFIGSTRINGS )
 
-#define CS_MAX                  ( CS_TAGCONNECTS + MAX_TAGCONNECTS )
+#define CS_CVARRESTRICTS        ( CS_TAGCONNECTS + MAX_TAGCONNECTS)
+#define CS_CVARRESTRICTVALS     ( CS_CVARRESTRICTS + MAX_CVARRESTRICTS)
+
+#define CS_MAX                  ( CS_CVARRESTRICTVALS + MAX_CVARRESTRICTS )
 
 #if ( CS_MAX ) > MAX_CONFIGSTRINGS
 #error overflow: (CS_MAX) > MAX_CONFIGSTRINGS
