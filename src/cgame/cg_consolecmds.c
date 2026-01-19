@@ -726,6 +726,8 @@ static consoleCommand_t commands[] = {
 	
 	{ "resetmaxspeed", CG_ResetMaxSpeed_f },
 	{ "edithud", CG_EditHud_f },
+	
+	{ "restrictions", CG_PrintRestrictions },
 };
 
 

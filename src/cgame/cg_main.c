@@ -880,6 +880,10 @@ void CG_UpdateCvars( void ) {
 	if(setFlags){
 		CG_setClientFlags();
 	}
+	if(cg.time > cg.lastCvarCheck){
+		CG_CheckAndApplyRestrictions();
+		cg.lastCvarCheck = cg.time + 5000;
+	}
 	
 }
 
@@ -2592,6 +2596,250 @@ void CG_LoadExtensions(void) {
 	}
 }
 
+typedef struct cvarRange_s {
+	char cvarName[64];
+	int type;
+	char min[64];
+	char max[64];
+} cvarRange_t;
+
+typedef enum cvarRestrictMode_e {
+	CVAR_REST_IN,
+	CVAR_REST_OUT,
+	CVAR_REST_EQ,
+	CVAR_REST_EXCLUDE,
+	CVAR_REST_INCLUDE,
+	CVAR_REST_UNKNOWN
+} cvarRestrictMode_t;
+
+cvarRange_t cvarRestrictions[MAX_CVARRESTRICTS];
+int currentCvarRestricts = 0;
+int restrict_argc = 0;
+static char *restrict_argv[MAX_STRING_TOKENS];
+static char origRestrictString[BIG_INFO_STRING]; 
+static char restrictStringTokenized[BIG_INFO_STRING + MAX_STRING_TOKENS]; 
+
+void CG_TokenizeRestrictString(char *text_in){
+	/*
+============
+Cmd_TokenizeString
+
+Parses the given string into command line tokens.
+The text is copied to a seperate buffer and 0 characters
+are inserted in the apropriate place, The argv array
+will point into this temporary buffer.
+============
+*/
+	const char  *text;
+	char    *textOut;
+
+	// clear previous args
+	restrict_argc = 0;
+
+	if ( !text_in ) {
+		return;
+	}
+
+	Q_strncpyz( origRestrictString, text_in, sizeof( origRestrictString ) );
+
+	text = text_in;
+	textOut = restrictStringTokenized;
+
+	while ( 1 ) {
+		if ( restrict_argc == MAX_STRING_TOKENS ) {
+			return;         // this is usually something malicious
+		}
+
+		while ( 1 ) {
+			// skip whitespace
+			while ( *text && *text <= ' ' ) {
+				text++;
+			}
+			if ( !*text ) {
+				return;         // all tokens parsed
+			}
+
+			// skip // comments
+			if ( text[0] == '/' && text[1] == '/' ) {
+				return;         // all tokens parsed
+			}
+
+			// skip /* */ comments
+			if ( text[0] == '/' && text[1] == '*' ) {
+				while ( *text && ( text[0] != '*' || text[1] != '/' ) ) {
+					text++;
+				}
+				if ( !*text ) {
+					return;     // all tokens parsed
+				}
+				text += 2;
+			} else {
+				break;          // we are ready to parse a token
+			}
+		}
+
+		// handle quoted strings
+		if ( *text == '"' ) {
+			restrict_argv[restrict_argc] = textOut;
+			restrict_argc++;
+			text++;
+			while ( *text && *text != '"' ) {
+				*textOut++ = *text++;
+			}
+			*textOut++ = 0;
+			if ( !*text ) {
+				return;     // all tokens parsed
+			}
+			text++;
+			continue;
+		}
+
+		// regular token
+		restrict_argv[restrict_argc] = textOut;
+		restrict_argc++;
+
+		// skip until whitespace, quote, or command
+		while ( *text > ' ' ) {
+			if ( text[0] == '"' ) {
+				break;
+			}
+
+			if ( text[0] == '/' && text[1] == '/' ) {
+				break;
+			}
+
+			// skip /* */ comments
+			if ( text[0] == '/' && text[1] == '*' ) {
+				break;
+			}
+
+			*textOut++ = *text++;
+		}
+
+		*textOut++ = 0;
+
+		if ( !*text ) {
+			return;     // all tokens parsed
+		}
+	}
+
+}
+
+void CG_LoadRestriction(char *name, char *restrictString, int i){
+	cvarRange_t *cvar = &cvarRestrictions[i];
+	Q_strncpyz(cvar->cvarName, name, sizeof(cvar->cvarName));
+
+	CG_TokenizeRestrictString(restrictString);
+
+	if(restrict_argc == 0){
+		return;
+	}
+
+	if(strstr("IN", restrict_argv[0])){
+		cvar->type = CVAR_REST_IN;
+		Q_strncpyz(cvar->min, restrict_argv[1], sizeof(cvar->min));
+		Q_strncpyz(cvar->max, restrict_argv[2], sizeof(cvar->max));
+	}else if(strstr("OUT", restrict_argv[0])){
+		cvar->type = CVAR_REST_OUT;
+		Q_strncpyz(cvar->min, restrict_argv[1], sizeof(cvar->min));
+		Q_strncpyz(cvar->max, restrict_argv[2], sizeof(cvar->max));
+	}else if(strstr("EQ", restrict_argv[0])){
+		cvar->type = CVAR_REST_EQ;
+		Q_strncpyz(cvar->min, restrict_argv[1], sizeof(cvar->min));
+		Q_strncpyz(cvar->max, restrict_argv[1], sizeof(cvar->max));
+	}else if(strstr("EXCLUDE", restrict_argv[0])){
+		cvar->type = CVAR_REST_EXCLUDE;
+	}else if (strstr("INCLUDE", restrict_argv[0])) {
+		cvar->type = CVAR_REST_INCLUDE;
+	}else{
+		cvar->type = CVAR_REST_UNKNOWN;
+	}
+
+	currentCvarRestricts++;
+
+}
+
+void CG_RegisterCvarRestrict(void){
+	const char *cvarName;
+	const char *restrictString;
+	for(int i = 0; i < MAX_CVARRESTRICTS; i++){
+		cvarName = CG_ConfigString( CS_CVARRESTRICTS + i );
+		restrictString = CG_ConfigString( CS_CVARRESTRICTVALS + i );
+		CG_LoadRestriction(cvarName, restrictString, i);
+	}
+	CG_CheckAndApplyRestrictions();
+	
+}
+
+void CG_PrintRestrictions(void){
+	for(int i = 0; i < currentCvarRestricts; i++){
+		cvarRange_t *cvar = &cvarRestrictions[i];
+		char *type;
+		if(cvar->type == CVAR_REST_IN){
+			type = "IN";
+		}else if(cvar->type == CVAR_REST_OUT){
+			type = "OUT";
+		}else if(cvar->type == CVAR_REST_EQ){
+			type = "EQ";
+		}else if(cvar->type == CVAR_REST_EXCLUDE){
+			type = "EXCLUDE";
+		}else if (cvar->type == CVAR_REST_INCLUDE){
+			type = "INCLUDE";
+		}
+		CG_Printf("%s %s %s %s\n", cvar->cvarName, type, cvar->min, cvar->max);
+	}
+}
+
+void CG_CheckAndApplyRestrictions(void){
+	char cvarValue[MAX_CVAR_VALUE_STRING];
+	qboolean vidViolation = qfalse;
+	for(int i = 0; i < currentCvarRestricts; i++){
+		cvarRange_t *cvar = &cvarRestrictions[i];
+		trap_Cvar_VariableStringBuffer(cvar->cvarName, cvarValue, sizeof(cvarValue));
+		float value = 0.0f;
+		float min = 0.0f;
+		float max = 0.0f;
+		float clamped = 0.0f;
+		if(Q_IsNumeric(cvarValue)){
+			value = atof(cvarValue);
+			min = atof(cvar->min);
+			max = atof(cvar->max);
+			clamped = Com_Clamp(min, max, value);
+		}
+
+		qboolean vidCvar = qfalse;
+		if(!Q_strncmp("r_", cvar->cvarName, 2)){
+			vidCvar = qtrue;
+		}
+
+		qboolean violated = qfalse;
+		switch(cvar->type){
+			case CVAR_REST_EQ:
+			case CVAR_REST_IN:
+				if(value < min || value > max){
+					trap_Cvar_Set(cvar->cvarName, va("%.05f", clamped));
+					CG_Printf(S_COLOR_YELLOW"Cvar Restrict: %s clamped to %.05f\n", cvar->cvarName, clamped);
+					violated = qtrue;
+				}
+				break;
+			case CVAR_REST_OUT:
+				if (value >= min && value <= max){
+					trap_Cvar_Set(cvar->cvarName, va("%.05f", value < 0.0f? min - 0.0001f : max + 0.0001f));
+					CG_Printf(S_COLOR_YELLOW"Cvar Restrict: %s clamped to %.05f\n", cvar->cvarName, value < 0.0f ? min - 0.0001f : max + 0.0001f);
+					violated = qtrue;
+				}
+				break;
+			default: break;
+		}
+		if(vidCvar && violated){
+			vidViolation = qtrue;
+		}
+	}
+	if (vidViolation){
+		trap_SendConsoleCommand("vid_restart\n");
+	}
+}
+
 /*
 =================
 CG_Init
@@ -2627,7 +2875,6 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 	cgs.media.charsetPropB      = trap_R_RegisterShaderNoMip( "menu/art/font2_prop.tga" );
 
 	CG_RegisterCvars();
-
 	CG_InitConsoleCommands();
 
 	CG_ClearTrails();
@@ -2648,6 +2895,8 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 	if ( strcmp( s, GAME_VERSION ) ) {
 		CG_Error( "Client/Server game mismatch: %s/%s", GAME_VERSION, s );
 	}
+
+	CG_RegisterCvarRestrict();
 
 	s = CG_ConfigString( CS_LEVEL_START_TIME );
 	cgs.levelStartTime = atoi( s );
