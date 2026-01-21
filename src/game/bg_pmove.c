@@ -877,6 +877,40 @@ static void PM_WalkMove( void ) {
 
 	PM_Friction();
 
+
+	// Elver SideDrift bug fix or attempt
+	// If no strafe input, tries to kill residual lateral velocity smoothly.
+	if (pm->cmd.rightmove == 0 &&
+		!(pml.groundTrace.surfaceFlags & SURF_SLICK) &&
+		!(pm->ps->pm_flags & PMF_TIME_KNOCKBACK)) {
+
+		vec3_t right;
+		float sidevel;
+		float damping;
+
+		// build right vector from current view
+		right[0] = pml.right[0];
+		right[1] = pml.right[1];
+		right[2] = 0;
+		VectorNormalize(right);
+
+		sidevel = DotProduct(pm->ps->velocity, right);
+
+		//Elver
+		//Damping factor
+		// I tried to just kill the remaining velocity but feels really wrong so added a "Damping factor" when moving to side to side (MoveLeft - moveright)	
+		// If you want to notice the difference try 100.0f for a hard momentum stop and 8.0f for "smooth" but kinda still notice some remaining drag, at 18.0f-25.0f is not there and the momentum kill feels smooth
+
+		damping = 25.0f * pml.frametime;  // <--------------------TWEAK HERE 
+
+		// Maybe we want a var for adjustment?	// not adding this for now
+		// damping = pm_sideDamp->value * pml.frametime; 
+
+		// removes it smoothly
+		VectorMA(pm->ps->velocity, -sidevel * damping, right, pm->ps->velocity);
+
+	}
+
 	fmove = pm->cmd.forwardmove;
 	smove = pm->cmd.rightmove;
 
