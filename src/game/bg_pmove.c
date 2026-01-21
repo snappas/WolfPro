@@ -897,12 +897,15 @@ static void PM_WalkMove( void ) {
 
 		sidevel = DotProduct(pm->ps->velocity, right);
 
-		// Elver turn this on for debugging (print current side velocity) 
+		// Elver turn this on for debugging (print current side velocity)
+		/*
 		static int frameCounter = 0;
 		frameCounter++;
 		if (frameCounter % 20 == 0) {  // every 20 frames
 			Com_Printf("Side velocity: %.3f\n", sidevel);
 		}
+
+		*/
 
 		//Elver
 		//Damping factor
