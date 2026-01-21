@@ -898,24 +898,23 @@ static void PM_WalkMove( void ) {
 		sidevel = DotProduct(pm->ps->velocity, right);
 
 		// Elver turn this on for debugging (print current side velocity)
-		/*
 		static int frameCounter = 0;
 		frameCounter++;
 		if (frameCounter % 20 == 0) {  // every 20 frames
 			Com_Printf("Side velocity: %.3f\n", sidevel);
 		}
 
-		*/
+		
 
 		//Elver
 		//Damping factor
 		// I tried to just kill the remaining velocity but feels really wrong so added a "Damping factor" when moving to side to side (MoveLeft - moveright)
-		// Adjust, 0.20f feels like what it takes forward or backward momentum to end. Values to 0.03 feel like a hard stop
+		// Adjust, 0.35f 0.33f feels like what it takes forward or backward momentum to end. Values to 0.03 feel like a hard stop
 		 
-		damping = 1.0f - expf(-pml.frametime / 0.20f); //< --------------------TWEAK HERE
+		damping = 1.0f - expf(-pml.frametime / 0.35f); //< --------------------TWEAK HERE  (check residual velocity after changes, might be higher than later zeroing threshold)
 
 		//There was some remaining velocity like 4.8, due to float precision? That's my guess, but we kill it here.
-		if (fabs(sidevel) < 5.1f) { // threshold, tweak as needed 4.8 was the consistent remaining velocity so 5.1 should do the job
+		if (fabs(sidevel) < 7.8f) { // threshold, tweak as needed 6.something was the consistent remaining velocity so 7.8 should do the job (if you adjust the time above this must be check for the residual threshold)
 			// zero it out
 			VectorMA(pm->ps->velocity, -sidevel, right, pm->ps->velocity);
 		}
