@@ -888,26 +888,38 @@ static void PM_WalkMove( void ) {
 		float sidevel;
 		float damping;
 
+
 		// build right vector from current view
 		right[0] = pml.right[0];
 		right[1] = pml.right[1];
 		right[2] = 0;
-		VectorNormalize(right);
+		VectorNormalize(right);		
 
 		sidevel = DotProduct(pm->ps->velocity, right);
 
+		// Elver turn this on for debugging (print current side velocity) 
+		static int frameCounter = 0;
+		frameCounter++;
+		if (frameCounter % 20 == 0) {  // every 20 frames
+			Com_Printf("Side velocity: %.3f\n", sidevel);
+		}
+
 		//Elver
 		//Damping factor
-		// I tried to just kill the remaining velocity but feels really wrong so added a "Damping factor" when moving to side to side (MoveLeft - moveright)	
-		// If you want to notice the difference try 100.0f for a hard momentum stop and 8.0f for "smooth" but kinda still notice some remaining drag, at 18.0f-25.0f is not there and the momentum kill feels smooth
+		// I tried to just kill the remaining velocity but feels really wrong so added a "Damping factor" when moving to side to side (MoveLeft - moveright)
+		// Adjust, 0.20f feels like what it takes forward or backward momentum to end. Values to 0.03 feel like a hard stop
+		 
+		damping = 1.0f - expf(-pml.frametime / 0.20f); //< --------------------TWEAK HERE
 
-		damping = 25.0f * pml.frametime;  // <--------------------TWEAK HERE 
-
-		// Maybe we want a var for adjustment?	// not adding this for now
-		// damping = pm_sideDamp->value * pml.frametime; 
-
-		// removes it smoothly
-		VectorMA(pm->ps->velocity, -sidevel * damping, right, pm->ps->velocity);
+		//There was some remaining velocity like 4.8, due to float precision? That's my guess, but we kill it here.
+		if (fabs(sidevel) < 5.1f) { // threshold, tweak as needed 4.8 was the consistent remaining velocity so 5.1 should do the job
+			// zero it out
+			VectorMA(pm->ps->velocity, -sidevel, right, pm->ps->velocity);
+		}
+		else {
+			// smooth damping
+			VectorMA(pm->ps->velocity, -sidevel * damping, right, pm->ps->velocity);
+		}
 
 	}
 
@@ -3687,6 +3699,45 @@ void PM_LadderMove( void ) {
 	// do strafe friction
 	PM_Friction();
 
+	// Elver SideDrift bug fix or attempt
+	// If no strafe input, tries to kill residual lateral velocity smoothly.
+	if (pm->cmd.rightmove == 0 &&
+		!(pml.groundTrace.surfaceFlags & SURF_SLICK) &&
+		!(pm->ps->pm_flags & PMF_TIME_KNOCKBACK)) {
+
+		vec3_t right;
+		float sidevel;
+		float damping;
+
+
+		// build right vector from current view
+		right[0] = pml.right[0];
+		right[1] = pml.right[1];
+		right[2] = 0;
+		VectorNormalize(right);
+
+		sidevel = DotProduct(pm->ps->velocity, right);
+
+
+		//Elver
+		//Damping factor
+		// I tried to just kill the remaining velocity but feels really wrong so added a "Damping factor" when moving to side to side (MoveLeft - moveright)
+		// Adjust, 0.20f feels like what it takes forward or backward momentum to end. Values to 0.03 feel like a hard stop
+
+		damping = 1.0f - expf(-pml.frametime / 0.20f); //< --------------------TWEAK HERE
+
+		//There was some remaining velocity like 4.8, due to float precision? That's my guess, but we kill it here.
+		if (fabs(sidevel) < 5.1f) { // threshold, tweak as needed 4.8 was the consistent remaining velocity so 5.1 should do the job
+			// zero it out
+			VectorMA(pm->ps->velocity, -sidevel, right, pm->ps->velocity);
+		}
+		else {
+			// smooth damping
+			VectorMA(pm->ps->velocity, -sidevel * damping, right, pm->ps->velocity);
+		}
+
+	}
+
 	wishspeed = VectorNormalize2( wishvel, wishdir );
 
 	PM_Accelerate( wishdir, wishspeed, pm_accelerate );
@@ -3703,6 +3754,8 @@ void PM_LadderMove( void ) {
 				pm->ps->velocity[2]  = 0;
 			}
 		}
+
+
 	}
 
 //Com_Printf("vel[2] = %i\n", (int)pm->ps->velocity[2] );
