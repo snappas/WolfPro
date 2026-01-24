@@ -1303,8 +1303,8 @@ SpectatorClientEndFrame
 void SpectatorClientEndFrame( gentity_t *ent ) {
 	gclient_t   *cl;
 	int do_respawn = 0; // JPW NERVE
-	int savedScore;     // DHM - Nerve
-	int savedRespawns;  // DHM - Nerve
+	//int savedScore;     // DHM - Nerve
+	//int savedRespawns;  // DHM - Nerve
 	int savedClass;     // NERVE - SMF
 	int flags;
 	int testtime;
@@ -1350,23 +1350,27 @@ void SpectatorClientEndFrame( gentity_t *ent ) {
 		if ( clientNum >= 0 ) {
 			cl = &level.clients[ clientNum ];
 			if ( cl->pers.connected == CON_CONNECTED && cl->sess.sessionTeam != TEAM_SPECTATOR ) {
+				// WolfPro - Ping & Score bug fix
+				// This solves the /serverstatus and score table (who's specing/demoing you) bug..
+				int ping = ent->client->ps.ping;
+				int score = ent->client->ps.persistant[PERS_SCORE];
 				// DHM - Nerve :: carry flags over
 				flags = ( cl->ps.eFlags & ~( EF_VOTED ) ) | ( ent->client->ps.eFlags & ( EF_VOTED ) );
 				// JPW NERVE -- limbo latch
 				if ( ent->client->sess.sessionTeam != TEAM_SPECTATOR && ent->client->ps.pm_flags & PMF_LIMBO ) {
 					// abuse do_respawn var
-					savedScore = ent->client->ps.persistant[PERS_SCORE];
+			//		savedScore = ent->client->ps.persistant[PERS_SCORE];
 					do_respawn = ent->client->ps.pm_time;
-					savedRespawns = ent->client->ps.persistant[PERS_RESPAWNS_LEFT];
+			//		savedRespawns = ent->client->ps.persistant[PERS_RESPAWNS_LEFT];
 					savedClass = ent->client->ps.stats[STAT_PLAYER_CLASS];
 
 					ent->client->ps = cl->ps;
 					ent->client->ps.pm_flags |= PMF_FOLLOW;
 					ent->client->ps.pm_flags |= PMF_LIMBO;
 
-					ent->client->ps.persistant[PERS_RESPAWNS_LEFT] = savedRespawns;
+				//	ent->client->ps.persistant[PERS_RESPAWNS_LEFT] = savedRespawns;
 					ent->client->ps.pm_time = do_respawn;                           // put pm_time back
-					ent->client->ps.persistant[PERS_SCORE] = savedScore;            // put score back
+				//	ent->client->ps.persistant[PERS_SCORE] = savedScore;            // put score back
 					ent->client->ps.stats[STAT_PLAYER_CLASS] = savedClass;          // NERVE - SMF - put player class back
 				} else {
 					ent->client->ps = cl->ps;
@@ -1375,6 +1379,9 @@ void SpectatorClientEndFrame( gentity_t *ent ) {
 				// jpw
 				// DHM - Nerve :: carry flags over
 				ent->client->ps.eFlags = flags;
+				// WolfPro - Ping & Score bug fix
+				ent->client->ps.ping = ping;
+				ent->client->ps.persistant[PERS_SCORE] = score;
 				return;
 			} else {
 				// drop them to free spectators unless they are dedicated camera followers

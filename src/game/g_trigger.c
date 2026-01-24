@@ -471,6 +471,11 @@ void hurt_touch( gentity_t *self, gentity_t *other, trace_t *trace ) {
 		return;
 	}
 
+	// WolfPro - if game is paused don't hurt at all.
+	if ( level.paused ) {
+		return;
+	}
+
 	if ( self->spawnflags & 16 ) {
 		self->timestamp = level.time + 1000;
 	} else {

@@ -402,6 +402,10 @@ int Pickup_Weapon( gentity_t *ent, gentity_t *other ) {
 						}
 						ent->parent->client->PCSpecialPickedUpCount++;
 					}
+					// WolfPro stats
+					if ((ent->parent) && (ent->parent != other) &&
+						(OnSameTeam(ent->parent, other)))
+						ent->parent->client->sess.stats.ammo_given++;
 				}
 			}
 		}
@@ -534,6 +538,10 @@ int Pickup_Health( gentity_t *ent, gentity_t *other ) {
 					}
 					ent->parent->client->PCSpecialPickedUpCount++;
 				}
+				// WolfPro stats
+				if ((ent->parent) && (ent->parent != other) &&
+					(OnSameTeam(ent->parent, other)))
+					ent->parent->client->sess.stats.med_given++;
 			}
 		}
 	}
