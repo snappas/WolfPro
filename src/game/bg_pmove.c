@@ -3989,7 +3989,7 @@ void PmoveSingle( pmove_t *pmove ) {
 		PM_WaterEvents();
 
 		// snap some parts of playerstate to save network bandwidth
-		trap_SnapVector( pm->ps->velocity );
+		//trap_SnapVector( pm->ps->velocity ); //this causes the player to drift after tapping the strafe key
 //		SnapVector( pm->ps->velocity );
 
 		// Ridah
