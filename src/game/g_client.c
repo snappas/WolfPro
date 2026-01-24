@@ -1533,9 +1533,12 @@ void ClientUserinfoChanged( int clientNum ) {
 		Q_strncpyz( model, Info_ValueForKey( userinfo, "model" ), sizeof( model ) );
 	}
 
+	//Elver commenting this out to attempt to fix weird anim after revive (from nobo fix)
+	/*
 	// RF, reset anims so client's dont freak out
 	client->ps.legsAnim = 0;
 	client->ps.torsoAnim = 0;
+	*/
 
 	// DHM - Nerve :: Forcibly set both model and skin for multiplayer.
 	if ( g_gametype.integer >= GT_WOLF ) {
@@ -2054,7 +2057,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	if ( !revived ) {
 		ent->props_frame_state = -1;
 	}
-
+	
 	ent->die = player_die;
 	ent->waterlevel = 0;
 	ent->watertype = 0;
@@ -2149,7 +2152,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	if(revived){
 		vec3_t newangle;
 		//restore the value for the client's view before death
-		newangle[YAW] = client->pers.deathYaw; 
+		newangle[YAW] = client->pers.deathYaw; //ps.persistant[PERS_DEATH_YAW];
 		newangle[PITCH] = 0;
 		newangle[ROLL] = 0;
 		SetClientViewAngle( ent, newangle );
