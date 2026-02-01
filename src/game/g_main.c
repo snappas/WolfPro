@@ -389,7 +389,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
-	{ &g_gravityModifier, "g_gravityModifier", "0.987", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qfalse },
 
 };
 

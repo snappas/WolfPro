@@ -631,7 +631,7 @@ cvarTable_t cvarTable[] = {
 	{ &cg_bloodDamageBlend, "cg_bloodDamageBlend", "1.0", CVAR_ARCHIVE },
 	{ &cg_bloodFlash, "cg_bloodFlash", "1.0", CVAR_ARCHIVE },
 
-	{ &cg_customCrosshair, "cg_customCrosshair", "1", CVAR_ARCHIVE },
+	{ &cg_customCrosshair, "cg_customCrosshair", "0", CVAR_ARCHIVE },
 	{ &cg_customCrosshairHeight, "cg_customCrosshairHeight", "5", CVAR_ARCHIVE },
 	{ &cg_customCrosshairWidth, "cg_customCrosshairWidth", "5", CVAR_ARCHIVE },
 	{ &cg_customCrosshairThickness, "cg_customCrosshairThickness", "1", CVAR_ARCHIVE },
