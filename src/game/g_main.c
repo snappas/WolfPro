@@ -178,6 +178,7 @@ vmCvar_t g_delagHitscan;
 vmCvar_t g_maxExtrapolatedFrames;
 vmCvar_t g_maxLagCompensation;
 vmCvar_t g_delagMissiles;
+vmCvar_t sv_fps;
 
 vmCvar_t match_timeoutlength;
 vmCvar_t match_timeoutcount;
@@ -384,6 +385,8 @@ cvarTable_t gameCvarTable[] = {
 
 
 	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
+
+	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
 
 };
 

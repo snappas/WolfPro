@@ -668,6 +668,8 @@ typedef struct {
 	vec3_t		currentOrigin;
 	int			leveltime;
 	animationInfo_t animationInfo;
+	animation_t legsAnimHistory;
+	animation_t torsoAnimHistory;
 } clientHistory_t;
 
 typedef struct unlagged_s {
@@ -683,14 +685,11 @@ typedef struct unlagged_s {
 	clientHistory_t	saved;			// used to restore after time shift
 	// an approximation of the actual server time we received this
 	// command (not in 50ms increments)
-	int			frameOffset;
-//unlagged - backward reconciliation #1
-
+	int frameOffset;
 	//unlagged - smooth clients #1
 	// the last frame number we got an update from this client
-	int			lastUpdateFrame;
-	//unlagged - smooth clients #1
-	qboolean        spawnprotected;
+	int lastUpdateFrame;
+	qboolean spawnprotected;
 } unlagged_t;
 
 
@@ -1566,6 +1565,7 @@ extern vmCvar_t g_delagHitscan;
 extern vmCvar_t g_maxExtrapolatedFrames;
 extern vmCvar_t g_maxLagCompensation;
 extern vmCvar_t g_delagMissiles;
+extern	vmCvar_t sv_fps;
 
 extern vmCvar_t match_timeoutcount;
 extern vmCvar_t match_timeoutlength;
