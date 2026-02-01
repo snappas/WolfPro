@@ -1891,6 +1891,8 @@ extern vmCvar_t cg_teamObituaryColorEnemyTK;	// enemy team TK color
 extern vmCvar_t cg_fragsY;
 extern vmCvar_t cg_fragsWidth;
 
+extern vmCvar_t sv_fps;
+
 //
 // cg_main.c
 //

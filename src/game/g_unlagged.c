@@ -24,17 +24,30 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "g_local.h"
 
 
-static void CopyAnimationInfo(animationInfo_t *dst, animationInfo_t *src){
-	*dst = *src;
+static void CopyAnimationInfo(animationInfo_t *dst, animation_t *torsoAnim, animation_t *legsAnim, animationInfo_t *src){
+	VectorCopy(src->lerpOrigin, dst->lerpOrigin);
+	dst->lerpInfo = src->lerpInfo;
 	for(int i = 0; i < 3; i++){
 		VectorCopy(src->lerpInfo.torsoAxis[i], dst->lerpInfo.torsoAxis[i]);
 		VectorCopy(src->lerpInfo.headAxis[i], dst->lerpInfo.headAxis[i]);
 		VectorCopy(src->lerpInfo.legsAxis[i], dst->lerpInfo.legsAxis[i]);
-		VectorCopy(src->lerpOrigin, dst->lerpOrigin);
-		VectorCopy(src->legs.oldFramePos, dst->legs.oldFramePos);
-		VectorCopy(src->torso.oldFramePos, dst->torso.oldFramePos);
-		
 	}
+
+	dst->torso = src->torso;
+	if(src->torso.animation){
+		*torsoAnim = *src->torso.animation;
+		Q_strncpyz(torsoAnim->name, src->torso.animation->name, sizeof(torsoAnim->name));
+		dst->torso.animation = torsoAnim;
+	}
+	VectorCopy(src->torso.oldFramePos, dst->torso.oldFramePos);
+
+	dst->legs = src->legs;
+	if(src->legs.animation){
+		*legsAnim = *src->legs.animation;
+		Q_strncpyz(legsAnim->name, src->legs.animation->name, sizeof(legsAnim->name));
+		dst->legs.animation = legsAnim;
+	}
+	VectorCopy(src->legs.oldFramePos, dst->legs.oldFramePos);
 }
 
 /*
@@ -52,7 +65,7 @@ void G_ResetHistory( gentity_t *ent ) {
 		VectorCopy( ent->r.maxs, ent->client->unlag.history[i].maxs );
 		VectorCopy( ent->r.currentOrigin, ent->client->unlag.history[i].currentOrigin );
 		ent->client->unlag.history[i].leveltime = time;
-		CopyAnimationInfo(&ent->client->unlag.history[i].animationInfo, &ent->client->animationInfo);
+		CopyAnimationInfo(&ent->client->unlag.history[i].animationInfo, &ent->client->unlag.history[i].torsoAnimHistory, &ent->client->unlag.history[i].legsAnimHistory, &ent->client->animationInfo);
 	}
 }
 
@@ -78,7 +91,7 @@ void G_StoreHistory( gentity_t *ent ) {
 	VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
 	SnapVector( ent->client->unlag.history[head].currentOrigin );
 	ent->client->unlag.history[head].leveltime = level.time;
-	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->animationInfo);
+	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->unlag.history[head].torsoAnimHistory, &ent->client->unlag.history[head].legsAnimHistory, &ent->client->animationInfo);
 }
 
 
@@ -144,7 +157,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			VectorCopy( ent->r.maxs, ent->client->unlag.saved.maxs );
 			VectorCopy( ent->r.currentOrigin, ent->client->unlag.saved.currentOrigin );
 			ent->client->unlag.saved.leveltime = level.time;
-			CopyAnimationInfo(&ent->client->unlag.saved.animationInfo, &ent->client->animationInfo);
+			CopyAnimationInfo(&ent->client->unlag.saved.animationInfo, &ent->client->unlag.saved.torsoAnimHistory, &ent->client->unlag.saved.legsAnimHistory, &ent->client->animationInfo);
 		}
 
 		// if we haven't wrapped back to the head, we've sandwiched, so
@@ -167,7 +180,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 				ent->client->unlag.history[j].maxs, ent->client->unlag.history[k].maxs,
 				ent->r.maxs );
 
-			CopyAnimationInfo(&ent->client->unlag.history[j].animationInfo, &ent->client->animationInfo);
+			CopyAnimationInfo(&ent->client->unlag.history[j].animationInfo, &ent->client->unlag.history[j].torsoAnimHistory, &ent->client->unlag.history[j].legsAnimHistory, &ent->client->animationInfo);
 			// ported from nobo antilag for custom head animations
 			// find the "best" origin between the sandwiching trail nodes via interpolation
 			//Interpolate(frac, ent->client->history[j].currentOrigin, ent->client->history[k].currentOrigin, ent->r.currentOrigin);
@@ -187,7 +200,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			VectorCopy( ent->client->unlag.history[k].currentOrigin, ent->r.currentOrigin );
 			VectorCopy( ent->client->unlag.history[k].mins, ent->r.mins );
 			VectorCopy( ent->client->unlag.history[k].maxs, ent->r.maxs );
-			CopyAnimationInfo(&ent->client->unlag.history[k].animationInfo, &ent->client->animationInfo);
+			CopyAnimationInfo(&ent->client->unlag.history[k].animationInfo, &ent->client->unlag.history[k].torsoAnimHistory, &ent->client->unlag.history[k].legsAnimHistory, &ent->client->animationInfo);
 
 			// this will recalculate absmin and absmax
 			trap_LinkEntity( ent );
@@ -310,7 +323,7 @@ void G_UnTimeShiftClient( gentity_t *ent ) {
 		VectorCopy( ent->client->unlag.saved.maxs, ent->r.maxs );
 		VectorCopy( ent->client->unlag.saved.currentOrigin, ent->r.currentOrigin );
 		ent->client->unlag.saved.leveltime = 0;
-		CopyAnimationInfo(&ent->client->animationInfo, &ent->client->unlag.saved.animationInfo);
+		CopyAnimationInfo(&ent->client->animationInfo, ent->client->animationInfo.torso.animation, ent->client->animationInfo.legs.animation, &ent->client->unlag.saved.animationInfo);
 
 		// this will recalculate absmin and absmax
 		trap_LinkEntity( ent );
