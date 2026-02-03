@@ -426,6 +426,19 @@ vmCvar_t cg_fragsWidth;
 
 vmCvar_t sv_fps;
 
+vmCvar_t cg_wstatsX;
+vmCvar_t cg_wstatsY;
+vmCvar_t cg_wstatsH;
+vmCvar_t cg_wstatsW;
+vmCvar_t cg_statsX;
+vmCvar_t cg_statsY;
+vmCvar_t cg_statsH;
+vmCvar_t cg_statsW;
+vmCvar_t cg_topshotsX;
+vmCvar_t cg_topshotsY;
+vmCvar_t cg_topshotsH;
+vmCvar_t cg_topshotsW;
+
 typedef struct {
 	vmCvar_t    *vmCvar;
 	char        *cvarName;
@@ -747,6 +760,20 @@ cvarTable_t cvarTable[] = {
 	{ &cg_fragsWidth, "cg_fragsWidth", "16", CVAR_ARCHIVE },
 
 	{ &sv_fps, "sv_fps", "20", 0 },
+
+	{ &cg_wstatsX, "cg_wstatsX", "5", CVAR_ARCHIVE },
+	{ &cg_wstatsY, "cg_wstatsY", "0", CVAR_ARCHIVE },
+	{ &cg_wstatsH, "cg_wstatsH", "0", CVAR_ARCHIVE },
+	{ &cg_wstatsW, "cg_wstatsW", "0", CVAR_ARCHIVE },
+	{ &cg_statsX, "cg_statsX", "5", CVAR_ARCHIVE },
+	{ &cg_statsY, "cg_statsY", "385", CVAR_ARCHIVE },
+	{ &cg_statsH, "cg_statsH", "50", CVAR_ARCHIVE },
+	{ &cg_statsW, "cg_statsW", "250", CVAR_ARCHIVE },
+	{ &cg_topshotsX, "cg_topshotsX", "0", CVAR_ARCHIVE },
+	{ &cg_topshotsY, "cg_topshotsY", "0", CVAR_ARCHIVE },
+	{ &cg_topshotsH, "cg_topshotsH", "0", CVAR_ARCHIVE },
+	{ &cg_topshotsW, "cg_topshotsW", "0", CVAR_ARCHIVE },
+
 	
 };
 int cvarTableSize = sizeof( cvarTable ) / sizeof( cvarTable[0] );

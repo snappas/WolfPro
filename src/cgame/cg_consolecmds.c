@@ -535,6 +535,74 @@ void CG_vstrUp_f(void) {
 	else { CG_Printf("[cgnotify]^3Usage: ^7+vstr [down_vstr] [up_vstr]\n"); }
 }
 
+
+// +wstats
+void CG_wStatsDown_f( void ) {
+	if ( !cg.demoPlayback ) {
+		int i = cg.snap->ps.clientNum;
+
+		if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
+			CPri( "You must be a player or following a player to use +wstats\n" );
+			return;
+		}
+
+		if(cgs.gamestats.requestTime < cg.time) {
+			cgs.gamestats.requestTime = cg.time + 500;
+			trap_SendClientCommand(va("wstats %d", i));
+		}
+
+		cgs.gamestats.show = 1;
+	}
+}
+
+// -wstats
+void CG_wStatsUp_f( void ) {
+	cgs.gamestats.show = 0;
+}
+
+
+// +stats
+void CG_StatsDown_f( void ) {
+    if ( !cg.demoPlayback ) {
+		int i = cg.snap->ps.clientNum;
+
+		if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
+			CPri( "You must be a player or following a player to use +stats\n" );
+			return;
+		}
+
+        if(cgs.clientGameStats.requestTime < cg.time) {
+            cgs.clientGameStats.requestTime = cg.time + 500;
+            trap_SendClientCommand( va( "cstats %d", i ) );
+        }
+
+        cgs.clientGameStats.show = 1;
+    }
+
+}
+
+// -stats
+void CG_StatsUp_f( void ) {
+    cgs.clientGameStats.show = 0;
+}
+
+// +topshots
+void CG_topshotsDown_f( void ) {
+	if ( !cg.demoPlayback ) {
+		cgs.topshots.show = 1;
+
+		if ( cgs.topshots.requestTime < cg.time ) {
+			cgs.topshots.requestTime = cg.time + 2000;
+			trap_SendClientCommand( "stshots" );
+		}
+	}
+}
+
+// -topshots
+void CG_topshotsUp_f( void ) {
+	cgs.topshots.show = 0;
+}
+
 static void CG_TimerShare_f (void) {
 	int secondsThen;
 	int spawnTimerSet = cg.time - cgs.levelStartTime;
@@ -728,6 +796,13 @@ static consoleCommand_t commands[] = {
 	{ "edithud", CG_EditHud_f },
 	
 	{ "restrictions", CG_PrintRestrictions },
+
+	{ "+wstats", CG_wStatsDown_f },
+	{ "-wstats", CG_wStatsUp_f },
+	{ "+stats", CG_StatsDown_f },
+	{ "-stats", CG_StatsUp_f },
+	{ "+wtopshots", CG_topshotsDown_f },
+	{ "-wtopshots", CG_topshotsUp_f },
 };
 
 

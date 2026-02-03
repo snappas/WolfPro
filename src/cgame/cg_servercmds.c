@@ -1429,6 +1429,9 @@ void CG_parseWeaponStats_cmd( void( txt_dump ) ( char * ) ) {
 
 	ci = &cgs.clientinfo[nClient];
 
+	cgs.clientGameStats.lines = 1;
+	cgs.clientGameStats.maxLineLen = 0;
+
 	Q_strncpyz( strName, ci->name, sizeof( strName ) );
 	txt_dump( va( "^7Overall stats for: ^z%s ^7(^2%d^7 Round%s)\n\n", strName, nRounds, ( ( nRounds != 1 ) ? "s" : "" ) ) );
 
@@ -1913,6 +1916,15 @@ const char* CG_LocalizeServerCommand( const char *buf ) {
 }
 // -NERVE - SMF
 
+static void CG_PopulateWSBuffer(char *s){
+	Q_strncpyz(cgs.clientGameStats.textlines[cgs.clientGameStats.lines], s, sizeof(cgs.clientGameStats.textlines[cgs.clientGameStats.lines]));
+	int lineLen = Q_PrintStrlen(cgs.clientGameStats.textlines[cgs.clientGameStats.lines]);
+	if(lineLen > cgs.clientGameStats.maxLineLen){
+		cgs.clientGameStats.maxLineLen = lineLen;
+	}
+	cgs.clientGameStats.lines++;
+}
+
 /*
 =================
 CG_ServerCommand
@@ -2230,12 +2242,12 @@ static void CG_ServerCommand( void ) {
 	}
 	// +wstats
 	if ( !Q_stricmp( cmd, "wws" ) ) {
-		//CG_wstatsParse_cmd();
+		CG_parseWeaponStats_cmd( CG_PopulateWSBuffer );
 		return;
 	}
 	// +stats
 	if ( !Q_stricmp( cmd, "cgs" ) ) {
-		//CG_clientParse_cmd();
+		CG_parseWeaponStats_cmd( CG_PopulateWSBuffer );
 		return;
 	}
 	if (!Q_stricmp(cmd, "gamestats")) {

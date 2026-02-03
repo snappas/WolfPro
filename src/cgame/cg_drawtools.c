@@ -421,6 +421,10 @@ void CG_DrawStringExt( int x, int y, const char *string, const float *setColor,
 				s += 2;
 				continue;
 			}
+			if (*s == '\n') {
+				s++;
+				continue;
+			}
 			CG_DrawChar( xx + offset / cgs.screenXScale, y + offset / cgs.screenYScale, charWidth, charHeight, *s );
 			cnt++;
 			xx += charWidth;
@@ -441,6 +445,10 @@ void CG_DrawStringExt( int x, int y, const char *string, const float *setColor,
 				trap_R_SetColor( color );
 			}
 			s += 2;
+			continue;
+		}
+		if (s && *s == '\n') {
+			s++;
 			continue;
 		}
 		CG_DrawChar( xx, y, charWidth, charHeight, *s );
