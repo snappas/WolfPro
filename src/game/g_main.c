@@ -209,6 +209,8 @@ vmCvar_t g_mapScriptDirectory;
 
 vmCvar_t g_preciseHeadHitbox;
 
+vmCvar_t g_gravityModifier;
+
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
 	{ &g_cheats, "sv_cheats", "", 0, qfalse },
@@ -387,6 +389,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
+	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qfalse },
 
 };
 

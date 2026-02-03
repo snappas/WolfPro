@@ -1051,7 +1051,7 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.aiState = AISTATE_COMBAT;
 	}
 
-	client->ps.gravity = g_gravity.value;
+	client->ps.gravity = g_gravity.value * g_gravityModifier.value;
 
 	// set speed
 	client->ps.speed = g_speed.value;
