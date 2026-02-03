@@ -3989,8 +3989,9 @@ void PmoveSingle( pmove_t *pmove ) {
 		PM_WaterEvents();
 
 		// snap some parts of playerstate to save network bandwidth
-		//trap_SnapVector( pm->ps->velocity ); //this causes the player to drift after tapping the strafe key
-//		SnapVector( pm->ps->velocity );
+		//We always snap on slick surfaces to prevent acceleration.
+		if(pml.groundTrace.surfaceFlags & SURF_SLICK)
+			trap_SnapVector( pm->ps->velocity );
 
 		// Ridah
 	}

@@ -4013,6 +4013,9 @@ void BG_PlayerStateToEntityState( playerState_t *ps, entityState_t *s, qboolean 
 		SnapVector( s->apos.trBase );
 	}
 
+	// set the trDelta for flag direction and linear prediction
+	VectorCopy(ps->velocity, s->pos.trDelta);
+
 	if ( ps->movementDir > 128 ) {
 		s->angles2[YAW] = (float)ps->movementDir - 256;
 	} else {

@@ -1594,6 +1594,8 @@ extern vmCvar_t g_mapScriptDirectory;
 
 extern vmCvar_t g_preciseHeadHitbox;
 
+extern vmCvar_t g_gravityModifier;
+
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );
