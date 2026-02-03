@@ -1474,6 +1474,9 @@ typedef struct {
 	int revives;
 	int health_given;
 	int ammo_given;
+	char textlines[32][MAX_STRING_TOKENS];
+	int lines;
+	int maxLineLen;
 } gameStats_t;
 
 typedef struct {
@@ -1498,6 +1501,9 @@ typedef struct {
 	int fadeTime;
 	int show;
 	int requestTime;
+	char textlines[32][MAX_STRING_TOKENS];
+	int lines;
+	int maxLineLen;
 } topshotStats_t;
 
 // The client game static (cgs) structure hold everything
