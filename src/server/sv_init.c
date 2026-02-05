@@ -912,7 +912,7 @@ void SV_Init( void ) {
 	Cvar_Get( "g_voteFlags", "255", CVAR_ARCHIVE | CVAR_SERVERINFO );
 
 	// ATVI Tracker Wolfenstein Misc #263
-	Cvar_Get( "g_antilag", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
+	Cvar_Get( "g_antilag", "2", CVAR_ARCHIVE | CVAR_SERVERINFO );
 
 	// TTimo - autodownload speed tweaks
 #ifndef UPDATE_SERVER

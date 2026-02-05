@@ -1598,6 +1598,9 @@ void CG_parseBestShotsStats_cmd( qboolean doTop, void( txt_dump ) ( char * ) ) {
 	//qboolean fFull = ( txt_dump != CG_printWindow );
 	qboolean fFull = qtrue;
 
+	cgs.topshots.lines = 1;
+	cgs.topshots.maxLineLen = 0;
+
 	int iWeap = atoi( CG_Argv( iArg++ ) );
 	if ( !iWeap ) {
 		txt_dump(va("^3No qualifying %sshot info available.      \n\n", ((doTop) ? "top" : "bottom")));
@@ -1931,7 +1934,7 @@ static void CG_PopulateWSBuffer(char *s) {
 	cgs.gamestats.lines++;
 }
 
-static void CG_PopulatClientStatsBuffer(char *s) {
+static void CG_PopulateClientStatsBuffer(char *s) {
 	Q_strncpyz(cgs.clientGameStats.textlines[cgs.clientGameStats.lines], s, sizeof(cgs.clientGameStats.textlines[cgs.clientGameStats.lines]));
 	int lineLen = Q_PrintStrlen(cgs.clientGameStats.textlines[cgs.clientGameStats.lines]);
 	if (lineLen > cgs.clientGameStats.maxLineLen) {
@@ -1940,7 +1943,7 @@ static void CG_PopulatClientStatsBuffer(char *s) {
 	cgs.clientGameStats.lines++;
 }
 
-static void CG_PopulatTopShotsBuffer(char *s) {
+static void CG_PopulateTopshotsBuffer(char *s) {
 	Q_strncpyz(cgs.topshots.textlines[cgs.topshots.lines], s, sizeof(cgs.topshots.textlines[cgs.topshots.lines]));
 	int lineLen = Q_PrintStrlen(cgs.topshots.textlines[cgs.topshots.lines]);
 	if (lineLen > cgs.topshots.maxLineLen) {
@@ -2271,7 +2274,7 @@ static void CG_ServerCommand( void ) {
 	}
 	// +stats
 	if ( !Q_stricmp( cmd, "cgs" ) ) {
-		CG_parseClientStats_cmd( CG_PopulatClientStatsBuffer );
+		CG_parseClientStats_cmd( CG_PopulateClientStatsBuffer );
 		return;
 	}
 	if (!Q_stricmp(cmd, "gamestats")) {
@@ -2280,7 +2283,7 @@ static void CG_ServerCommand( void ) {
 	}
 	// +topshots
 	if ( !Q_stricmp( cmd, "wbstats" ) ) {
-		CG_parseTopShotsStats_cmd(qtrue, CG_PopulatTopShotsBuffer);
+		CG_parseBestShotsStats_cmd( qtrue, CG_PopulateTopshotsBuffer );
 		return;
 	}
 	// OSP - "topshots"-related commands (prints)

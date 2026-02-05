@@ -1904,16 +1904,10 @@ extern vmCvar_t sv_fps;
 
 extern vmCvar_t cg_wstatsX;
 extern vmCvar_t cg_wstatsY;
-extern vmCvar_t cg_wstatsH;
-extern vmCvar_t cg_wstatsW;
 extern vmCvar_t cg_statsX;
 extern vmCvar_t cg_statsY;
-extern vmCvar_t cg_statsH;
-extern vmCvar_t cg_statsW;
 extern vmCvar_t cg_topshotsX;
 extern vmCvar_t cg_topshotsY;
-extern vmCvar_t cg_topshotsH;
-extern vmCvar_t cg_topshotsW;
 
 //
 // cg_main.c
