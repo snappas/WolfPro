@@ -1940,6 +1940,15 @@ static void CG_PopulatClientStatsBuffer(char *s) {
 	cgs.clientGameStats.lines++;
 }
 
+static void CG_PopulatTopShotsBuffer(char *s) {
+	Q_strncpyz(cgs.topshots.textlines[cgs.topshots.lines], s, sizeof(cgs.topshots.textlines[cgs.topshots.lines]));
+	int lineLen = Q_PrintStrlen(cgs.topshots.textlines[cgs.topshots.lines]);
+	if (lineLen > cgs.topshots.maxLineLen) {
+		cgs.topshots.maxLineLen = lineLen;
+	}
+	cgs.topshots.lines++;
+}
+
 /*
 =================
 CG_ServerCommand
@@ -2271,7 +2280,7 @@ static void CG_ServerCommand( void ) {
 	}
 	// +topshots
 	if ( !Q_stricmp( cmd, "wbstats" ) ) {
-		//CG_TopShotsParse_cmd();
+		CG_parseTopShotsStats_cmd(qtrue, CG_PopulatTopShotsBuffer);
 		return;
 	}
 	// OSP - "topshots"-related commands (prints)

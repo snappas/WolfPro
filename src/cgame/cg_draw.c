@@ -4271,7 +4271,7 @@ static void CG_DrawStatsWindows(void){
 	if(cgs.gamestats.show){
 		float offset = cgs.gamestats.lines * 8 + 2;
 		float windowWidth = cgs.gamestats.maxLineLen * 4 + 4;
-		CG_FillRect( cg_wstatsX.value, cg_wstatsY.value, cg_wstatsW.value, cg_wstatsH.value, bgColor );
+		CG_FillRect(cg_wstatsX.value, cg_wstatsY.value - offset, windowWidth, offset, bgColor );
 		CG_FillRect(cg_wstatsX.value + 1.0f, cg_wstatsY.value + 1.0f - offset, windowWidth - 2.0f, offset - 2.0f, bgColor);
 		for (int i = 0; i < cgs.gamestats.lines; i++) {
 			CG_DrawStringExt(cg_wstatsX.value + 1.0f, cg_wstatsY.value - offset + i * 8, cgs.gamestats.textlines[i], colorWhite, qfalse, qtrue, 4, 8, 0);
@@ -4294,8 +4294,8 @@ static void CG_DrawStatsWindows(void){
 	if(cgs.topshots.show){
 		float offset = cgs.topshots.lines * 8 + 2;
 		float windowWidth = cgs.topshots.maxLineLen * 4 + 4;
-		CG_FillRect(cg_topshotsX.value, cg_topshotsY.value - offset, windowWidth, offset, bgColor);
-		CG_FillRect( cg_topshotsX.value, cg_topshotsY.value, cg_topshotsW.value, cg_topshotsH.value, bgColor );
+		CG_FillRect(cg_topshotsX.value, cg_topshotsY.value - offset, windowWidth, offset, bgColor );
+		CG_FillRect( cg_topshotsX.value + 1.0f, cg_topshotsY.value + 1.0f - offset, windowWidth - 2.0f, offset - 2.0f, bgColor);
 		for (int i = 0; i < cgs.topshots.lines; i++) {
 			CG_DrawStringExt(cg_topshotsX.value + 1.0f, cg_topshotsY.value - offset + i * 8, cgs.topshots.textlines[i], colorWhite, qfalse, qtrue, 4, 8, 0);
 		}

@@ -762,17 +762,17 @@ cvarTable_t cvarTable[] = {
 	{ &sv_fps, "sv_fps", "20", 0 },
 
 	{ &cg_wstatsX, "cg_wstatsX", "5", CVAR_ARCHIVE },
-	{ &cg_wstatsY, "cg_wstatsY", "0", CVAR_ARCHIVE },
-	{ &cg_wstatsH, "cg_wstatsH", "0", CVAR_ARCHIVE },
-	{ &cg_wstatsW, "cg_wstatsW", "0", CVAR_ARCHIVE },
+	{ &cg_wstatsY, "cg_wstatsY", "385", CVAR_ARCHIVE },
+	{ &cg_wstatsH, "cg_wstatsH", "50", CVAR_ARCHIVE },
+	{ &cg_wstatsW, "cg_wstatsW", "250", CVAR_ARCHIVE },
 	{ &cg_statsX, "cg_statsX", "5", CVAR_ARCHIVE },
 	{ &cg_statsY, "cg_statsY", "385", CVAR_ARCHIVE },
 	{ &cg_statsH, "cg_statsH", "50", CVAR_ARCHIVE },
 	{ &cg_statsW, "cg_statsW", "250", CVAR_ARCHIVE },
-	{ &cg_topshotsX, "cg_topshotsX", "0", CVAR_ARCHIVE },
-	{ &cg_topshotsY, "cg_topshotsY", "0", CVAR_ARCHIVE },
-	{ &cg_topshotsH, "cg_topshotsH", "0", CVAR_ARCHIVE },
-	{ &cg_topshotsW, "cg_topshotsW", "0", CVAR_ARCHIVE },
+	{ &cg_topshotsX, "cg_topshotsX", "5", CVAR_ARCHIVE },
+	{ &cg_topshotsY, "cg_topshotsY", "385", CVAR_ARCHIVE },
+	{ &cg_topshotsH, "cg_topshotsH", "50", CVAR_ARCHIVE },
+	{ &cg_topshotsW, "cg_topshotsW", "250", CVAR_ARCHIVE },
 
 	
 };
