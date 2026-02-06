@@ -4262,6 +4262,46 @@ void CG_GenerateHudEvents(void){
 	}
 }
 
+static void CG_DrawStatsWindows(void){
+	vec4_t bgColor = {0.0f, 0.0f, 0.0f, 0.3f};
+
+
+
+	//wstats
+	if(cgs.gamestats.show){
+		float offset = cgs.gamestats.lines * 8 + 2;
+		float windowWidth = cgs.gamestats.maxLineLen * 4 + 4;
+		CG_FillRect(cg_wstatsX.value, cg_wstatsY.value - offset, windowWidth, offset, bgColor );
+		CG_FillRect(cg_wstatsX.value + 1.0f, cg_wstatsY.value + 1.0f - offset, windowWidth - 2.0f, offset - 2.0f, bgColor);
+		for (int i = 0; i < cgs.gamestats.lines; i++) {
+			CG_DrawStringExt(cg_wstatsX.value + 1.0f, cg_wstatsY.value - offset + i * 8, cgs.gamestats.textlines[i], colorWhite, qfalse, qtrue, 4, 8, 0);
+		}
+	}
+
+	//stats
+	if(cgs.clientGameStats.show){
+		float offset = cgs.clientGameStats.lines * 8 + 2;
+		float windowWidth = cgs.clientGameStats.maxLineLen * 4 + 4;
+		CG_FillRect( cg_statsX.value, cg_statsY.value - offset, windowWidth, offset, bgColor );
+		CG_FillRect( cg_statsX.value + 1.0f, cg_statsY.value + 1.0f - offset, windowWidth - 2.0f, offset - 2.0f, bgColor );
+		for(int i = 0; i < cgs.clientGameStats.lines; i++){
+			CG_DrawStringExt(cg_statsX.value + 1.0f, cg_statsY.value - offset + i * 8, cgs.clientGameStats.textlines[i], colorWhite, qfalse, qtrue, 4, 8, 0);
+		}
+
+	}
+
+	//topshots
+	if(cgs.topshots.show){
+		float offset = cgs.topshots.lines * 8 + 2;
+		float windowWidth = cgs.topshots.maxLineLen * 4 + 4;
+		CG_FillRect(cg_topshotsX.value, cg_topshotsY.value - offset, windowWidth, offset, bgColor );
+		CG_FillRect( cg_topshotsX.value + 1.0f, cg_topshotsY.value + 1.0f - offset, windowWidth - 2.0f, offset - 2.0f, bgColor);
+		for (int i = 0; i < cgs.topshots.lines; i++) {
+			CG_DrawStringExt(cg_topshotsX.value + 1.0f, cg_topshotsY.value - offset + i * 8, cgs.topshots.textlines[i], colorWhite, qfalse, qtrue, 4, 8, 0);
+		}
+	}
+}
+
 /*
 =================
 CG_Draw2D
@@ -4369,6 +4409,8 @@ static void CG_Draw2D( void ) {
 			CG_DrawTJSpeed();
 		}
 	}
+
+	CG_DrawStatsWindows();
 
 	// Ridah, draw flash blends now
 	CG_DrawFlashBlend();

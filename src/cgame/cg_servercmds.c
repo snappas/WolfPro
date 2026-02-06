@@ -1429,6 +1429,9 @@ void CG_parseWeaponStats_cmd( void( txt_dump ) ( char * ) ) {
 
 	ci = &cgs.clientinfo[nClient];
 
+	cgs.gamestats.lines = 1;
+	cgs.gamestats.maxLineLen = 0;
+
 	Q_strncpyz( strName, ci->name, sizeof( strName ) );
 	txt_dump( va( "^7Overall stats for: ^z%s ^7(^2%d^7 Round%s)\n\n", strName, nRounds, ( ( nRounds != 1 ) ? "s" : "" ) ) );
 
@@ -1524,6 +1527,9 @@ void CG_parseClientStats_cmd (void( txt_dump ) ( char * ) ) {
 
 	ci = &cgs.clientinfo[nClient];
 
+	cgs.clientGameStats.lines = 1;
+	cgs.clientGameStats.maxLineLen = 0;
+
 	Q_strncpyz( strName, ci->name, sizeof( strName ) );
 	txt_dump( va( "^7Current game stats for: ^7%s\n\n", strName ));
 
@@ -1592,6 +1598,9 @@ void CG_parseBestShotsStats_cmd( qboolean doTop, void( txt_dump ) ( char * ) ) {
 	//qboolean fFull = ( txt_dump != CG_printWindow );
 	qboolean fFull = qtrue;
 
+	cgs.topshots.lines = 1;
+	cgs.topshots.maxLineLen = 0;
+
 	int iWeap = atoi( CG_Argv( iArg++ ) );
 	if ( !iWeap ) {
 		txt_dump(va("^3No qualifying %sshot info available.      \n\n", ((doTop) ? "top" : "bottom")));
@@ -1645,6 +1654,9 @@ void CG_parseTopShotsStats_cmd( qboolean doTop, void( txt_dump ) ( char * ) ) {
 	int cClients = atoi( CG_Argv( iArg++ ) );
 	int iWeap = atoi( CG_Argv( iArg++ ) );
 	int wBestAcc = atoi( CG_Argv( iArg++ ) );
+
+	cgs.topshots.lines = 1;
+	cgs.topshots.maxLineLen = 0;
 
 	txt_dump( va( "Weapon accuracies for: ^3%s\n",
 				  ( iWeap >= WS_KNIFE && iWeap < WS_MAX ) ? aWeaponInfo[iWeap].pszName : "UNKNOWN" ) );
@@ -1912,6 +1924,33 @@ const char* CG_LocalizeServerCommand( const char *buf ) {
 	return token;
 }
 // -NERVE - SMF
+
+static void CG_PopulateWSBuffer(char *s) {
+	Q_strncpyz(cgs.gamestats.textlines[cgs.gamestats.lines], s, sizeof(cgs.gamestats.textlines[cgs.gamestats.lines]));
+	int lineLen = Q_PrintStrlen(cgs.gamestats.textlines[cgs.gamestats.lines]);
+	if(lineLen > cgs.gamestats.maxLineLen){
+		cgs.gamestats.maxLineLen = lineLen;
+	}
+	cgs.gamestats.lines++;
+}
+
+static void CG_PopulateClientStatsBuffer(char *s) {
+	Q_strncpyz(cgs.clientGameStats.textlines[cgs.clientGameStats.lines], s, sizeof(cgs.clientGameStats.textlines[cgs.clientGameStats.lines]));
+	int lineLen = Q_PrintStrlen(cgs.clientGameStats.textlines[cgs.clientGameStats.lines]);
+	if (lineLen > cgs.clientGameStats.maxLineLen) {
+		cgs.clientGameStats.maxLineLen = lineLen;
+	}
+	cgs.clientGameStats.lines++;
+}
+
+static void CG_PopulateTopshotsBuffer(char *s) {
+	Q_strncpyz(cgs.topshots.textlines[cgs.topshots.lines], s, sizeof(cgs.topshots.textlines[cgs.topshots.lines]));
+	int lineLen = Q_PrintStrlen(cgs.topshots.textlines[cgs.topshots.lines]);
+	if (lineLen > cgs.topshots.maxLineLen) {
+		cgs.topshots.maxLineLen = lineLen;
+	}
+	cgs.topshots.lines++;
+}
 
 /*
 =================
@@ -2230,12 +2269,12 @@ static void CG_ServerCommand( void ) {
 	}
 	// +wstats
 	if ( !Q_stricmp( cmd, "wws" ) ) {
-		//CG_wstatsParse_cmd();
+		CG_parseWeaponStats_cmd( CG_PopulateWSBuffer );
 		return;
 	}
 	// +stats
 	if ( !Q_stricmp( cmd, "cgs" ) ) {
-		//CG_clientParse_cmd();
+		CG_parseClientStats_cmd( CG_PopulateClientStatsBuffer );
 		return;
 	}
 	if (!Q_stricmp(cmd, "gamestats")) {
@@ -2244,7 +2283,7 @@ static void CG_ServerCommand( void ) {
 	}
 	// +topshots
 	if ( !Q_stricmp( cmd, "wbstats" ) ) {
-		//CG_TopShotsParse_cmd();
+		CG_parseBestShotsStats_cmd( qtrue, CG_PopulateTopshotsBuffer );
 		return;
 	}
 	// OSP - "topshots"-related commands (prints)

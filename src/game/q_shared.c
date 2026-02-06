@@ -847,6 +847,10 @@ int Q_PrintStrlen( const char *string ) {
 			p += 2;
 			continue;
 		}
+		if(p && *p == '\n'){
+			p++;
+			continue;
+		}
 		p++;
 		len++;
 	}
