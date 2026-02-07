@@ -1038,6 +1038,8 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 	const char *pPaks, *pArg;
 	qboolean bGood = qtrue;
 
+	int qagameChkSum = 0;
+
 	// if we are pure, we "expect" the client to load certain things from
 	// certain pk3 files, namely we want the client to have loaded the
 	// ui and cgame that we think should be loaded based on the pure setting
@@ -1053,6 +1055,9 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 
 		nClientPaks = Cmd_Argc();
 
+		if ( nClientPaks > ARRAY_LEN( nClientChkSum ) )
+			nClientPaks = ARRAY_LEN( nClientChkSum );
+
 		// start at arg 2 ( skip serverId cl_paks )
 		nCurArg = 1;
 
@@ -1065,7 +1070,7 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 			// show_bug.cgi?id=475
 			// we may get incoming cp sequences from a previous checksumFeed, which we need to ignore
 			// since serverId is a frame count, it always goes up
-			if ( atoi( pArg ) < sv.checksumFeedServerId ) {
+			if ( atoi( pArg ) != sv.serverId ) {
 				Com_DPrintf( "ignoring outdated cp command from client %s\n", cl->name );
 				return;
 			}
@@ -1126,26 +1131,9 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 				break;
 			}
 
-			// get the pure checksums of the pk3 files loaded by the server
-			pPaks = FS_LoadedPakPureChecksums();
-			Cmd_TokenizeString( pPaks );
-			nServerPaks = Cmd_Argc();
-			if ( nServerPaks > 1024 ) {
-				nServerPaks = 1024;
-			}
-
-			for ( i = 0; i < nServerPaks; i++ ) {
-				nServerChkSum[i] = atoi( Cmd_Argv( i ) );
-			}
-
 			// check if the client has provided any pure checksums of pk3 files not loaded by the server
 			for ( i = 0; i < nClientPaks; i++ ) {
-				for ( j = 0; j < nServerPaks; j++ ) {
-					if ( nClientChkSum[i] == nServerChkSum[j] ) {
-						break;
-					}
-				}
-				if ( j >= nServerPaks ) {
+				if ( !FS_IsPureChecksum( nClientChkSum[i] ) ) {
 					bGood = qfalse;
 					break;
 				}
@@ -1155,12 +1143,37 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 			}
 
 			// check if the number of checksums was correct
-			nChkSum1 = sv.checksumFeed;
+			
+			int reverseXorCksum = sv.checksumFeed;
 			for ( i = 0; i < nClientPaks; i++ ) {
-				nChkSum1 ^= nClientChkSum[i];
+				reverseXorCksum ^= nClientChkSum[i];
 			}
-			nChkSum1 ^= nClientPaks;
-			if ( nChkSum1 != nClientChkSum[nClientPaks] ) {
+
+			reverseXorCksum ^= nClientPaks;
+			if (reverseXorCksum != nClientChkSum[nClientPaks] ) {
+				bGood = qfalse;
+				break;
+			}
+
+			// check if the client has all of the referenced checksums @TODO add fs_excludepaks e.g. christmas pak
+			//skip qagame
+			int rc = FS_FileIsInPAK(FS_ShiftStr(SYS_DLLNAME_QAGAME, -SYS_DLLNAME_QAGAME_SHIFT), &qagameChkSum);
+			
+			int foundPaks = 0;
+			for(i = 0; i < numReferencedPaks; i++){
+				int csum = referencedPakPureChecksums[i];
+				//we already verified ui and cgame and dont need qagame
+				if(csum == nChkSum1 || csum == nChkSum2 || csum == qagameChkSum){
+					foundPaks++;
+					continue;
+				}
+				for(j = 0; j < nClientPaks; j++){
+					if(csum == nClientChkSum[j]){
+						foundPaks++;
+					}
+				}
+			}
+			if(foundPaks != numReferencedPaks){
 				bGood = qfalse;
 				break;
 			}

@@ -1309,20 +1309,15 @@ CL_SendPureChecksums
 =================
 */
 void CL_SendPureChecksums( void ) {
-	const char *pChecksums;
-	char cMsg[MAX_INFO_VALUE];
-	int i;
+	char cMsg[ MAX_STRING_CHARS-1 ];
+	int len;
+
+	if ( !cl_connectedToPureServer || clc.demoplaying )
+		return;
 
 	// if we are pure we need to send back a command with our referenced pk3 checksums
-	pChecksums = FS_ReferencedPakPureChecksums();
-
-	// "cp"
-	Com_sprintf( cMsg, sizeof( cMsg ), "Va " );
-	Q_strcat( cMsg, sizeof( cMsg ), va( "%d ", cl.serverId ) );
-	Q_strcat( cMsg, sizeof( cMsg ), pChecksums );
-	for ( i = 0; i < 2; i++ ) {
-		cMsg[i] += 13 + ( i * 2 );
-	}
+	len = sprintf( cMsg, "cp %d ", cl.serverId );
+	strcpy( cMsg + len, FS_ReferencedPakPureChecksums( sizeof( cMsg ) - len - 1 ) );
 	CL_AddReliableCommand( cMsg );
 }
 

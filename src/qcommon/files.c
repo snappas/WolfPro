@@ -2734,7 +2734,7 @@ Sets fs_gamedir, adds the directory to the head of the path,
 then loads the zip headers
 ================
 */
-#define MAX_PAKFILES    1024
+
 static void FS_AddGameDirectory( const char *path, const char *dir ) {
 	searchpath_t    *sp;
 	int i;
@@ -3045,6 +3045,52 @@ static void FS_ReorderPurePaks() {
 }
 
 /*
+=====================
+FS_LoadedPakPureChecksums
+=====================
+*/
+static int fs_numPureChecksums;
+static int fs_pureChecksum[ MAX_FOUND_FILES ];
+
+static void FS_LoadedPakPureChecksums( void )
+{
+	const searchpath_t *search;
+
+	fs_numPureChecksums = 0;
+	for ( search = fs_searchpaths ; search ; search = search->next ) {
+		if ( search->pack ) {
+			if ( fs_numPureChecksums >= ARRAY_LEN( fs_pureChecksum ) ) {
+				Com_DPrintf( "WARNING: pure checksums overflowed\n" );
+				fs_numPureChecksums = 0;
+				return;
+			}
+			fs_pureChecksum[ fs_numPureChecksums ] = search->pack->pure_checksum;
+			fs_numPureChecksums++;
+		}
+	}
+}
+
+
+/*
+================
+FS_IsPureChecksum
+================
+*/
+qboolean FS_IsPureChecksum( int sum )
+{
+	int i;
+
+	if ( fs_numPureChecksums == 0 )
+		return qtrue;
+	
+	for ( i = 0; i < fs_numPureChecksums; i++ )
+		if ( fs_pureChecksum[i] == sum )
+			return qtrue;
+
+	return qfalse;
+}
+
+/*
 ================
 FS_Startup
 ================
@@ -3127,6 +3173,9 @@ static void FS_Startup( const char *gameName ) {
 	// show_bug.cgi?id=506
 	// reorder the pure pk3 files according to server order
 	FS_ReorderPurePaks();
+
+	// get the pure checksums of the pk3 files loaded by the server
+	FS_LoadedPakPureChecksums();
 
 	// print the current search paths
 	FS_Path_f();
@@ -3272,36 +3321,7 @@ const char *FS_LoadedPakNames( void ) {
 	return info;
 }
 
-/*
-=====================
-FS_LoadedPakPureChecksums
 
-Returns a space separated string containing the pure checksums of all loaded pk3 files.
-Servers with sv_pure use these checksums to compare with the checksums the clients send
-back to the server.
-=====================
-*/
-const char *FS_LoadedPakPureChecksums( void ) {
-	static char info[BIG_INFO_STRING];
-	searchpath_t    *search;
-
-	info[0] = 0;
-
-	for ( search = fs_searchpaths ; search ; search = search->next ) {
-		// is the element a pak file?
-		if ( !search->pack ) {
-			continue;
-		}
-
-		Q_strcat( info, sizeof( info ), va( "%i ", search->pack->pure_checksum ) );
-	}
-
-	// DO_LIGHT_DEDICATED
-	// only comment out when you need a new pure checksums string
-	//Com_DPrintf("FS_LoadPakPureChecksums: %s\n", info);
-
-	return info;
-}
 
 /*
 =====================
@@ -3376,29 +3396,47 @@ this function is only used by the client to build the string sent back to server
 we don't have any need of overriding it for light, but it's useless in dedicated
 =====================
 */
-const char *FS_ReferencedPakPureChecksums( void ) {
-	static char info[BIG_INFO_STRING];
-	searchpath_t    *search;
+int referencedPakPureChecksums[MAX_PAKFILES];
+int numReferencedPaks = 0;
+
+void FS_ServerReferencedPureChecksums(void){
+	const searchpath_t	*search;
+	int nFlags, numPaks, checksum;
+	for ( nFlags = FS_QAGAME_REF; nFlags; nFlags = nFlags >> 1 ) {
+		for ( search = fs_searchpaths ; search ; search = search->next ) {
+			// is the element a pak file and has it been referenced based on flag?
+			if ( search->pack && (search->pack->referenced & nFlags)) {
+				referencedPakPureChecksums[numReferencedPaks++] = search->pack->pure_checksum;
+			}
+		}
+	}
+}
+
+const char *FS_ReferencedPakPureChecksums( int maxlen ) {
+	static char	info[ MAX_STRING_CHARS*2 ];
+	char *s, *max;
+	const searchpath_t	*search;
 	int nFlags, numPaks, checksum;
 
-	info[0] = 0;
+	max = info + maxlen; // maxlen is always smaller than MAX_STRING_CHARS so we can overflow a bit
+	s = info;
+	*s = '\0';
 
 	checksum = fs_checksumFeed;
-
 	numPaks = 0;
 	for ( nFlags = FS_CGAME_REF; nFlags; nFlags = nFlags >> 1 ) {
 		if ( nFlags & FS_GENERAL_REF ) {
-			// add a delimter between must haves and general refs
-			//Q_strcat(info, sizeof(info), "@ ");
-			info[strlen( info ) + 1] = '\0';
-			info[strlen( info ) + 2] = '\0';
-			info[strlen( info )] = '@';
-			info[strlen( info )] = ' ';
+			// add a delimiter between must haves and general refs
+			s = Q_stradd( s, "@ " );
+			if ( s > max ) // client-side overflow
+				break;
 		}
 		for ( search = fs_searchpaths ; search ; search = search->next ) {
 			// is the element a pak file and has it been referenced based on flag?
-			if ( search->pack && ( search->pack->referenced & nFlags ) ) {
-				Q_strcat( info, sizeof( info ), va( "%i ", search->pack->pure_checksum ) );
+			if ( search->pack && (search->pack->referenced & nFlags)) {
+				s = Q_stradd( s, va( "%i ", search->pack->pure_checksum ) );
+				if ( s > max ) // client-side overflow
+					break;
 				if ( nFlags & ( FS_CGAME_REF | FS_UI_REF ) ) {
 					break;
 				}
@@ -3406,15 +3444,17 @@ const char *FS_ReferencedPakPureChecksums( void ) {
 				numPaks++;
 			}
 		}
-		if ( fs_fakeChkSum != 0 ) {
-			// only added if a non-pure file is referenced
-			Q_strcat( info, sizeof( info ), va( "%i ", fs_fakeChkSum ) );
-		}
 	}
+
 	// last checksum is the encoded number of referenced pk3s
 	checksum ^= numPaks;
-	Q_strcat( info, sizeof( info ), va( "%i ", checksum ) );
-
+	s = Q_stradd( s, va( "%i ", checksum ) );
+	if ( s > max ) { 
+		// client-side overflow
+		Com_Printf( S_COLOR_YELLOW "WARNING: pure checksum list is too long (%i), you might be not able to play on remote server!\n", (int)(s - info) );
+		*max = '\0';
+	}
+	
 	return info;
 }
 #else // DO_LIGHT_DEDICATED implementation follows
@@ -3764,8 +3804,8 @@ void FS_PureServerSetLoadedPaks( const char *pakSums, const char *pakNames ) {
 	Cmd_TokenizeString( pakSums );
 
 	c = Cmd_Argc();
-	if ( c > MAX_SEARCH_PATHS ) {
-		c = MAX_SEARCH_PATHS;
+	if ( c > ARRAY_LEN( fs_serverPaks ) ) {
+		c = ARRAY_LEN( fs_serverPaks );
 	}
 
 	fs_numServerPaks = c;
@@ -3787,7 +3827,7 @@ void FS_PureServerSetLoadedPaks( const char *pakSums, const char *pakNames ) {
 		}
 	}
 
-	for ( i = 0 ; i < c ; i++ ) {
+	for ( i = 0 ; i < ARRAY_LEN( fs_serverPakNames ) ; i++ ) {
 		if ( fs_serverPakNames[i] ) {
 			Z_Free( fs_serverPakNames[i] );
 		}
@@ -3797,14 +3837,22 @@ void FS_PureServerSetLoadedPaks( const char *pakSums, const char *pakNames ) {
 		Cmd_TokenizeString( pakNames );
 
 		d = Cmd_Argc();
-		if ( d > MAX_SEARCH_PATHS ) {
-			d = MAX_SEARCH_PATHS;
+		if ( d > ARRAY_LEN( fs_serverPakNames ) ) {
+			d = ARRAY_LEN( fs_serverPakNames );
 		}
 
 		for ( i = 0 ; i < d ; i++ ) {
 			fs_serverPakNames[i] = CopyString( Cmd_Argv( i ) );
 		}
 	}
+}
+
+char *FS_CopyString( const char *in ) {
+	char *out;
+	//out = S_Malloc( strlen( in ) + 1 );
+	out = Z_Malloc( strlen( in ) + 1 );
+	strcpy( out, in );
+	return out;
 }
 
 /*
@@ -3822,8 +3870,8 @@ void FS_PureServerSetReferencedPaks( const char *pakSums, const char *pakNames )
 	Cmd_TokenizeString( pakSums );
 
 	c = Cmd_Argc();
-	if ( c > MAX_SEARCH_PATHS ) {
-		c = MAX_SEARCH_PATHS;
+	if ( c > ARRAY_LEN( fs_serverReferencedPaks ) ) {
+		c = ARRAY_LEN( fs_serverReferencedPaks );
 	}
 
 	fs_numServerReferencedPaks = c;
@@ -3832,24 +3880,35 @@ void FS_PureServerSetReferencedPaks( const char *pakSums, const char *pakNames )
 		fs_serverReferencedPaks[i] = atoi( Cmd_Argv( i ) );
 	}
 
-	for ( i = 0 ; i < c ; i++ ) {
+	for ( i = 0 ; i < ARRAY_LEN( fs_serverReferencedPakNames ); i++ ) {
 		if ( fs_serverReferencedPakNames[i] ) {
 			Z_Free( fs_serverReferencedPakNames[i] );
 		}
 		fs_serverReferencedPakNames[i] = NULL;
 	}
+
 	if ( pakNames && *pakNames ) {
 		Cmd_TokenizeString( pakNames );
 
 		d = Cmd_Argc();
-		if ( d > MAX_SEARCH_PATHS ) {
-			d = MAX_SEARCH_PATHS;
-		}
+		if ( d > c )
+			d = c;
 
 		for ( i = 0 ; i < d ; i++ ) {
-			fs_serverReferencedPakNames[i] = CopyString( Cmd_Argv( i ) );
+
+			// Too long pak name may lose its extension during further processing
+			if ( strlen( Cmd_Argv( i ) ) >= MAX_OSPATH-13 ) // + ".00000000.pk3"
+				Com_Error( ERR_DROP, "Referenced pak name is too long: %s", Cmd_Argv( i ) );
+
+			fs_serverReferencedPakNames[i] = FS_CopyString( Cmd_Argv( i ) );
 		}
 	}
+
+	// ensure that there are as many checksums as there are pak names.
+	if ( d < c )
+		c = d;
+
+	fs_numServerReferencedPaks = c;	
 }
 
 /*
