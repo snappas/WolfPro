@@ -2780,7 +2780,7 @@ void CG_LoadRestriction(char *name, char *restrictString, int i){
 }
 
 void CG_RegisterCvarRestrict(void){
-	if(cg.demoPlayback) return;
+	if(cg.demoPlayback || cg.ndpDemoEnabled) return;
 	const char *cvarName;
 	const char *restrictString;
 	for(int i = 0; i < MAX_CVARRESTRICTS; i++){
@@ -2917,8 +2917,6 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 		CG_Error( "Client/Server game mismatch: %s/%s", GAME_VERSION, s );
 	}
 
-	CG_RegisterCvarRestrict();
-
 	s = CG_ConfigString( CS_LEVEL_START_TIME );
 	cgs.levelStartTime = atoi( s );
 
@@ -2998,6 +2996,8 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 	}
 
 	CG_LoadExtensions();
+
+	CG_RegisterCvarRestrict();
 }
 
 static void SaveSession(void)
