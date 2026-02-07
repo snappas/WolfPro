@@ -171,6 +171,7 @@ vmCvar_t match_minplayers;
 vmCvar_t match_readypercent;
 vmCvar_t match_latejoin;
 vmCvar_t match_warmupDamage;
+vmCvar_t match_mutespecs;
 
  // unlagged
 vmCvar_t g_floatPlayerPosition;
@@ -356,6 +357,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &match_warmupDamage, "match_warmupDamage", "1", 0, 0, qfalse }, 
 	{ &match_timeoutlength, "match_timeoutlength", "180", 0, 0, qfalse, qtrue },
 	{ &match_timeoutcount, "match_timeoutcount", "3", 0, 0, qfalse, qtrue },
+	{ &match_mutespecs, "match_mutespecs", "0", 0, 0, qfalse, qtrue },
 
 	{ &g_allowForceTapout, "g_allowForceTapout", "1", CVAR_ARCHIVE, qtrue },
 
@@ -389,7 +391,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
-	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },
 
 };
 

@@ -2212,6 +2212,9 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 		if ( cg.snap->ps.clientNum == es->teamNum ) {
 			if ( cgs.gameSounds[ es->eventParm ] ) {
+				if(cg_hitsounds.integer == 0 && Q_stristr(CG_ConfigString( CS_SOUNDS + es->eventParm ), "hitsounds")){
+					break;
+				}
 				trap_S_StartSound( NULL, cg.snap->ps.clientNum, CHAN_AUTO, cgs.gameSounds[ es->eventParm ] );
 			}
 		}

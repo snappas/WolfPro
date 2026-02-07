@@ -1139,7 +1139,7 @@ void R_ComputeCursorPosition( int* x, int* y )
 */
 void RE_BeginRegistration( glconfig_t *glconfigOut ) {
 	ri.Hunk_Clear();    // (SA) MEM NOTE: not in missionpack
-
+	cl_numModels = 0;
 	R_Init();
 	*glconfigOut = glConfig;
 

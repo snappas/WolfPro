@@ -1562,7 +1562,7 @@ static void R_LoadSubmodels( lump_t *l ) {
 	for ( i = 0 ; i < count ; i++, in++, out++ ) {
 		model_t *model;
 
-		model = R_AllocModel();
+		model = MDL_AllocModel(VM_CGAME);
 
 		assert( model != NULL );            // this should never happen
 

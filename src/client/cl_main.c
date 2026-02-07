@@ -734,6 +734,7 @@ void CL_FlushMemory( void ) {
 		Hunk_Clear();
 		// clear collision map data
 		CM_ClearMap();
+		cl_numModels = 0;
 	} else {
 		// clear all the client data on the hunk
 		Hunk_ClearToMark();
@@ -1291,6 +1292,7 @@ void CL_Vid_Restart_f( void ) {
 	if ( !com_sv_running->integer ) {
 		// clear the whole hunk
 		Hunk_Clear();
+		cl_numModels = 0;
 	} else {
 		// clear all the client data on the hunk
 		Hunk_ClearToMark();

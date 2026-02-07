@@ -1585,6 +1585,7 @@ void Com_InitHunkMemory( void ) {
 	// cacheline align
 	s_hunkData = ( byte * )( ( (intptr_t)s_hunkData + 31 ) & ~31 );
 	Hunk_Clear();
+	cl_numModels = 0;
 
 	Cmd_AddCommand( "meminfo", Com_Meminfo_f );
 #ifdef ZONE_DEBUG
