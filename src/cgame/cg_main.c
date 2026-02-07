@@ -900,7 +900,7 @@ void CG_UpdateCvars( void ) {
 	if(setFlags){
 		CG_setClientFlags();
 	}
-	if(cg.time > cg.lastCvarCheck){
+	if(!cg.demoPlayback && cg.time > cg.lastCvarCheck){
 		CG_CheckAndApplyRestrictions();
 		cg.lastCvarCheck = cg.time + 5000;
 	}
@@ -2780,6 +2780,7 @@ void CG_LoadRestriction(char *name, char *restrictString, int i){
 }
 
 void CG_RegisterCvarRestrict(void){
+	if(cg.demoPlayback) return;
 	const char *cvarName;
 	const char *restrictString;
 	for(int i = 0; i < MAX_CVARRESTRICTS; i++){

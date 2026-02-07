@@ -505,6 +505,10 @@ void CL_SystemInfoChanged( void ) {
 		if ( !key[0] ) {
 			break;
 		}
+		
+		if ( !Q_stricmp( key, "sv_referencedPaks" ) || !Q_stricmp( key, "sv_referencedPakNames" ) ) {
+			continue;
+		}
 
 		Cvar_Set( key, value );
 	}

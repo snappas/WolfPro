@@ -753,16 +753,18 @@ const char *FS_GamePureChecksum( void );
 
 const char *FS_LoadedPakNames( void );
 const char *FS_LoadedPakChecksums( void );
-const char *FS_LoadedPakPureChecksums( void );
 // Returns a space separated string containing the checksums of all loaded pk3 files.
 // Servers with sv_pure set will get this string and pass it to clients.
 
+qboolean FS_IsPureChecksum( int sum );
+
 const char *FS_ReferencedPakNames( void );
 const char *FS_ReferencedPakChecksums( void );
-const char *FS_ReferencedPakPureChecksums( void );
+const char *FS_ReferencedPakPureChecksums( int maxlen );
 // Returns a space separated string containing the checksums of all loaded
 // AND referenced pk3 files. Servers with sv_pure set will get this string
 // back from clients for pure validation
+void FS_ServerReferencedPureChecksums(void);
 
 void FS_ClearPakReferences( int flags );
 // clears referenced booleans on loaded pk3s
@@ -798,6 +800,9 @@ void FS_CopyFile( char *fromOSPath, char *toOSPath );
 
 qboolean FS_VerifyPak( const char *pak );
 
+#define MAX_PAKFILES    1024
+extern int referencedPakPureChecksums[MAX_PAKFILES];
+extern int numReferencedPaks;
 /*
 ==============================================================
 

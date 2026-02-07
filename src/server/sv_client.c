@@ -84,67 +84,17 @@ void SV_GetChallenge( netadr_t from ) {
 		i = oldest;
 	}
 
-	// if they are on a lan address, send the challengeResponse immediately
-	if ( Sys_IsLANAddress( from ) ) {
-		challenge->pingTime = svs.time;
-		if ( sv_onlyVisibleClients->integer ) {
-			NET_OutOfBandPrint( NS_SERVER, from, "challengeResponse %i %i", challenge->challenge, sv_onlyVisibleClients->integer );
-		} else {
-			NET_OutOfBandPrint( NS_SERVER, from, "challengeResponse %i", challenge->challenge );
-		}
-		return;
+	//there is no challenge server anymore
+	challenge->pingTime = svs.time;
+	if ( sv_onlyVisibleClients->integer ) {
+		NET_OutOfBandPrint( NS_SERVER, challenge->adr,
+							"challengeResponse %i %i", challenge->challenge, sv_onlyVisibleClients->integer );
+	} else {
+		NET_OutOfBandPrint( NS_SERVER, challenge->adr,
+							"challengeResponse %i", challenge->challenge );
 	}
 
-	// look up the authorize server's IP
-	if ( !svs.authorizeAddress.ip[0] && svs.authorizeAddress.type != NA_BAD ) {
-		Com_Printf( "Resolving %s\n", AUTHORIZE_SERVER_NAME );
-		if ( !NET_StringToAdr( AUTHORIZE_SERVER_NAME, &svs.authorizeAddress ) ) {
-			Com_Printf( "Couldn't resolve address\n" );
-			return;
-		}
-		svs.authorizeAddress.port = BigShort( PORT_AUTHORIZE );
-		Com_Printf( "%s resolved to %i.%i.%i.%i:%i\n", AUTHORIZE_SERVER_NAME,
-					svs.authorizeAddress.ip[0], svs.authorizeAddress.ip[1],
-					svs.authorizeAddress.ip[2], svs.authorizeAddress.ip[3],
-					BigShort( svs.authorizeAddress.port ) );
-	}
-
-	// if they have been challenging for a long time and we
-	// haven't heard anything from the authoirze server, go ahead and
-	// let them in, assuming the id server is down
-	if ( svs.time - challenge->firstTime > AUTHORIZE_TIMEOUT ) {
-		Com_DPrintf( "authorize server timed out\n" );
-
-		challenge->pingTime = svs.time;
-		if ( sv_onlyVisibleClients->integer ) {
-			NET_OutOfBandPrint( NS_SERVER, challenge->adr,
-								"challengeResponse %i %i", challenge->challenge, sv_onlyVisibleClients->integer );
-		} else {
-			NET_OutOfBandPrint( NS_SERVER, challenge->adr,
-								"challengeResponse %i", challenge->challenge );
-		}
-
-		return;
-	}
-
-	// otherwise send their ip to the authorize server
-	if ( svs.authorizeAddress.type != NA_BAD ) {
-		cvar_t  *fs;
-		char game[1024];
-
-		game[0] = 0;
-		fs = Cvar_Get( "fs_game", "wolfpro", CVAR_INIT | CVAR_SYSTEMINFO );
-		if ( fs && fs->string[0] != 0 ) {
-			strcpy( game, fs->string );
-		}
-		Com_DPrintf( "sending getIpAuthorize for %s\n", NET_AdrToString( from ) );
-		fs = Cvar_Get( "sv_allowAnonymous", "0", CVAR_SERVERINFO );
-
-		// NERVE - SMF - fixed parsing on sv_allowAnonymous
-		NET_OutOfBandPrint( NS_SERVER, svs.authorizeAddress,
-							"getIpAuthorize %i %i.%i.%i.%i %s %i",  svs.challenges[i].challenge,
-							from.ip[0], from.ip[1], from.ip[2], from.ip[3], game, fs->integer );
-	}
+	return;
 }
 
 /*
@@ -1038,6 +988,8 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 	const char *pPaks, *pArg;
 	qboolean bGood = qtrue;
 
+	int qagameChkSum = 0;
+
 	// if we are pure, we "expect" the client to load certain things from
 	// certain pk3 files, namely we want the client to have loaded the
 	// ui and cgame that we think should be loaded based on the pure setting
@@ -1053,6 +1005,9 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 
 		nClientPaks = Cmd_Argc();
 
+		if ( nClientPaks > ARRAY_LEN( nClientChkSum ) )
+			nClientPaks = ARRAY_LEN( nClientChkSum );
+
 		// start at arg 2 ( skip serverId cl_paks )
 		nCurArg = 1;
 
@@ -1065,7 +1020,7 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 			// show_bug.cgi?id=475
 			// we may get incoming cp sequences from a previous checksumFeed, which we need to ignore
 			// since serverId is a frame count, it always goes up
-			if ( atoi( pArg ) < sv.checksumFeedServerId ) {
+			if ( atoi( pArg ) != sv.serverId ) {
 				Com_DPrintf( "ignoring outdated cp command from client %s\n", cl->name );
 				return;
 			}
@@ -1126,26 +1081,9 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 				break;
 			}
 
-			// get the pure checksums of the pk3 files loaded by the server
-			pPaks = FS_LoadedPakPureChecksums();
-			Cmd_TokenizeString( pPaks );
-			nServerPaks = Cmd_Argc();
-			if ( nServerPaks > 1024 ) {
-				nServerPaks = 1024;
-			}
-
-			for ( i = 0; i < nServerPaks; i++ ) {
-				nServerChkSum[i] = atoi( Cmd_Argv( i ) );
-			}
-
 			// check if the client has provided any pure checksums of pk3 files not loaded by the server
 			for ( i = 0; i < nClientPaks; i++ ) {
-				for ( j = 0; j < nServerPaks; j++ ) {
-					if ( nClientChkSum[i] == nServerChkSum[j] ) {
-						break;
-					}
-				}
-				if ( j >= nServerPaks ) {
+				if ( !FS_IsPureChecksum( nClientChkSum[i] ) ) {
 					bGood = qfalse;
 					break;
 				}
@@ -1155,12 +1093,37 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 			}
 
 			// check if the number of checksums was correct
-			nChkSum1 = sv.checksumFeed;
+			
+			int reverseXorCksum = sv.checksumFeed;
 			for ( i = 0; i < nClientPaks; i++ ) {
-				nChkSum1 ^= nClientChkSum[i];
+				reverseXorCksum ^= nClientChkSum[i];
 			}
-			nChkSum1 ^= nClientPaks;
-			if ( nChkSum1 != nClientChkSum[nClientPaks] ) {
+
+			reverseXorCksum ^= nClientPaks;
+			if (reverseXorCksum != nClientChkSum[nClientPaks] ) {
+				bGood = qfalse;
+				break;
+			}
+
+			// check if the client has all of the referenced checksums @TODO add fs_excludepaks e.g. christmas pak
+			//skip qagame
+			int rc = FS_FileIsInPAK(FS_ShiftStr(SYS_DLLNAME_QAGAME, -SYS_DLLNAME_QAGAME_SHIFT), &qagameChkSum);
+			
+			int foundPaks = 0;
+			for(i = 0; i < numReferencedPaks; i++){
+				int csum = referencedPakPureChecksums[i];
+				//we already verified ui and cgame and dont need qagame
+				if(csum == nChkSum1 || csum == nChkSum2 || csum == qagameChkSum){
+					foundPaks++;
+					continue;
+				}
+				for(j = 0; j < nClientPaks; j++){
+					if(csum == nClientChkSum[j]){
+						foundPaks++;
+					}
+				}
+			}
+			if(foundPaks != numReferencedPaks){
 				bGood = qfalse;
 				break;
 			}

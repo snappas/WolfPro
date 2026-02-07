@@ -942,90 +942,6 @@ void CL_RequestMotd( void ) {
 	NET_OutOfBandPrint( NS_CLIENT, cls.updateServer, "getmotd \"%s\"\n", info );
 }
 
-/*
-===================
-CL_RequestAuthorization
-
-Authorization server protocol
------------------------------
-
-All commands are text in Q3 out of band packets (leading 0xff 0xff 0xff 0xff).
-
-Whenever the client tries to get a challenge from the server it wants to
-connect to, it also blindly fires off a packet to the authorize server:
-
-getKeyAuthorize <challenge> <cdkey>
-
-cdkey may be "demo"
-
-
-#OLD The authorize server returns a:
-#OLD
-#OLD keyAthorize <challenge> <accept | deny>
-#OLD
-#OLD A client will be accepted if the cdkey is valid and it has not been used by any other IP
-#OLD address in the last 15 minutes.
-
-
-The server sends a:
-
-getIpAuthorize <challenge> <ip>
-
-The authorize server returns a:
-
-ipAuthorize <challenge> <accept | deny | demo | unknown >
-
-A client will be accepted if a valid cdkey was sent by that ip (only) in the last 15 minutes.
-If no response is received from the authorize server after two tries, the client will be let
-in anyway.
-===================
-*/
-void CL_RequestAuthorization( void ) {
-	char nums[64];
-	int i, j, l;
-	cvar_t  *fs;
-
-	if ( !cls.authorizeServer.port ) {
-		Com_Printf( "Resolving %s\n", AUTHORIZE_SERVER_NAME );
-		if ( !NET_StringToAdr( AUTHORIZE_SERVER_NAME, &cls.authorizeServer  ) ) {
-			Com_Printf( "Couldn't resolve address\n" );
-			return;
-		}
-
-		cls.authorizeServer.port = BigShort( PORT_AUTHORIZE );
-		Com_Printf( "%s resolved to %i.%i.%i.%i:%i\n", AUTHORIZE_SERVER_NAME,
-					cls.authorizeServer.ip[0], cls.authorizeServer.ip[1],
-					cls.authorizeServer.ip[2], cls.authorizeServer.ip[3],
-					BigShort( cls.authorizeServer.port ) );
-	}
-	if ( cls.authorizeServer.type == NA_BAD ) {
-		return;
-	}
-
-	if ( Cvar_VariableValue( "fs_restrict" ) ) {
-		Q_strncpyz( nums, "demo", sizeof( nums ) );
-	} else {
-		// only grab the alphanumeric values from the cdkey, to avoid any dashes or spaces
-		j = 0;
-		l = strlen( cl_cdkey );
-		if ( l > 32 ) {
-			l = 32;
-		}
-		for ( i = 0 ; i < l ; i++ ) {
-			if ( ( cl_cdkey[i] >= '0' && cl_cdkey[i] <= '9' )
-				 || ( cl_cdkey[i] >= 'a' && cl_cdkey[i] <= 'z' )
-				 || ( cl_cdkey[i] >= 'A' && cl_cdkey[i] <= 'Z' )
-				 ) {
-				nums[j] = cl_cdkey[i];
-				j++;
-			}
-		}
-		nums[j] = 0;
-	}
-
-	fs = Cvar_Get( "cl_anonymous", "0", CVAR_INIT | CVAR_SYSTEMINFO );
-	NET_OutOfBandPrint( NS_CLIENT, cls.authorizeServer, va( "getKeyAuthorize %i %s", fs->integer, nums ) );
-}
 
 /*
 ======================================================================
@@ -1309,20 +1225,15 @@ CL_SendPureChecksums
 =================
 */
 void CL_SendPureChecksums( void ) {
-	const char *pChecksums;
-	char cMsg[MAX_INFO_VALUE];
-	int i;
+	char cMsg[ MAX_STRING_CHARS-1 ];
+	int len;
+
+	if ( !cl_connectedToPureServer || clc.demoplaying )
+		return;
 
 	// if we are pure we need to send back a command with our referenced pk3 checksums
-	pChecksums = FS_ReferencedPakPureChecksums();
-
-	// "cp"
-	Com_sprintf( cMsg, sizeof( cMsg ), "Va " );
-	Q_strcat( cMsg, sizeof( cMsg ), va( "%d ", cl.serverId ) );
-	Q_strcat( cMsg, sizeof( cMsg ), pChecksums );
-	for ( i = 0; i < 2; i++ ) {
-		cMsg[i] += 13 + ( i * 2 );
-	}
+	len = sprintf( cMsg, "cp %d ", cl.serverId );
+	strcpy( cMsg + len, FS_ReferencedPakPureChecksums( sizeof( cMsg ) - len - 1 ) );
 	CL_AddReliableCommand( cMsg );
 }
 
@@ -1810,9 +1721,6 @@ void CL_CheckForResend( void ) {
 	switch ( cls.state ) {
 	case CA_CONNECTING:
 		// requesting a challenge
-		if ( !Sys_IsLANAddress( clc.serverAddress ) ) {
-			CL_RequestAuthorization();
-		}
 		NET_OutOfBandPrint( NS_CLIENT, clc.serverAddress, "getchallenge" );
 		break;
 

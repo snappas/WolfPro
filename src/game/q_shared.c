@@ -858,6 +858,14 @@ int Q_PrintStrlen( const char *string ) {
 	return len;
 }
 
+char *Q_stradd( char *dst, const char *src )
+{
+	char c;
+	while ( (c = *src++) != '\0' )
+		*dst++ = c;
+	*dst = '\0';
+	return dst;
+}
 
 char *Q_CleanStr( char *string ) {
 	char*   d;
