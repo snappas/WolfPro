@@ -648,6 +648,7 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	Cvar_Set( "sv_referencedPaks", p );
 	p = FS_ReferencedPakNames();
 	Cvar_Set( "sv_referencedPakNames", p );
+	numReferencedPaks = 0;
 	FS_ServerReferencedPureChecksums();
 
 	// save systeminfo and serverinfo strings
