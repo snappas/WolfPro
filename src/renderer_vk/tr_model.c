@@ -102,7 +102,7 @@ void R_ModelInit( void ) {
 	// leave a space for NULL model
 	cl_numModels = 0;
 
-	mod = R_AllocModel();
+	mod = MDL_AllocModel(VM_CGAME);
 	mod->type = MOD_BAD;
 
 }

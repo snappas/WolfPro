@@ -1326,6 +1326,7 @@ int MDL_LerpTag(orientation_t* tag, const refEntity_t* refent, const char* tagNa
 int MDL_LerpTagExt( orientation_t *tag, lerpInfo_t *lerpInfo, const char *tagNameIn, int startIndex, vmType_t vmType );
 qhandle_t MDL_RegisterModel( const char *name, vmType_t vmType );
 void MDL_CalcBones(mdsHeader_t* header, const refEntity_t* refent, int* boneList, int numBones);
+model_t *MDL_AllocModel( vmType_t vmType );
 
 qboolean R_LoadMDC( model_t *mod, int lod, void *buffer, const char *mod_name, vmType_t vmType );
 qboolean R_LoadMD3( model_t *mod, int lod, void *buffer, const char *name, vmType_t vmType );
