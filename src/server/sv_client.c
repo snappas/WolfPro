@@ -84,67 +84,17 @@ void SV_GetChallenge( netadr_t from ) {
 		i = oldest;
 	}
 
-	// if they are on a lan address, send the challengeResponse immediately
-	if ( Sys_IsLANAddress( from ) ) {
-		challenge->pingTime = svs.time;
-		if ( sv_onlyVisibleClients->integer ) {
-			NET_OutOfBandPrint( NS_SERVER, from, "challengeResponse %i %i", challenge->challenge, sv_onlyVisibleClients->integer );
-		} else {
-			NET_OutOfBandPrint( NS_SERVER, from, "challengeResponse %i", challenge->challenge );
-		}
-		return;
+	//there is no challenge server anymore
+	challenge->pingTime = svs.time;
+	if ( sv_onlyVisibleClients->integer ) {
+		NET_OutOfBandPrint( NS_SERVER, challenge->adr,
+							"challengeResponse %i %i", challenge->challenge, sv_onlyVisibleClients->integer );
+	} else {
+		NET_OutOfBandPrint( NS_SERVER, challenge->adr,
+							"challengeResponse %i", challenge->challenge );
 	}
 
-	// look up the authorize server's IP
-	if ( !svs.authorizeAddress.ip[0] && svs.authorizeAddress.type != NA_BAD ) {
-		Com_Printf( "Resolving %s\n", AUTHORIZE_SERVER_NAME );
-		if ( !NET_StringToAdr( AUTHORIZE_SERVER_NAME, &svs.authorizeAddress ) ) {
-			Com_Printf( "Couldn't resolve address\n" );
-			return;
-		}
-		svs.authorizeAddress.port = BigShort( PORT_AUTHORIZE );
-		Com_Printf( "%s resolved to %i.%i.%i.%i:%i\n", AUTHORIZE_SERVER_NAME,
-					svs.authorizeAddress.ip[0], svs.authorizeAddress.ip[1],
-					svs.authorizeAddress.ip[2], svs.authorizeAddress.ip[3],
-					BigShort( svs.authorizeAddress.port ) );
-	}
-
-	// if they have been challenging for a long time and we
-	// haven't heard anything from the authoirze server, go ahead and
-	// let them in, assuming the id server is down
-	if ( svs.time - challenge->firstTime > AUTHORIZE_TIMEOUT ) {
-		Com_DPrintf( "authorize server timed out\n" );
-
-		challenge->pingTime = svs.time;
-		if ( sv_onlyVisibleClients->integer ) {
-			NET_OutOfBandPrint( NS_SERVER, challenge->adr,
-								"challengeResponse %i %i", challenge->challenge, sv_onlyVisibleClients->integer );
-		} else {
-			NET_OutOfBandPrint( NS_SERVER, challenge->adr,
-								"challengeResponse %i", challenge->challenge );
-		}
-
-		return;
-	}
-
-	// otherwise send their ip to the authorize server
-	if ( svs.authorizeAddress.type != NA_BAD ) {
-		cvar_t  *fs;
-		char game[1024];
-
-		game[0] = 0;
-		fs = Cvar_Get( "fs_game", "wolfpro", CVAR_INIT | CVAR_SYSTEMINFO );
-		if ( fs && fs->string[0] != 0 ) {
-			strcpy( game, fs->string );
-		}
-		Com_DPrintf( "sending getIpAuthorize for %s\n", NET_AdrToString( from ) );
-		fs = Cvar_Get( "sv_allowAnonymous", "0", CVAR_SERVERINFO );
-
-		// NERVE - SMF - fixed parsing on sv_allowAnonymous
-		NET_OutOfBandPrint( NS_SERVER, svs.authorizeAddress,
-							"getIpAuthorize %i %i.%i.%i.%i %s %i",  svs.challenges[i].challenge,
-							from.ip[0], from.ip[1], from.ip[2], from.ip[3], game, fs->integer );
-	}
+	return;
 }
 
 /*
