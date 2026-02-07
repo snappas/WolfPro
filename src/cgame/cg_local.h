@@ -2371,6 +2371,7 @@ void CG_ParseReinforcementTimes(const char *pszReinfSeedString);
 void CG_ParseReady(const char* pState);
 void CG_ParsePause( const char *pTime );
 void CG_AddToTeamChat( const char *str );
+extern const char *aMonths[12];
 
 //
 // cg_playerstate.c

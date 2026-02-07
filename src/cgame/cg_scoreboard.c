@@ -166,6 +166,18 @@ static int CG_TeamScoreboard( int x, int y, team_t team, float fade ) {
 	return y + count * lineHeight + 20;
 }
 
+
+char* CG_GetClock(void) {
+	static char displayTime[30] = { 0 };
+	qtime_t     tm;
+
+	trap_RealTime(&tm);
+	displayTime[0] = '\0';
+	Q_strcat(displayTime, sizeof(displayTime), va("%02d:%02d:%02d %02d %s %d", tm.tm_hour, tm.tm_min, tm.tm_sec, tm.tm_mday, aMonths[tm.tm_mon], 1900 + tm.tm_year));
+
+	return displayTime;
+}
+
 /*
 =================
 WM_DrawObjectives
@@ -208,6 +220,28 @@ int WM_DrawObjectives( int x, int y, int width, float fade ) {
 	if ( cg.snap->ps.pm_type != PM_INTERMISSION ) {
 		CG_DrawSmallString( x, y, CG_TranslateString( "Goals" ), fade );
 	}
+
+	// show server name and time/date
+	char scoreInfo[200];
+	scoreInfo[0] = 0;
+	
+	s = CG_ConfigString(CS_SERVERINFO);
+	Q_strcat(scoreInfo, sizeof(scoreInfo), va("^3Server: ^7%s  ", Q_CleanStr(Info_ValueForKey(s, "sv_hostname"))));
+	Q_strcat(scoreInfo, sizeof(scoreInfo), va("^3Time: ^7%s", CG_GetClock()));
+
+	// if intermission move it up a little
+	if (cg.snap->ps.pm_type == PM_INTERMISSION)
+		y -= 15;
+
+	int w = CG_DrawStrlen(scoreInfo) * TINYCHAR_WIDTH;
+	CG_DrawStringExt(615 - w, y + TINYCHAR_HEIGHT - 2, scoreInfo, colorWhite, qfalse, qfalse, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0);
+
+	//CG_DrawSmallString(x + 530, y, CG_GetClock(), fade); // RTCWPro - time
+
+	// if intermission move it back
+	if (cg.snap->ps.pm_type == PM_INTERMISSION)
+		y += 15;
+
 	y += SMALLCHAR_HEIGHT + 3;
 
 	// draw color bands
@@ -463,7 +497,7 @@ static void WM_DrawClientScore( int x, int y, score_t *score, float *color, floa
 
 		totalwidth = INFO_CLASS_WIDTH + INFO_SCORE_WIDTH + INFO_LATENCY_WIDTH - 8;
 
-		s = CG_TranslateString( "^3SPECTATOR" );
+		s = va("^3(%i) %s", score->ping, ci->shoutStatus ? "SHOUTCASTER" : "SPECTATOR");
 		w = CG_DrawStrlen( s ) * SMALLCHAR_WIDTH;
 
 		CG_DrawSmallString( tempx + totalwidth - w, y, s, fade );
