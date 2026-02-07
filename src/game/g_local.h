@@ -1569,6 +1569,7 @@ extern	vmCvar_t sv_fps;
 
 extern vmCvar_t match_timeoutcount;
 extern vmCvar_t match_timeoutlength;
+extern vmCvar_t match_mutespecs;
 
 extern vmCvar_t g_allowForceTapout;
 
