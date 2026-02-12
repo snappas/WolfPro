@@ -657,6 +657,7 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 	trace_t tr;
 	gentity_t   *traceEnt;
 	orientation_t or;           // DHM - Nerve
+	vec3_t		new_end;
 
 	qboolean head_shot_weapon = qfalse;
 
@@ -682,8 +683,10 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 		int oldOwner = head->r.ownerNum;
 		head->r.ownerNum = ENTITYNUM_NONE;
 
+		VectorMA(start, 64, end, new_end);
+
 		// trace another shot see if we hit the head
-		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
+		trap_Trace( &tr, start, NULL, NULL, new_end, targ->s.number, MASK_SHOT );
 
 		head->r.ownerNum = oldOwner;
 

@@ -1661,6 +1661,10 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	gentity_t   *traceEnt;
 	damage *= s_quadFactor;
 
+	vec3_t		initial_start;
+	// since start is overwritten halfway through this function.
+	VectorCopy(start, initial_start);
+
 	trap_Trace( &tr, start, NULL, NULL, end, source->s.number, MASK_SHOT );
 
 	// bullet debugging using Q3A's railtrail
@@ -1780,7 +1784,11 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 //----(SA)	end
 
 		} else {
-			traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, start, end, ammoTable[attacker->s.weapon].mod );
+			vec3_t backwards;
+			VectorSubtract(initial_start, tr.endpos, backwards);
+			VectorNormalize(backwards);
+			VectorMA(tr.endpos, 1, backwards, initial_start);
+			traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, initial_start, forward, ammoTable[attacker->s.weapon].mod );
 			G_Damage( traceEnt, attacker, attacker, forward, tr.endpos, damage, 0, ammoTable[attacker->s.weapon].mod );
 
 			// allow bullets to "pass through" func_explosives if they break by taking another simultanious shot
