@@ -1571,7 +1571,9 @@ void Sys_SendKeyEvents( void ) {
 	HandleEvents();
 }
 
-
+void GLimp_WakeRenderer( void *data ) { }
+void GLimp_FrontEndSleep(void) { }
+void GLimp_RendererSleep(void) { }
 // bk010216 - added stubs for non-Linux UNIXes here
 // FIXME - use NO_JOYSTICK or something else generic
 
