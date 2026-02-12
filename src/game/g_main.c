@@ -209,6 +209,12 @@ vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
 
 vmCvar_t g_preciseHeadHitbox;
+vmCvar_t g_headMinX;
+vmCvar_t g_headMinY;
+vmCvar_t g_headMinZ;
+vmCvar_t g_headMaxX;
+vmCvar_t g_headMaxY;
+vmCvar_t g_headMaxZ;
 
 vmCvar_t g_gravityModifier;
 
@@ -388,7 +394,12 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_mapScriptDirectory, "g_mapScriptDirectory", "", CVAR_ARCHIVE, 0, qfalse },
 
 
-	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMinX, "g_headMinX", "-6", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMinY, "g_headMinY", "-6", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMinZ, "g_headMinZ", "-2", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMaxX, "g_headMaxX", "6", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMaxY, "g_headMaxY", "6", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMaxZ, "g_headMaxZ", "10", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
 	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },

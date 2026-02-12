@@ -1594,6 +1594,12 @@ extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
 
 extern vmCvar_t g_preciseHeadHitbox;
+extern vmCvar_t g_headMinX;
+extern vmCvar_t g_headMinY;
+extern vmCvar_t g_headMinZ;
+extern vmCvar_t g_headMaxX;
+extern vmCvar_t g_headMaxY;
+extern vmCvar_t g_headMaxZ;
 
 extern vmCvar_t g_gravityModifier;
 
