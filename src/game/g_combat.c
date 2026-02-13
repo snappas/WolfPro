@@ -752,8 +752,15 @@ void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 	VectorCopy( ent->r.currentAngles, head->s.angles );
 	VectorCopy( head->s.angles, head->s.apos.trBase );
 	VectorCopy( head->s.angles, head->s.apos.trDelta );
-	VectorSet( head->r.mins, g_headMinX.integer, g_headMinY.integer, g_headMinZ.integer); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
-	VectorSet( head->r.maxs, g_headMaxX.integer, g_headMaxY.integer, g_headMaxZ.integer); // changed this z from 0 to 6
+	if(g_preciseHeadHitbox.integer){
+		VectorSet( head->r.mins, g_headMinX.integer, g_headMinY.integer, g_headMinZ.integer);
+		VectorSet( head->r.maxs, g_headMaxX.integer, g_headMaxY.integer, g_headMaxZ.integer); 
+	}else{
+		//leave non-precise hardcoded for comparison
+		VectorSet( head->r.mins, -6, -6, -2 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
+		VectorSet( head->r.maxs, 6, 6, 10 ); // changed this z from 0 to 6
+	}
+	
 	head->clipmask = CONTENTS_SOLID;
 	head->r.contents = CONTENTS_SOLID;
 	head->s.eType = ET_TEMPHEAD;
