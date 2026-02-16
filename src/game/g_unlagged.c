@@ -103,7 +103,7 @@ void G_StoreHistory( gentity_t *ent ) {
 	VectorCopy( ent->r.maxs, ent->client->unlag.history[head].maxs );
 	VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
 	SnapVector( ent->client->unlag.history[head].currentOrigin );
-	ent->client->unlag.history[head].leveltime = trap_Milliseconds() - level.frameStartTime;
+	ent->client->unlag.history[head].leveltime = (trap_Milliseconds() - level.frameStartTime) + level.previousTime;
 	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->unlag.history[head].torsoAnimHistory, &ent->client->unlag.history[head].legsAnimHistory, &ent->client->animationInfo);
 }
 
