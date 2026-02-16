@@ -60,6 +60,7 @@ Clear out the given client's history (should be called when the teleport bit is 
 void G_ResetHistory( gentity_t *ent ) {
 	// fill up the history with data (assume the current position)
 	ent->client->unlag.historyHead = NUM_CLIENT_HISTORY - 1;
+	ent->client->unlag.lastHistoryTime = 0;
 	for (int i = ent->client->unlag.historyHead, time = level.time; i >= 0; i--, time -= 50 ) {
 		VectorCopy( ent->r.mins, ent->client->unlag.history[i].mins );
 		VectorCopy( ent->r.maxs, ent->client->unlag.history[i].maxs );
@@ -79,14 +80,16 @@ Keep track of where the client's been
 */
 void G_StoreHistory( gentity_t *ent ) {
 	//don't save updates with the same timestamps
-	if(ent->client->unlag.history[ent->client->unlag.historyHead].leveltime >= ent->client->pers.cmd.serverTime){
+	if(ent->client->unlag.lastHistoryTime >= ent->client->pers.cmd.serverTime){
 		return;
 	}
-	
+
 	//limit how many updates are saved for high fps players
-	if(ent->client->pers.cmd.serverTime - ent->client->unlag.history[ent->client->unlag.historyHead].leveltime < 6){
+	if(ent->client->pers.cmd.serverTime - ent->client->unlag.lastHistoryTime < 6){
 		return;
 	}
+
+	ent->client->unlag.lastHistoryTime = ent->client->pers.cmd.serverTime;
 
 	ent->client->unlag.historyHead++;
 	if ( ent->client->unlag.historyHead >= NUM_CLIENT_HISTORY ) {
@@ -100,7 +103,7 @@ void G_StoreHistory( gentity_t *ent ) {
 	VectorCopy( ent->r.maxs, ent->client->unlag.history[head].maxs );
 	VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
 	SnapVector( ent->client->unlag.history[head].currentOrigin );
-	ent->client->unlag.history[head].leveltime = ent->client->pers.cmd.serverTime;
+	ent->client->unlag.history[head].leveltime = trap_Milliseconds() - level.frameStartTime;
 	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->unlag.history[head].torsoAnimHistory, &ent->client->unlag.history[head].legsAnimHistory, &ent->client->animationInfo);
 }
 
