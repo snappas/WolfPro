@@ -660,7 +660,7 @@ typedef struct animationInfo_s {
 
 //unlagged - backward reconciliation #1
 // the size of history we'll keep
-#define NUM_CLIENT_HISTORY 17
+#define NUM_CLIENT_HISTORY 64
 
 // everything we need to know to backward reconcile
 typedef struct {

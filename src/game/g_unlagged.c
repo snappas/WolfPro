@@ -78,6 +78,16 @@ Keep track of where the client's been
 ============
 */
 void G_StoreHistory( gentity_t *ent ) {
+	//don't save updates with the same timestamps
+	if(ent->client->unlag.history[ent->client->unlag.historyHead].leveltime >= ent->client->pers.cmd.serverTime){
+		return;
+	}
+	
+	//limit how many updates are saved for high fps players
+	if(ent->client->pers.cmd.serverTime - ent->client->unlag.history[ent->client->unlag.historyHead].leveltime < 6){
+		return;
+	}
+
 	ent->client->unlag.historyHead++;
 	if ( ent->client->unlag.historyHead >= NUM_CLIENT_HISTORY ) {
 		ent->client->unlag.historyHead = 0;
@@ -90,7 +100,7 @@ void G_StoreHistory( gentity_t *ent ) {
 	VectorCopy( ent->r.maxs, ent->client->unlag.history[head].maxs );
 	VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
 	SnapVector( ent->client->unlag.history[head].currentOrigin );
-	ent->client->unlag.history[head].leveltime = level.time;
+	ent->client->unlag.history[head].leveltime = ent->client->pers.cmd.serverTime;
 	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->unlag.history[head].torsoAnimHistory, &ent->client->unlag.history[head].legsAnimHistory, &ent->client->animationInfo);
 }
 

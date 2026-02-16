@@ -1171,6 +1171,9 @@ void ClientThink_real( gentity_t *ent ) {
 	// NOTE: now copy the exact origin over otherwise clients can be snapped into solid
 	VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
 
+	// store the client's position for backward reconciliation later
+	G_StoreHistory(ent);
+
 	// touch other objects
 	ClientImpacts( ent, &pm );
 
@@ -1775,9 +1778,6 @@ void ClientEndFrame( gentity_t *ent ) {
 		// save network bandwidth
 		SnapVector( ent->s.pos.trBase );
 	}
-
-	// store the client's position for backward reconciliation later
-	G_StoreHistory(ent);
 
 	
 }
