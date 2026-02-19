@@ -1688,7 +1688,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	// SnapVectorTowards( tr.endpos, start );
 
 	// send bullet impact
-	if ( traceEnt->takedamage && traceEnt->client && !( traceEnt->flags & FL_DEFENSE_GUARD ) ) {
+	if ( traceEnt->takedamage && traceEnt->client ) {
 		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
 		tent->s.eventParm = traceEnt->s.number;
 		if ( LogAccuracyHit( traceEnt, attacker ) && g_gamestate.integer == GS_PLAYING) {
@@ -1709,36 +1709,36 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 			bboxEnt->s.dmgFlags = 1;    // ("type")
 		}
 //----(SA)	end
+	}else {
+		// Ridah, bullet impact should reflect off surface
+		vec3_t reflect;
+		float dot;
+
+		if ( g_debugBullets.integer <= -2 ) {  // show hit thing bb
+			gentity_t *bboxEnt;
+			vec3_t b1, b2;
+			VectorCopy( traceEnt->r.currentOrigin, b1 );
+			VectorCopy( traceEnt->r.currentOrigin, b2 );
+			VectorAdd( b1, traceEnt->r.mins, b1 );
+			VectorAdd( b2, traceEnt->r.maxs, b2 );
+			bboxEnt = G_TempEntity( b1, EV_RAILTRAIL );
+			VectorCopy( b2, bboxEnt->s.origin2 );
+			bboxEnt->s.dmgFlags = 1;    // ("type")
+		}
 
 
-	// Ridah, bullet impact should reflect off surface
-	vec3_t reflect;
-	float dot;
+		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_WALL );
 
-	if ( g_debugBullets.integer <= -2 ) {  // show hit thing bb
-		gentity_t *bboxEnt;
-		vec3_t b1, b2;
-		VectorCopy( traceEnt->r.currentOrigin, b1 );
-		VectorCopy( traceEnt->r.currentOrigin, b2 );
-		VectorAdd( b1, traceEnt->r.mins, b1 );
-		VectorAdd( b2, traceEnt->r.maxs, b2 );
-		bboxEnt = G_TempEntity( b1, EV_RAILTRAIL );
-		VectorCopy( b2, bboxEnt->s.origin2 );
-		bboxEnt->s.dmgFlags = 1;    // ("type")
+
+		dot = DotProduct( forward, tr.plane.normal );
+		VectorMA( forward, -2 * dot, tr.plane.normal, reflect );
+		VectorNormalize( reflect );
+
+		tent->s.eventParm = DirToByte( reflect );
+		tent->s.otherEntityNum2 = ENTITYNUM_NONE;
+
+		// done.
 	}
-
-
-	tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_WALL );
-	
-
-	dot = DotProduct( forward, tr.plane.normal );
-	VectorMA( forward, -2 * dot, tr.plane.normal, reflect );
-	VectorNormalize( reflect );
-
-	tent->s.eventParm = DirToByte( reflect );
-	tent->s.otherEntityNum2 = ENTITYNUM_NONE;
-	
-	// done.
 	
 	tent->s.otherEntityNum = attacker->s.number;
 
