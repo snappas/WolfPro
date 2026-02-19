@@ -680,17 +680,12 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 		head = targ->headBBox;
 
 		//remove owner so the trace doesn't ignore it
-		int oldOwner = head->r.ownerNum;
-		head->r.ownerNum = ENTITYNUM_NONE;
-
-		VectorMA(start, 64, end, new_end);
-
+		gentity_t *owner = &g_entities[head->r.ownerNum];
+		trap_UnlinkEntity(owner);
 		// trace another shot see if we hit the head
-		trap_Trace( &tr, start, NULL, NULL, new_end, targ->s.number, MASK_SHOT );
-
-		head->r.ownerNum = oldOwner;
-
+		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
 		traceEnt = &g_entities[ tr.entityNum ];
+		trap_LinkEntity(owner);
 
 		if ( g_debugBullets.integer >= 3 ) {   // show hit player head bb
 			gentity_t *tent;
