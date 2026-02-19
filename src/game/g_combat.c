@@ -657,7 +657,6 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 	trace_t tr;
 	gentity_t   *traceEnt;
 	orientation_t or;           // DHM - Nerve
-	vec3_t		new_end;
 
 	qboolean head_shot_weapon = qfalse;
 
@@ -670,22 +669,18 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 		return qfalse;
 	}
 
+	if( targ->isHeadshot ){
+		return qtrue;
+	}
+
 	head_shot_weapon = IsHeadShotWeapon( mod, isAICharacter );
 
 	if ( head_shot_weapon ) {
-		if(targ->isHeadshot){
-			return qtrue;
-		}
-
 		head = targ->headBBox;
 
-		//remove owner so the trace doesn't ignore it
-		gentity_t *owner = &g_entities[head->r.ownerNum];
-		trap_UnlinkEntity(owner);
 		// trace another shot see if we hit the head
 		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
 		traceEnt = &g_entities[ tr.entityNum ];
-		trap_LinkEntity(owner);
 
 		if ( g_debugBullets.integer >= 3 ) {   // show hit player head bb
 			gentity_t *tent;

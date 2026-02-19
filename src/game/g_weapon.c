@@ -1743,8 +1743,17 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	tent->s.otherEntityNum = attacker->s.number;
 
 	if ( traceEnt->takedamage ) {
+		if(!traceEnt->isHeadshot){
+			AngleVectors( attacker->client->ps.viewangles, forward, right, up );
 
-		traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, start, forward, ammoTable[attacker->s.weapon].mod );
+			vec3_t muzzlePoint, end_point;
+			VectorCopy( attacker->r.currentOrigin, muzzlePoint );
+			muzzlePoint[2] += attacker->client->ps.viewheight;
+			VectorMA( muzzlePoint, 8192, forward, end_point );
+
+			traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, start, end_point, ammoTable[attacker->s.weapon].mod );
+		}
+		
 		G_Damage( traceEnt, attacker, attacker, forward, tr.endpos, damage, 0, ammoTable[attacker->s.weapon].mod );
 
 		// allow bullets to "pass through" func_explosives if they break by taking another simultanious shot
