@@ -679,7 +679,9 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 		head = targ->headBBox;
 
 		// trace another shot see if we hit the head
+		trap_UnlinkEntity(&g_entities[targ->s.number]);
 		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
+		trap_LinkEntity(&g_entities[targ->s.number]);
 		traceEnt = &g_entities[ tr.entityNum ];
 
 		if ( g_debugBullets.integer >= 3 ) {   // show hit player head bb
