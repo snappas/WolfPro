@@ -1917,7 +1917,7 @@ void AddHeadEntities(gentity_t* skip, int content, int mask);
 void RemoveHeadEntities(gentity_t* skip);
 void FreeHeadEntity(gentity_t* ent);
 void UpdateHeadPosition(gentity_t *ent);
-qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod );
+qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod );
 
 // Macros
 //

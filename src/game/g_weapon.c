@@ -1751,7 +1751,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 			muzzlePoint[2] += attacker->client->ps.viewheight;
 			VectorMA( muzzlePoint, 8192, forward, end_point );
 
-			traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, start, end_point, ammoTable[attacker->s.weapon].mod );
+			traceEnt->isHeadshot = IsHeadShot( attacker, traceEnt, qfalse, start, end_point, ammoTable[attacker->s.weapon].mod );
 		}
 		
 		G_Damage( traceEnt, attacker, attacker, forward, tr.endpos, damage, 0, ammoTable[attacker->s.weapon].mod );
