@@ -1675,6 +1675,9 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	if(traceEnt->s.eType == ET_TEMPHEAD){
 		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
 		traceEnt->isHeadshot = qtrue;
+		if(traceEnt->health <= 0){
+			traceEnt->isHeadshot = qfalse;
+		}
 	}
 
 	EmitterCheck( traceEnt, attacker, &tr );
