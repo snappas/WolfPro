@@ -690,7 +690,6 @@ typedef struct unlagged_s {
 	// the last frame number we got an update from this client
 	int lastUpdateFrame;
 	qboolean spawnprotected;
-	int lastHistoryTime;
 } unlagged_t;
 
 
