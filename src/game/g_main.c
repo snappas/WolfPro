@@ -399,7 +399,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_headMinZ, "g_headMinZ", "0", CVAR_ARCHIVE, 0, qfalse },
 	{ &g_headMaxX, "g_headMaxX", "6", CVAR_ARCHIVE, 0, qfalse },
 	{ &g_headMaxY, "g_headMaxY", "6", CVAR_ARCHIVE, 0, qfalse },
-	{ &g_headMaxZ, "g_headMaxZ", "12", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMaxZ, "g_headMaxZ", "13.75", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
 	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },

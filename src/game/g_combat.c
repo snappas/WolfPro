@@ -753,8 +753,8 @@ void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 	VectorCopy( head->s.angles, head->s.apos.trBase );
 	VectorCopy( head->s.angles, head->s.apos.trDelta );
 	if(g_preciseHeadHitbox.integer){
-		VectorSet( head->r.mins, g_headMinX.integer, g_headMinY.integer, g_headMinZ.integer);
-		VectorSet( head->r.maxs, g_headMaxX.integer, g_headMaxY.integer, g_headMaxZ.integer); 
+		VectorSet( head->r.mins, g_headMinX.value, g_headMinY.value, g_headMinZ.value);
+		VectorSet( head->r.maxs, g_headMaxX.value, g_headMaxY.value, g_headMaxZ.value); 
 	}else{
 		//leave non-precise hardcoded for comparison
 		VectorSet( head->r.mins, -6, -6, -2 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
