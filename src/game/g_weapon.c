@@ -1675,6 +1675,9 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	if(traceEnt->s.eType == ET_TEMPHEAD){
 		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
 		traceEnt->isHeadshot = qtrue;
+		if(traceEnt->health <= 0){
+			traceEnt->isHeadshot = qfalse;
+		}
 	}
 
 	EmitterCheck( traceEnt, attacker, &tr );
@@ -1684,11 +1687,11 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 		source->client->sess.stats.acc_shots++;
 	}
 
-	// snap the endpos to integers, but nudged towards the line
-	SnapVectorTowards( tr.endpos, start );
+	// // snap the endpos to integers, but nudged towards the line
+	// SnapVectorTowards( tr.endpos, start );
 
 	// send bullet impact
-	if ( traceEnt->takedamage && traceEnt->client && !( traceEnt->flags & FL_DEFENSE_GUARD ) ) {
+	if ( traceEnt->takedamage && traceEnt->client ) {
 		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
 		tent->s.eventParm = traceEnt->s.number;
 		if ( LogAccuracyHit( traceEnt, attacker ) && g_gamestate.integer == GS_PLAYING) {
@@ -1709,11 +1712,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 			bboxEnt->s.dmgFlags = 1;    // ("type")
 		}
 //----(SA)	end
-
-	} else if ( traceEnt->takedamage && traceEnt->s.eType == ET_BAT ) {
-		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
-		tent->s.eventParm = traceEnt->s.number;
-	} else {
+	}else {
 		// Ridah, bullet impact should reflect off surface
 		vec3_t reflect;
 		float dot;
@@ -1730,68 +1729,43 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 			bboxEnt->s.dmgFlags = 1;    // ("type")
 		}
 
-		if ( traceEnt->flags & FL_DEFENSE_GUARD ) {
-			// reflect off sheild
-			VectorSubtract( tr.endpos, traceEnt->r.currentOrigin, reflect );
-			VectorNormalize( reflect );
-			VectorMA( traceEnt->r.currentOrigin, 15, reflect, reflect );
-			tent = G_TempEntity( reflect, EV_BULLET_HIT_WALL );
-		} else {
-			tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_WALL );
-		}
+
+		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_WALL );
+
 
 		dot = DotProduct( forward, tr.plane.normal );
 		VectorMA( forward, -2 * dot, tr.plane.normal, reflect );
 		VectorNormalize( reflect );
 
 		tent->s.eventParm = DirToByte( reflect );
+		tent->s.otherEntityNum2 = ENTITYNUM_NONE;
 
-		if ( traceEnt->flags & FL_DEFENSE_GUARD ) {
-			tent->s.otherEntityNum2 = traceEnt->s.number;   // force sparks
-		} else {
-			tent->s.otherEntityNum2 = ENTITYNUM_NONE;
-		}
 		// done.
 	}
+	
 	tent->s.otherEntityNum = attacker->s.number;
 
 	if ( traceEnt->takedamage ) {
-		qboolean reflectBool = qfalse;
-		vec3_t trDir;
+		if(!traceEnt->isHeadshot){
+			AngleVectors( attacker->client->ps.viewangles, forward, right, up );
 
-		if ( traceEnt->flags & FL_DEFENSE_GUARD ) {
-			// if we are facing the direction the bullet came from, then reflect it
-			AngleVectors( traceEnt->s.apos.trBase, trDir, NULL, NULL );
-			if ( DotProduct( forward, trDir ) < 0.6 ) {
-				reflectBool = qtrue;
-			}
+			vec3_t muzzlePoint, end_point;
+			VectorCopy( attacker->r.currentOrigin, muzzlePoint );
+			muzzlePoint[2] += attacker->client->ps.viewheight;
+			VectorMA( muzzlePoint, 8192, forward, end_point );
+
+			traceEnt->isHeadshot = IsHeadShot( attacker, traceEnt, qfalse, start, end_point, ammoTable[attacker->s.weapon].mod );
 		}
+		
+		G_Damage( traceEnt, attacker, attacker, forward, tr.endpos, damage, 0, ammoTable[attacker->s.weapon].mod );
 
-		if ( reflectBool ) {
-			vec3_t reflect_end;
-			// reflect this bullet
-			G_AddEvent( traceEnt, EV_GENERAL_SOUND, level.bulletRicochetSound );
-			CalcMuzzlePoints( traceEnt, traceEnt->s.weapon );
-
-//----(SA)	modified to use extended version so attacker would pass through
-//			Bullet_Fire( traceEnt, 1000, damage );
-			Bullet_Endpos( traceEnt, spread, &reflect_end );
-			Bullet_Fire_Extended( traceEnt, attacker, muzzleTrace, reflect_end, spread, damage );
-//----(SA)	end
-
-		} else {
-			traceEnt->isHeadshot = IsHeadShot( traceEnt, qfalse, start, end, ammoTable[attacker->s.weapon].mod );
-			G_Damage( traceEnt, attacker, attacker, forward, tr.endpos, damage, 0, ammoTable[attacker->s.weapon].mod );
-
-			// allow bullets to "pass through" func_explosives if they break by taking another simultanious shot
-			if ( Q_stricmp( traceEnt->classname, "func_explosive" ) == 0 ) {
-				if ( traceEnt->health <= damage ) {
-					// start new bullet at position this hit the bmodel and continue to the end position (ignoring shot-through bmodel in next trace)
-					// spread = 0 as this is an extension of an already spread shot
-					Bullet_Fire_Extended( traceEnt, attacker, tr.endpos, end, 0, damage );
-				}
+		// allow bullets to "pass through" func_explosives if they break by taking another simultanious shot
+		if ( Q_stricmp( traceEnt->classname, "func_explosive" ) == 0 ) {
+			if ( traceEnt->health <= damage ) {
+				// start new bullet at position this hit the bmodel and continue to the end position (ignoring shot-through bmodel in next trace)
+				// spread = 0 as this is an extension of an already spread shot
+				Bullet_Fire_Extended( traceEnt, attacker, tr.endpos, end, 0, damage );
 			}
-
 		}
 	}
 }

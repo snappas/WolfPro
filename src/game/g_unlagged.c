@@ -180,7 +180,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 				ent->client->unlag.history[j].maxs, ent->client->unlag.history[k].maxs,
 				ent->r.maxs );
 
-			CopyAnimationInfo(&ent->client->unlag.history[j].animationInfo, &ent->client->unlag.history[j].torsoAnimHistory, &ent->client->unlag.history[j].legsAnimHistory, &ent->client->animationInfo);
+			CopyAnimationInfo(&ent->client->animationInfo, &ent->client->unlag.history[j].torsoAnimHistory, &ent->client->unlag.history[j].legsAnimHistory, &ent->client->unlag.history[j].animationInfo);
 			// ported from nobo antilag for custom head animations
 			// find the "best" origin between the sandwiching trail nodes via interpolation
 			//Interpolate(frac, ent->client->history[j].currentOrigin, ent->client->history[k].currentOrigin, ent->r.currentOrigin);
@@ -200,7 +200,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 			VectorCopy( ent->client->unlag.history[k].currentOrigin, ent->r.currentOrigin );
 			VectorCopy( ent->client->unlag.history[k].mins, ent->r.mins );
 			VectorCopy( ent->client->unlag.history[k].maxs, ent->r.maxs );
-			CopyAnimationInfo(&ent->client->unlag.history[k].animationInfo, &ent->client->unlag.history[k].torsoAnimHistory, &ent->client->unlag.history[k].legsAnimHistory, &ent->client->animationInfo);
+			CopyAnimationInfo(&ent->client->animationInfo, &ent->client->unlag.history[k].torsoAnimHistory, &ent->client->unlag.history[k].legsAnimHistory, &ent->client->unlag.history[k].animationInfo);
 
 			// this will recalculate absmin and absmax
 			trap_LinkEntity( ent );
@@ -323,7 +323,7 @@ void G_UnTimeShiftClient( gentity_t *ent ) {
 		VectorCopy( ent->client->unlag.saved.maxs, ent->r.maxs );
 		VectorCopy( ent->client->unlag.saved.currentOrigin, ent->r.currentOrigin );
 		ent->client->unlag.saved.leveltime = 0;
-		CopyAnimationInfo(&ent->client->animationInfo, ent->client->animationInfo.torso.animation, ent->client->animationInfo.legs.animation, &ent->client->unlag.saved.animationInfo);
+		CopyAnimationInfo(&ent->client->animationInfo, &ent->client->unlag.saved.torsoAnimHistory, &ent->client->unlag.saved.legsAnimHistory, &ent->client->unlag.saved.animationInfo);
 
 		// this will recalculate absmin and absmax
 		trap_LinkEntity( ent );

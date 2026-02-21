@@ -652,7 +652,7 @@ qboolean IsHeadShotWeapon( int mod, qboolean aicharacter ) {
 	return qfalse;
 }
 
-qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3_t end, int mod ) {
+qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3_t end, int mod ) {
 	gentity_t   *head;
 	trace_t tr;
 	gentity_t   *traceEnt;
@@ -669,22 +669,25 @@ qboolean IsHeadShot( gentity_t *targ, qboolean isAICharacter, vec3_t start, vec3
 		return qfalse;
 	}
 
+	if( targ->isHeadshot ){
+		return qtrue;
+	}
+
 	head_shot_weapon = IsHeadShotWeapon( mod, isAICharacter );
 
 	if ( head_shot_weapon ) {
-		if(targ->isHeadshot){
-			return qtrue;
-		}
-
 		head = targ->headBBox;
-
-		//remove owner so the trace doesn't ignore it
 		int oldOwner = head->r.ownerNum;
-		head->r.ownerNum = ENTITYNUM_NONE;
+
+		head->s.otherEntityNum = ENTITYNUM_WORLD;
+		head->r.ownerNum = ENTITYNUM_WORLD;
 
 		// trace another shot see if we hit the head
-		trap_Trace( &tr, start, NULL, NULL, end, targ->s.number, MASK_SHOT );
+		trap_UnlinkEntity(&g_entities[targ->s.number]);
+		trap_Trace( &tr, start, NULL, NULL, end, attacker->s.number, MASK_SHOT );
+		trap_LinkEntity(&g_entities[targ->s.number]);
 
+		head->s.otherEntityNum = oldOwner;
 		head->r.ownerNum = oldOwner;
 
 		traceEnt = &g_entities[ tr.entityNum ];
@@ -749,8 +752,15 @@ void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
 	VectorCopy( ent->r.currentAngles, head->s.angles );
 	VectorCopy( head->s.angles, head->s.apos.trBase );
 	VectorCopy( head->s.angles, head->s.apos.trDelta );
-	VectorSet( head->r.mins, -6, -6, -2 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
-	VectorSet( head->r.maxs, 6, 6, 10 ); // changed this z from 0 to 6
+	if(g_preciseHeadHitbox.integer){
+		VectorSet( head->r.mins, g_headMinX.value, g_headMinY.value, g_headMinZ.value);
+		VectorSet( head->r.maxs, g_headMaxX.value, g_headMaxY.value, g_headMaxZ.value); 
+	}else{
+		//leave non-precise hardcoded for comparison
+		VectorSet( head->r.mins, -6, -6, -2 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
+		VectorSet( head->r.maxs, 6, 6, 10 ); // changed this z from 0 to 6
+	}
+	
 	head->clipmask = CONTENTS_SOLID;
 	head->r.contents = CONTENTS_SOLID;
 	head->s.eType = ET_TEMPHEAD;
