@@ -1512,7 +1512,7 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 			trap_SendServerCommand( ent - g_entities, "print \"Client not on server.\n\"" );
 			return;
 		}
-	} else if ( !Q_stricmp( arg1, "start_match" ) || !Q_stricmp( arg1, "reset_match" ) || !Q_stricmp( arg1, "swap_teams" ) || !Q_stricmp( arg1, "nextmap" ) ) {        // NERVE - SMF
+	} else if ( !Q_stricmp( arg1, "start_match" ) || !Q_stricmp( arg1, "reset_match" ) || !Q_stricmp( arg1, "swap_teams" ) || !Q_stricmp( arg1, "nextmap" ) ||  !Q_stricmp( arg1, "timelimit" )) {        // NERVE - SMF
 
 		if ( !Q_stricmp( arg1, "nextmap" ) ) {
 			trap_Cvar_VariableStringBuffer( "nextmap", s, sizeof( s ) );
@@ -1530,7 +1530,7 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		}
  	} else {
 		trap_SendServerCommand( ent - g_entities, "print \"Invalid vote string.\n\"" );
-		trap_SendServerCommand( ent - g_entities, "print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>\n\"" );
+		trap_SendServerCommand( ent - g_entities, "print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit\n\"" );
 		return;
 	}
 
