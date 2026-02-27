@@ -1596,6 +1596,18 @@ void RemoveHeadEntities(gentity_t* skip){
 	}
 }
 
+qboolean CheckAntilagConditions(gentity_t *ent){
+	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
+	{
+		if(g_lowPingAntilag.integer == 0 && ent->client->ps.ping <= (1000 / sv_fps.integer)){
+			return qfalse;
+		}else{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 /*
 ==============
 Bullet_Fire
@@ -1604,8 +1616,7 @@ Bullet_Fire
 void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 	vec3_t end;
 
-	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
-	{
+	if(CheckAntilagConditions(ent)){
 		G_DoTimeShiftFor(ent);
 	}
 	AddHeadEntities(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
@@ -1613,8 +1624,7 @@ void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 	Bullet_Endpos( ent, spread, &end );
 	Bullet_Fire_Extended( ent, ent, muzzleTrace, end, spread, damage );
 
-	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2)
-	{
+	if(CheckAntilagConditions(ent)){
 		G_UndoTimeShiftFor(ent);
 	}
 	RemoveHeadEntities(ent);
