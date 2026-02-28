@@ -1599,7 +1599,7 @@ void RemoveHeadEntities(gentity_t* skip){
 qboolean CheckAntilagConditions(gentity_t *ent){
 	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
 	{
-		if(g_lowPingAntilag.integer == 0 && ent->client->ps.ping <= (1000 / sv_fps.integer)){
+		if(g_lowPingAntilag.integer == 0 && ent->client->ps.ping <= g_lowPingAntilagThreshold.integer){
 			return qfalse;
 		}else{
 			return qtrue;

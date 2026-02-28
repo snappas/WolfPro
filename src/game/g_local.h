@@ -1604,6 +1604,7 @@ extern vmCvar_t g_headMaxZ;
 extern vmCvar_t g_gravityModifier;
 
 extern vmCvar_t g_lowPingAntilag;
+extern vmCvar_t g_lowPingAntilagThreshold;
 
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );

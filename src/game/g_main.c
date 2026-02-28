@@ -219,6 +219,7 @@ vmCvar_t g_headMaxZ;
 vmCvar_t g_gravityModifier;
 
 vmCvar_t g_lowPingAntilag;
+vmCvar_t g_lowPingAntilagThreshold;
 
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
@@ -407,6 +408,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },
 
 	{ &g_lowPingAntilag, "g_lowPingAntilag", "0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_lowPingAntilagThreshold, "g_lowPingAntilagThreshold", "25", CVAR_ARCHIVE, 0, qtrue },
 
 };
 
