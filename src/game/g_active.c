@@ -1132,8 +1132,12 @@ void ClientThink_real( gentity_t *ent ) {
 		ent->r.eventTime = level.time;
 	}
 
-
-	BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qtrue );
+	if(CheckAntilagConditions(ent)){
+		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qtrue );
+	}else{
+		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qtrue );
+	}
+	
 	
 
 	if ( !( ent->client->ps.eFlags & EF_FIRING ) ) {
@@ -1726,8 +1730,12 @@ void ClientEndFrame( gentity_t *ent ) {
 
 	// set the latest infor
 
-
-	BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, ( ( ent->r.svFlags & SVF_CASTAI ) == 0 ) );
+	if(CheckAntilagConditions(ent)){
+		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, ( ( ent->r.svFlags & SVF_CASTAI ) == 0 ) );
+	}else{
+		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, ( ( ent->r.svFlags & SVF_CASTAI ) == 0 ) );
+	}
+	
 
 
 	//SendPendingPredictableEvents( &ent->client->ps );

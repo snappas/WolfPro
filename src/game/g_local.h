@@ -1283,7 +1283,7 @@ void ClearMaxLivesGUID();
 //
 void G_BurnMeGood( gentity_t *self, gentity_t *body );
 void FireWeapon( gentity_t *ent );
-
+qboolean CheckAntilagConditions(gentity_t *ent);
 //
 // p_hud.c
 //
