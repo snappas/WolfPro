@@ -364,7 +364,7 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		if(self->client->ps.ammoclip[BG_FindClipForWeapon(self->s.weapon)]){
 			self->client->ps.ammoclip[BG_FindClipForWeapon(self->s.weapon)]--;
 			//if no more ammo remove the weapon
-			if (!self->client->ps.ammo[BG_FindClipForWeapon(self->s.weapon)])
+			if (!self->client->ps.ammoclip[BG_FindClipForWeapon(self->s.weapon)])
 			{
 				COM_BitClear(self->client->ps.weapons, self->client->ps.weapon);
 				G_AddEvent(self, EV_NOAMMO, 0);
