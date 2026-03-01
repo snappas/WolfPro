@@ -1237,7 +1237,7 @@ static void PM_CrashLand( void ) {
 	}
 
 	// start footstep cycle over
-	pm->ps->bobCycle = 0;
+	pm->ps->bobCycle = pm->pmext->bobCycle = 0;
 }
 
 
@@ -1539,7 +1539,7 @@ PM_Footsteps
 */
 static void PM_Footsteps( void ) {
 	float bobmove;
-	int old;
+	float old;
 	qboolean footstep;
 	qboolean iswalking;
 	int animResult = -1;
@@ -1600,7 +1600,7 @@ static void PM_Footsteps( void ) {
 	// if not trying to move
 	if ( !pm->cmd.forwardmove && !pm->cmd.rightmove ) {
 		if (  pm->xyspeed < 5 ) {
-			pm->ps->bobCycle = 0;   // start at beginning of cycle again
+			pm->ps->bobCycle = pm->pmext->bobCycle = 0;   // start at beginning of cycle again
 		}
 		if ( pm->xyspeed > 120 ) {
 			return; // continue what they were doing last frame, until we stop
@@ -1697,8 +1697,13 @@ static void PM_Footsteps( void ) {
 	}
 
 	// check for footstep / splash sounds
-	old = pm->ps->bobCycle;
-	pm->ps->bobCycle = (int)( old + bobmove * pml.msec ) & 255;
+	old = (float)pm->ps->bobCycle + fmodf(pm->pmext->bobCycle, 1);
+	pm->pmext->bobCycle = old + bobmove * pml.msec;
+	pm->ps->bobCycle = pm->pmext->bobCycle;
+
+	if (pm->ps->bobCycle > 255){
+		pm->ps->bobCycle = pm->pmext->bobCycle = pm->ps->bobCycle & 255;
+	}
 
 	// if we just crossed a cycle boundary, play an apropriate footstep event
 	if ( iswalking ) {
@@ -1720,7 +1725,7 @@ static void PM_Footsteps( void ) {
 			}
 
 		}
-	} else if ( ( ( old + 64 ) ^ ( pm->ps->bobCycle + 64 ) ) & 128 )   {
+	} else if ( ( ( (int)old + 64 ) ^ ( pm->ps->bobCycle + 64 ) ) & 128 )   {
 
 		if ( pm->ps->sprintExertTime && pm->waterlevel <= 2 ) {
 			PM_ExertSound();
@@ -2194,15 +2199,14 @@ void PM_CoolWeapons( void ) {
 	int wp;
 
 	for ( wp = 0; wp < WP_NUM_WEAPONS; wp++ ) {
-
-		// if you have the weapon
-		if ( COM_BitCheck( pm->ps->weapons, wp ) ) {
+		// if you have the weapon and it can heat
+		if ( ammoTable[wp].coolRate && COM_BitCheck( pm->ps->weapons, wp ) ) {
 			// and it's hot
-			if ( pm->ps->weapHeat[wp] ) {
-				pm->ps->weapHeat[wp] -= ( (float)ammoTable[wp].coolRate * pml.frametime );
+			if ( pm->pmext->weapHeat[wp] ) {
+				pm->pmext->weapHeat[wp] -= ( (float)ammoTable[wp].coolRate * pml.frametime );
 
-				if ( pm->ps->weapHeat[wp] < 0 ) {
-					pm->ps->weapHeat[wp] = 0;
+				if ( pm->pmext->weapHeat[wp] < 0 ) {
+					pm->pmext->weapHeat[wp] = 0;
 				}
 
 			}
@@ -2210,13 +2214,18 @@ void PM_CoolWeapons( void ) {
 	}
 
 	// a weapon is currently selected, convert current heat value to 0-255 range for client transmission
-	if ( pm->ps->weapon ) {
-		pm->ps->curWeapHeat = ( ( (float)pm->ps->weapHeat[pm->ps->weapon] / (float)ammoTable[pm->ps->weapon].maxHeat ) ) * 255.0f;
-
-//		if(pm->ps->weapHeat[pm->ps->weapon])
-//			Com_Printf("pm heat: %d, %d\n", pm->ps->weapHeat[pm->ps->weapon], pm->ps->curWeapHeat);
+	if ( ammoTable[pm->ps->weapon].maxHeat ) {
+		pm->ps->curWeapHeat = (int)floor((pm->pmext->weapHeat[pm->ps->weapon] / (double)ammoTable[pm->ps->weapon].maxHeat) * 255);
+	}else{
+		pm->ps->curWeapHeat = 0;
 	}
 
+	//sanity check weapon heat
+	if (pm->ps->curWeapHeat > 255){
+		pm->ps->curWeapHeat = 255;
+	}else if (pm->ps->curWeapHeat < 0){
+		pm->ps->curWeapHeat = 0;
+	}
 }
 
 /*
@@ -3127,10 +3136,12 @@ static void PM_Weapon( void ) {
 	// check for overheat
 
 	// the weapon can overheat, and it's hot
-	if ( ammoTable[pm->ps->weapon].maxHeat && pm->ps->weapHeat[pm->ps->weapon] ) {
+	if ( ammoTable[pm->ps->weapon].maxHeat ) {
+		pm->pmext->weapHeat[pm->ps->weapon] += ammoTable[pm->ps->weapon].nextShotTime;
+
 		// it is overheating
-		if ( pm->ps->weapHeat[pm->ps->weapon] >= ammoTable[pm->ps->weapon].maxHeat ) {
-			pm->ps->weapHeat[pm->ps->weapon] = ammoTable[pm->ps->weapon].maxHeat;   // cap heat to max
+		if ( pm->pmext->weapHeat[pm->ps->weapon] >= ammoTable[pm->ps->weapon].maxHeat ) {
+			pm->pmext->weapHeat[pm->ps->weapon] = ammoTable[pm->ps->weapon].maxHeat;   // cap heat to max
 			PM_AddEvent( EV_WEAP_OVERHEAT );
 //			PM_StartWeaponAnim(WEAP_IDLE1);	// removed.  client handles anim in overheat event
 			addTime = 2000;     // force "heat recovery minimum" to 2 sec right now

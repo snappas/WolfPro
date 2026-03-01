@@ -294,6 +294,9 @@ typedef struct {
 	vec3_t centerangles;
 	int jumpTime;
 
+	float bobCycle; //footstep time
+	float weapHeat[MAX_WEAPONS]; //sten/venom heat
+
 } pmoveExt_t;   // data used both in client and server - store it here
 // generally useful for data you want to manipulate in bg_* and cgame, or bg_* and game
 // instead of playerstate to prevent different engine versions of playerstate between XP and MP
