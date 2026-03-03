@@ -1283,7 +1283,7 @@ G_InitGame
 */
 void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	int i;
-	char cs[MAX_INFO_STRING];
+	char cs[MAX_STRING_CHARS];
 
 	G_Printf( "------- Game Initialization -------\n" );
 	G_Printf( "gamename: %s\n", GAMEVERSION );
