@@ -1043,6 +1043,9 @@ typedef struct {
 
 	qhandle_t alliesTorsoModel;
 	qhandle_t axisTorsoModel;
+
+	int winningTeam;
+	int defendingTeam;
 } level_locals_t;
 
 extern qboolean reloading;                  // loading up a savegame

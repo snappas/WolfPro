@@ -2233,18 +2233,9 @@ void LogExit( const char *string ) {
 
 	// NERVE - SMF
 	if ( g_gametype.integer == GT_WOLF_STOPWATCH ) {
-		char cs[MAX_STRING_CHARS];
-		int winner, defender;
-
-		trap_GetConfigstring( CS_MULTI_INFO, cs, sizeof( cs ) );
-		defender = atoi( Info_ValueForKey( cs, "defender" ) );
-
-		trap_GetConfigstring( CS_MULTI_MAPWINNER, cs, sizeof( cs ) );
-		winner = atoi( Info_ValueForKey( cs, "winner" ) );
-
 		// NERVE - SMF
 		if ( !g_currentRound.integer ) {
-			if ( winner == defender ) {
+			if ( level.winningTeam == level.defendingTeam ) {
 				// if the defenders won, use default timelimit
 				trap_Cvar_Set( "g_nextTimeLimit", va( "%f", g_timelimit.value ) );
 			} else {
