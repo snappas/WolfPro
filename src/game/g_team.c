@@ -1057,7 +1057,6 @@ gentity_t *SelectRandomTeamSpawnPoint( int teamstate, team_t team, int spawnObje
 	vec3_t farthest;      // JPW NERVE FIXME this is temp
 	char cs[MAX_STRING_CHARS];          // NERVE - SMF
 	char        *def;
-	int defendingTeam;
 	qboolean defender = qfalse;
 
 	if ( level.defendingTeam && team == TEAM_BLUE ) {         // allies
