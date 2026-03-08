@@ -114,6 +114,8 @@ typedef struct {
 	// -NERVE - SMF
 	mergedUserCmd_t mergedUserCmd[MAX_CLIENTS];
 	int mergeInterval;
+
+	byte baselineUsed[ MAX_GENTITIES ];
 } server_t;
 
 
@@ -201,6 +203,8 @@ typedef struct client_s {
 	netchan_buffer_t *netchan_start_queue;
 	netchan_buffer_t **netchan_end_queue;
 	char guid[GUID_LEN];
+	int pingSamples[PACKET_BACKUP];
+	int pingSampleIndex;
 } client_t;
 
 //=============================================================================

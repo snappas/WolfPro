@@ -68,6 +68,7 @@ If you have questions concerning this license or the applicable additional terms
 #pragma warning(disable : 4702) // unreachable code
 #pragma warning(disable : 4711) // selected for automatic inline expansion
 #pragma warning(disable : 4220) // varargs matches remaining parameters
+#pragma warning(disable : 4267) // size_t to int mismatch 
 #endif
 
 #if defined( ppc ) || defined( __ppc ) || defined( __ppc__ ) || defined( __POWERPC__ )
@@ -478,6 +479,8 @@ static inline int  FloatAsInt(float f) {
 
 #define ARRAY_LEN(x)		(sizeof(x) / sizeof(*(x)))
 
+#define PAD(base, alignment)	(((base)+(alignment)-1) & ~((alignment)-1))
+
 // angle indexes
 #define PITCH               0       // up / down
 #define YAW                 1       // left / right
@@ -492,7 +495,7 @@ static inline int  FloatAsInt(float f) {
 #define MAX_STRING_TOKENS   256     // max tokens resulting from Cmd_TokenizeString
 #define MAX_TOKEN_CHARS     1024    // max length of an individual token
 
-#define MAX_INFO_STRING     4096
+#define MAX_INFO_STRING     1024
 #define MAX_INFO_KEY        1024
 #define MAX_INFO_VALUE      1024
 
@@ -941,7 +944,7 @@ void Parse1DMatrix( char **buf_p, int x, float *m );
 void Parse2DMatrix( char **buf_p, int y, int x, float *m );
 void Parse3DMatrix( char **buf_p, int z, int y, int x, float *m );
 
-void QDECL Com_sprintf( char *dest, int size, const char *fmt, ... );
+int QDECL Com_sprintf( char *dest, int size, const char *fmt, ... );
 
 
 // mode parm for FS_FOpenFile
@@ -1035,12 +1038,14 @@ float   *tv( float x, float y, float z );
 //
 // key / value info strings
 //
-char *Info_ValueForKey( const char *s, const char *key );
-void Info_RemoveKey( char *s, const char *key );
+const char *Info_ValueForKey( const char *s, const char *key );
+int Info_RemoveKey( char *s, const char *key );
 void Info_RemoveKey_big( char *s, const char *key );
-void Info_SetValueForKey( char *s, const char *key, const char *value );
+#define Info_SetValueForKey( buf, key, value ) Info_SetValueForKey_s( (buf), MAX_INFO_STRING, (key), (value) )
+qboolean Info_SetValueForKey_s( char *s, int slen, const char *key, const char *value );
 void Info_SetValueForKey_Big( char *s, const char *key, const char *value );
 qboolean Info_Validate( const char *s );
+qboolean Info_ValidateKeyValue( const char *s );
 void Info_NextPair( const char **s, char *key, char *value );
 
 // this is only here so the functions in q_shared.c and bg_*.c can link

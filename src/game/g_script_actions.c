@@ -1350,6 +1350,7 @@ qboolean G_ScriptAction_SetWinner( gentity_t *ent, char *params ) {
 	// NERVE - SMF - compare before setting, so we don't spam the clients during map_restart
 	if ( Q_stricmp( Info_ValueForKey( cs, "winner" ), token ) ) {
 		Info_SetValueForKey( cs, "winner", token );
+		level.winningTeam = num;
 
 		trap_SetConfigstring( CS_MULTI_MAPWINNER, cs );
 	}
@@ -1446,6 +1447,7 @@ qboolean G_ScriptAction_SetDefendingTeam( gentity_t *ent, char *params ) {
 	trap_GetConfigstring( CS_MULTI_INFO, cs, sizeof( cs ) );
 
 	Info_SetValueForKey( cs, "defender", token );
+	level.defendingTeam = num;
 
 	trap_SetConfigstring( CS_MULTI_INFO, cs );
 

@@ -812,6 +812,12 @@ void SV_PacketEvent( netadr_t from, msg_t *msg ) {
 }
 
 
+static int cmp_int(const void *a, const void *b){
+    int x = *(const int*)a;
+    int y = *(const int*)b;
+    return (x > y) - (x < y);
+}
+
 /*
 ===================
 SV_CalcPings
@@ -849,7 +855,6 @@ void SV_CalcPings( void ) {
 			continue;
 		}
 
-		total = 0;
 		count = 0;
 		int max = 0;
 		for ( j = 0 ; j < PACKET_BACKUP ; j++ ) {
@@ -858,16 +863,30 @@ void SV_CalcPings( void ) {
 			}
 			delta = cl->frames[j].messageAcked - cl->frames[j].messageSent;
 			count++;
-			total += delta;
 			if(delta > max){
 				max = delta;
 			}
 		}
+		
+		cl->pingSamples[cl->pingSampleIndex] = max;
+
+		cl->pingSampleIndex = (cl->pingSampleIndex + 1) & (PACKET_MASK);
+
+		total = 0;
+		int sortedPings[PACKET_BACKUP];
+		for(int p = 0; p < PACKET_BACKUP; p++){
+			total += cl->pingSamples[p];
+			sortedPings[p] = cl->pingSamples[p];
+		}
+		int avg = total / PACKET_BACKUP;
+
+		qsort(sortedPings, PACKET_BACKUP, sizeof(int), cmp_int);
+
 
 		if ( !count ) {
 			cl->ping = 999;
 		} else {
-			cl->ping = max;
+			cl->ping = sortedPings[15];
 			cl->ping -= 1000/sv_fps->integer;
 			if ( cl->ping > 999 ) {
 				cl->ping = 999;
@@ -1052,7 +1071,7 @@ void SV_Frame( int msec ) {
 		cvar_modifiedFlags &= ~CVAR_SERVERINFO;
 	}
 	if ( cvar_modifiedFlags & CVAR_SYSTEMINFO ) {
-		SV_SetConfigstring( CS_SYSTEMINFO, Cvar_InfoString_Big( CVAR_SYSTEMINFO ) );
+		SV_SetConfigstring( CS_SYSTEMINFO, Cvar_InfoString_Big( CVAR_SYSTEMINFO, NULL ) );
 		cvar_modifiedFlags &= ~CVAR_SYSTEMINFO;
 	}
 	// NERVE - SMF

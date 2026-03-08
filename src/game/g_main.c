@@ -407,7 +407,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
 	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },
 
-	{ &g_lowPingAntilag, "g_lowPingAntilag", "0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_lowPingAntilag, "g_lowPingAntilag", "1", CVAR_ARCHIVE, 0, qtrue },
 	{ &g_lowPingAntilagThreshold, "g_lowPingAntilagThreshold", "25", CVAR_ARCHIVE, 0, qtrue },
 
 };
@@ -1283,7 +1283,7 @@ G_InitGame
 */
 void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	int i;
-	char cs[MAX_INFO_STRING];
+	char cs[MAX_STRING_CHARS];
 
 	G_Printf( "------- Game Initialization -------\n" );
 	G_Printf( "gamename: %s\n", GAMEVERSION );
@@ -2233,18 +2233,9 @@ void LogExit( const char *string ) {
 
 	// NERVE - SMF
 	if ( g_gametype.integer == GT_WOLF_STOPWATCH ) {
-		char cs[MAX_STRING_CHARS];
-		int winner, defender;
-
-		trap_GetConfigstring( CS_MULTI_INFO, cs, sizeof( cs ) );
-		defender = atoi( Info_ValueForKey( cs, "defender" ) );
-
-		trap_GetConfigstring( CS_MULTI_MAPWINNER, cs, sizeof( cs ) );
-		winner = atoi( Info_ValueForKey( cs, "winner" ) );
-
 		// NERVE - SMF
 		if ( !g_currentRound.integer ) {
-			if ( winner == defender ) {
+			if ( level.winningTeam == level.defendingTeam ) {
 				// if the defenders won, use default timelimit
 				trap_Cvar_Set( "g_nextTimeLimit", va( "%f", g_timelimit.value ) );
 			} else {

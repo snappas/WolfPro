@@ -1057,22 +1057,11 @@ gentity_t *SelectRandomTeamSpawnPoint( int teamstate, team_t team, int spawnObje
 	vec3_t farthest;      // JPW NERVE FIXME this is temp
 	char cs[MAX_STRING_CHARS];          // NERVE - SMF
 	char        *def;
-	int defendingTeam;
 	qboolean defender = qfalse;
 
-	// NERVE - SMF - get defender
-	trap_GetConfigstring( CS_MULTI_INFO, cs, sizeof( cs ) );
-	def = Info_ValueForKey( cs, "defender" );
-
-	if ( strlen( def ) > 0 ) {
-		defendingTeam = atoi( def );
-	} else {
-		defendingTeam = -1;
-	}
-
-	if ( defendingTeam && team == TEAM_BLUE ) {         // allies
+	if ( level.defendingTeam && team == TEAM_BLUE ) {         // allies
 		defender = qtrue;
-	} else if ( !defendingTeam && team == TEAM_RED )   {  // axis
+	} else if ( !level.defendingTeam && team == TEAM_RED )   {  // axis
 		defender = qtrue;
 	}
 
@@ -1177,7 +1166,7 @@ gentity_t *SelectRandomTeamSpawnPoint( int teamstate, team_t team, int spawnObje
 		int useCluster = 0;
 		switch(manualSpawn){
 		case 0:
-			if (defendingTeam < 0) {
+			if (level.defendingTeam < 0) {
 				if (team == TEAM_RED) {
 					useCluster = clusterMgr.furthestClusterFromAllies;
 				} else {

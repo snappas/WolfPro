@@ -202,6 +202,7 @@ void SV_CreateBaseline( void ) {
 		// take current state as baseline
 		//
 		sv.svEntities[entnum].baseline = svent->s;
+		sv.baselineUsed[ entnum ] = 1;
 	}
 }
 
@@ -437,6 +438,89 @@ void SV_TouchCGameDLL( void ) {
 
 /*
 ================
+SV_RemainingGameState
+
+estimates free space available for additional systeminfo keys
+================
+*/
+int SV_RemainingGameState( void )
+{
+	int			len;
+	int			start, i;
+	entityState_t nullstate;
+	const svEntity_t *svEnt;
+	msg_t		msg;
+	byte		msgBuffer[ MAX_MSGLEN_BUF ];
+
+	MSG_Init( &msg, msgBuffer, MAX_MSGLEN );
+
+	MSG_WriteLong( &msg, 7 ); // last client command
+
+	for ( i = 0; i < 256; i++ ) // simulate dummy client commands
+		MSG_WriteByte( &msg, i & 127 );
+
+	// send the gamestate
+	MSG_WriteByte( &msg, svc_gamestate );
+	MSG_WriteLong( &msg, 7 ); // client->reliableSequence
+
+	// write the configstrings
+	for ( start = 0 ; start < MAX_CONFIGSTRINGS ; start++ ) {
+		if ( start == CS_SERVERINFO ) {
+			MSG_WriteByte( &msg, svc_configstring );
+			MSG_WriteShort( &msg, start );
+			MSG_WriteBigString( &msg, Cvar_InfoString( CVAR_SERVERINFO) );
+			continue;
+		}
+		if ( start == CS_SYSTEMINFO ) {
+			MSG_WriteByte( &msg, svc_configstring );
+			MSG_WriteShort( &msg, start );
+			MSG_WriteBigString( &msg, Cvar_InfoString_Big( CVAR_SYSTEMINFO, NULL) );
+			continue;
+		}
+		if ( start == CS_WOLFINFO ) {
+			MSG_WriteByte( &msg, svc_configstring );
+			MSG_WriteShort( &msg, start );
+			MSG_WriteBigString( &msg, Cvar_InfoString( CS_WOLFINFO) );
+			continue;
+		}
+		if ( sv.configstrings[start][0] ) {
+			MSG_WriteByte( &msg, svc_configstring );
+			MSG_WriteShort( &msg, start );
+			MSG_WriteBigString( &msg, sv.configstrings[start] );
+		}
+	}
+
+	// write the baselines
+	Com_Memset( &nullstate, 0, sizeof( nullstate ) );
+	for ( start = 0 ; start < MAX_GENTITIES; start++ ) {
+		if ( !sv.baselineUsed[ start ] ) {
+			continue;
+		}
+		svEnt = &sv.svEntities[ start ];
+		MSG_WriteByte( &msg, svc_baseline );
+		MSG_WriteDeltaEntity( &msg, &nullstate, &svEnt->baseline, qtrue );
+	}
+
+	MSG_WriteByte( &msg, svc_EOF );
+
+	MSG_WriteLong( &msg, 7 ); // client num
+
+	// write the checksum feed
+	MSG_WriteLong( &msg, sv.checksumFeed );
+
+	// finalize packet
+	MSG_WriteByte( &msg, svc_EOF );
+
+	len = PAD( msg.bit, 8 ) / 8;
+
+	// reserve some space for potential userinfo expansion
+	len += 512;
+
+	return MAX_MSGLEN - len;
+}
+
+/*
+================
 SV_SpawnServer
 
 Change the server to a new map, taking all connected
@@ -624,19 +708,37 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	SV_BotFrame( svs.time );
 	svs.time += 100;
 
+	Cvar_Set( "sv_paks", "" );
+	Cvar_Set( "sv_pakNames", "" ); // not used on client-side
+
 	if ( sv_pure->integer ) {
-		// the server sends these to the clients so they will only
-		// load pk3s also loaded at the server
-		p = FS_LoadedPakChecksums();
-		Cvar_Set( "sv_paks", p );
-		if ( strlen( p ) == 0 ) {
-			Com_Printf( "WARNING: sv_pure set but no PK3 files loaded\n" );
+		int freespace, pakslen, infolen;
+		qboolean overflowed = qfalse;
+		qboolean infoTruncated = qfalse;
+
+		p = FS_LoadedPakChecksums( &overflowed );
+
+		pakslen = strlen( p ) + 9; // + strlen( "\\sv_paks\\" )
+		freespace = SV_RemainingGameState();
+		infolen = strlen( Cvar_InfoString_Big( CVAR_SYSTEMINFO, &infoTruncated ) );
+
+		if ( infoTruncated ) {
+			Com_Printf( S_COLOR_YELLOW "WARNING: truncated systeminfo!\n" );
 		}
-		p = FS_LoadedPakNames();
-		Cvar_Set( "sv_pakNames", p );
-	} else {
-		Cvar_Set( "sv_paks", "" );
-		Cvar_Set( "sv_pakNames", "" );
+
+		if ( pakslen > freespace || infolen + pakslen >= BIG_INFO_STRING || overflowed ) {
+			// switch to degraded pure mode
+			// this could *potentially* lead to a false "unpure client" detection
+			// which is better than guaranteed drop
+			Com_DPrintf( S_COLOR_YELLOW "WARNING: skipping sv_paks setup to avoid gamestate overflow\n" );
+		} else {
+			// the server sends these to the clients so they will only
+			// load pk3s also loaded at the server
+			Cvar_Set( "sv_paks", p );
+			if ( *p == '\0' ) {
+				Com_Printf( S_COLOR_YELLOW "WARNING: sv_pure set but no PK3 files loaded\n" );
+			}
+		}
 	}
 	// the server sends these to the clients so they can figure
 	// out which pk3s should be auto-downloaded
@@ -653,9 +755,8 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	FS_ServerReferencedPureChecksums();
 
 	// save systeminfo and serverinfo strings
-	Q_strncpyz( systemInfo, Cvar_InfoString_Big( CVAR_SYSTEMINFO ), sizeof( systemInfo ) );
+	SV_SetConfigstring( CS_SYSTEMINFO, Cvar_InfoString_Big( CVAR_SYSTEMINFO, NULL ) );
 	cvar_modifiedFlags &= ~CVAR_SYSTEMINFO;
-	SV_SetConfigstring( CS_SYSTEMINFO, systemInfo );
 
 	SV_SetConfigstring( CS_SERVERINFO, Cvar_InfoString( CVAR_SERVERINFO ) );
 	cvar_modifiedFlags &= ~CVAR_SERVERINFO;
@@ -841,12 +942,12 @@ void SV_Init( void ) {
 	sv_maxclients = Cvar_Get( "sv_maxclients", "20", CVAR_SERVERINFO | CVAR_LATCH );               // NERVE - SMF - changed to 20 from 8
 #endif
 
-	sv_maxRate = Cvar_Get( "sv_maxRate", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
-	sv_minPing = Cvar_Get( "sv_minPing", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
-	sv_maxPing = Cvar_Get( "sv_maxPing", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
+	sv_maxRate = Cvar_Get( "sv_maxRate", "0", CVAR_ARCHIVE);
+	sv_minPing = Cvar_Get( "sv_minPing", "0", CVAR_ARCHIVE);
+	sv_maxPing = Cvar_Get( "sv_maxPing", "0", CVAR_ARCHIVE);
 	sv_floodProtect = Cvar_Get( "sv_floodProtect", "1", CVAR_ARCHIVE | CVAR_SERVERINFO );
-	sv_allowAnonymous = Cvar_Get( "sv_allowAnonymous", "0", CVAR_SERVERINFO );
-	sv_friendlyFire = Cvar_Get( "g_friendlyFire", "1", CVAR_SERVERINFO | CVAR_ARCHIVE );           // NERVE - SMF
+	sv_allowAnonymous = Cvar_Get( "sv_allowAnonymous", "0", CVAR_ROM );
+	sv_friendlyFire = Cvar_Get( "g_friendlyFire", "1", CVAR_ARCHIVE );           // NERVE - SMF
 	sv_maxlives = Cvar_Get( "g_maxlives", "0", CVAR_ARCHIVE | CVAR_LATCH | CVAR_SERVERINFO );      // NERVE - SMF
 	sv_tourney = Cvar_Get( "g_noTeamSwitching", "0", CVAR_ARCHIVE );                               // NERVE - SMF
 
@@ -931,11 +1032,11 @@ void SV_Init( void ) {
 	SV_GetIP();
 	sv_serverIP = Cvar_Get("sv_serverIP", "", CVAR_LATCH);
 	SV_GetCountry(sv_serverIP->string);
-	sv_serverCountry = Cvar_Get("sv_serverCountry", "", CVAR_SERVERINFO | CVAR_ROM);
+	sv_serverCountry = Cvar_Get("sv_serverCountry", "", CVAR_ROM);
     // end sIP/Country
 #else
 	sv_serverIP = Cvar_Get("sv_serverIP", "", CVAR_LATCH);
-	sv_serverCountry = Cvar_Get("sv_serverCountry", "", CVAR_SERVERINFO | CVAR_ROM);
+	sv_serverCountry = Cvar_Get("sv_serverCountry", "", CVAR_ROM);
 #endif
 
 	sv_GameConfig = Cvar_Get("sv_GameConfig", "", CVAR_SERVERINFO | CVAR_ARCHIVE | CVAR_ROM); // | CVAR_LATCH );

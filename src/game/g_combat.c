@@ -1450,6 +1450,15 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 		origin[2] += 16.0f; //move the explosion up a little bit to get out of the solid geometry
 		if ( CanDamage( ent, origin ) ) {
 			origin[2] -= 16.0f;
+			if(mod == MOD_AIRSTRIKE || mod == MOD_ARTILLERY){
+				vec3_t straightUp;
+				VectorCopy(ent->r.currentOrigin, straightUp);
+				straightUp[2] += 8196;
+				trap_Trace(&tr, ent->s.pos.trBase, NULL, NULL, straightUp, ent->s.number, MASK_SHOT);
+				if ( ( tr.fraction < 1.0 ) && ( !( tr.surfaceFlags & SURF_NOIMPACT ) ) ) {
+					return qfalse;
+				}
+			}
 			if ( LogAccuracyHit( ent, attacker ) ) {
 				hitClient = qtrue;
 			}
