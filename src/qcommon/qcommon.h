@@ -249,6 +249,8 @@ void        NET_Sleep( int msec );
 
 //----(SA)	increased for larger submodel entity counts
 #define MAX_MSGLEN              32768       // max length of a message, which may
+#define	MAX_MSGLEN_BUF	(MAX_MSGLEN+8)	// real buffer size that we need to allocate
+										// to safely handle overflows
 //#define	MAX_MSGLEN				16384		// max length of a message, which may
 // be fragmented into multiple packets
 #define MAX_DOWNLOAD_WINDOW         8       // max of eight download frames
@@ -609,7 +611,7 @@ void    Cvar_WriteVariables( fileHandle_t f );
 void    Cvar_Init( void );
 
 char    *Cvar_InfoString( int bit );
-char    *Cvar_InfoString_Big( int bit );
+char    *Cvar_InfoString_Big( int bit, qboolean *truncated );
 // returns an info string containing all the cvars that have the given bit set
 // in their flags ( CVAR_USERINFO, CVAR_SERVERINFO, CVAR_SYSTEMINFO, etc )
 void    Cvar_InfoStringBuffer( int bit, char *buff, int buffsize );
@@ -752,7 +754,7 @@ const char *FS_GamePureChecksum( void );
 // Returns the checksum of the pk3 from which the server loaded the qagame.qvm
 
 const char *FS_LoadedPakNames( void );
-const char *FS_LoadedPakChecksums( void );
+const char *FS_LoadedPakChecksums( qboolean *overflowed );
 // Returns a space separated string containing the checksums of all loaded pk3 files.
 // Servers with sv_pure set will get this string and pass it to clients.
 

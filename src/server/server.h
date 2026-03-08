@@ -114,6 +114,8 @@ typedef struct {
 	// -NERVE - SMF
 	mergedUserCmd_t mergedUserCmd[MAX_CLIENTS];
 	int mergeInterval;
+
+	byte baselineUsed[ MAX_GENTITIES ];
 } server_t;
 
 

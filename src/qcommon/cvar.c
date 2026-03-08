@@ -841,17 +841,25 @@ Cvar_InfoString_Big
   handles large info strings ( CS_SYSTEMINFO )
 =====================
 */
-char    *Cvar_InfoString_Big( int bit ) {
+char *Cvar_InfoString_Big( int bit, qboolean *truncated ) {
 	static char info[BIG_INFO_STRING];
 	cvar_t  *var;
+	qboolean allSet;
 
-	info[0] = 0;
+	info[0] = '\0';
+	allSet = qtrue;
 
 	for ( var = cvar_vars ; var ; var = var->next ) {
 		if ( var->flags & bit ) {
 			Info_SetValueForKey_Big( info, var->name, var->string );
 		}
 	}
+
+	if ( truncated )
+	{
+		*truncated = !allSet;
+	}
+
 	return info;
 }
 

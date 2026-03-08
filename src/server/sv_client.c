@@ -535,6 +535,7 @@ void SV_SendClientGameState( client_t *client ) {
 	entityState_t   *base, nullstate;
 	msg_t msg;
 	byte msgBuffer[MAX_MSGLEN];
+	const svEntity_t *svEnt;
 
 	Com_DPrintf( "SV_SendClientGameState() for %s\n", client->name );
 	Com_DPrintf( "Going from CS_CONNECTED to CS_PRIMED for %s\n", client->name );
@@ -575,12 +576,12 @@ void SV_SendClientGameState( client_t *client ) {
 	// write the baselines
 	memset( &nullstate, 0, sizeof( nullstate ) );
 	for ( start = 0 ; start < MAX_GENTITIES; start++ ) {
-		base = &sv.svEntities[start].baseline;
-		if ( !base->number ) {
+		if ( !sv.baselineUsed[ start ] ) {
 			continue;
 		}
+		svEnt = &sv.svEntities[ start ];
 		MSG_WriteByte( &msg, svc_baseline );
-		MSG_WriteDeltaEntity( &msg, &nullstate, base, qtrue );
+		MSG_WriteDeltaEntity( &msg, &nullstate, &svEnt->baseline, qtrue );
 	}
 
 	MSG_WriteByte( &msg, svc_EOF );
