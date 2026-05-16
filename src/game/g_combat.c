@@ -1113,7 +1113,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		if(((targ->health - ((float)take / 2.9f)) <= 0) || (mod == MOD_ROCKET && g_rocketMidairInstagib.integer == 1 && targ->s.groundEntityNum == 1023) ){
 			take = (-1 * GIB_HEALTH) + targ->health + 1; //mid-air causes instagib 
 		}else{
-			(float)take *= g_rocketDamageMultiplier.value; //3 direct rockets to kill? 
+			take = (float)take * g_rocketDamageMultiplier.value; //3 direct rockets to kill? 
 		}
 	}
 
