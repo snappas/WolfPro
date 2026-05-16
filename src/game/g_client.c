@@ -1124,6 +1124,12 @@ void SetWolfSpawnWeapons( gclient_t *client ) {
 		}
 	} // End Knifeonly stuff -- Ensure that medics get their basic stuff
 
+	if(g_rocketMode.integer){
+		COM_BitSet( client->ps.weapons, WP_ROCKET_LAUNCHER );
+		client->ps.ammoclip[BG_FindClipForWeapon( WP_ROCKET_LAUNCHER )] += 500;
+		client->ps.weapon = WP_ROCKET_LAUNCHER;
+	}
+
 
 	// JPW NERVE -- medics on each team make cumulative health bonus -- this gets overridden for "revived" players
 	// count up # of medics on team
@@ -2125,7 +2131,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 		// TTimo keep it isolated from spectator to be safe still
 		if ( client->sess.sessionTeam != TEAM_SPECTATOR ) {
 			// Xian - Moved the invul. stuff out of SetWolfSpawnWeapons and put it here for clarity
-			if ( g_fastres.integer == 1 && revived ) {
+			if ( g_fastres.integer == 1 ) {
 				client->ps.powerups[PW_INVULNERABLE] = level.time + g_fastResMsec.integer;
 			} else {
 				client->ps.powerups[PW_INVULNERABLE] = level.time + 3000;

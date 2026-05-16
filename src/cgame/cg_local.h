@@ -1310,6 +1310,7 @@ typedef struct {
 	sfxHandle_t sfx_ric3;
 	sfxHandle_t sfx_railg;
 	sfxHandle_t sfx_rockexp;
+	sfxHandle_t sfx_q3_rockexp;
 	sfxHandle_t sfx_rockexpDist; // JPW NERVE
 	sfxHandle_t sfx_dynamiteexp;
 	sfxHandle_t sfx_dynamiteexpDist;    //----(SA)	added
@@ -1908,6 +1909,8 @@ extern vmCvar_t cg_statsX;
 extern vmCvar_t cg_statsY;
 extern vmCvar_t cg_topshotsX;
 extern vmCvar_t cg_topshotsY;
+
+extern vmCvar_t g_rocketMode;
 
 //
 // cg_main.c

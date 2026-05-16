@@ -391,6 +391,9 @@ static void CG_Obituary( entityState_t *ent ) {
 			break;
 // jpw
 		case MOD_ROCKET_LAUNCHER:
+			message = "was blasted by";
+			message2 = "'s Rocket Launcher";
+			break;
 		case MOD_ROCKET_SPLASH:
 			//message = "was vaporized by";
 			//message2 = "'s Panzerfaust";

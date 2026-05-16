@@ -2206,7 +2206,7 @@ void RE_LoadWorldMap( const char *name ) {
 	fileBase = (byte *)header;
 
 	i = LittleLong( header->version );
-	if ( i != BSP_VERSION ) {
+	if ( i != BSP_VERSION  && i != BSP_VERSION - 1) {
 		ri.Error( ERR_DROP, "RE_LoadWorldMap: %s has wrong version number (%i should be %i)",
 				  name, i, BSP_VERSION );
 	}

@@ -1528,9 +1528,13 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		if(!G_Config_v(ent)){
 			return;
 		}
+	} else if ( !Q_stricmp( arg1, "g_rocketmode" ) ) {
+		i = atoi( arg2 );
+		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %d", arg1, i );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %d", arg1, i );
  	} else {
 		trap_SendServerCommand( ent - g_entities, "print \"Invalid vote string.\n\"" );
-		trap_SendServerCommand( ent - g_entities, "print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit\n\"" );
+		trap_SendServerCommand( ent - g_entities, "print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit, g_rocketmode [1|0]\n\"" );
 		return;
 	}
 

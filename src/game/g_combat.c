@@ -998,7 +998,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		VectorScale( dir, g_knockback.value * (float)knockback / mass, kvel );
 		VectorAdd( targ->client->ps.velocity, kvel, targ->client->ps.velocity );
 
-		if ( targ == attacker && !(  mod != MOD_ROCKET &&
+		if ( targ == attacker && attacker->s.weapon != WP_ROCKET_LAUNCHER && !(  mod != MOD_ROCKET &&
 									 mod != MOD_ROCKET_SPLASH &&
 									 mod != MOD_GRENADE &&
 									 mod != MOD_GRENADE_SPLASH &&
@@ -1103,6 +1103,22 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	if ( g_debugDamage.integer ) {
 		G_Printf( "client:%i health:%i damage:%i armor:%i\n", targ->s.number,
 				  targ->health, take, asave );
+	}
+
+	if(targ == attacker && g_noSelfDamage.integer && targ->s.weapon == WP_ROCKET_LAUNCHER ){
+		take = 0;
+	}else if(targ == attacker && targ->s.weapon == WP_ROCKET_LAUNCHER){ 
+		take /= 2; //self damage with rocket launcher is half dmg
+	}else if(attacker->s.weapon == WP_ROCKET_LAUNCHER){
+		if(((targ->health - ((float)take / 2.9f)) <= 0) || (mod == MOD_ROCKET && g_rocketMidairInstagib.integer == 1 && targ->s.groundEntityNum == 1023) ){
+			take = (-1 * GIB_HEALTH) + targ->health + 1; //mid-air causes instagib 
+		}else{
+			(float)take *= g_rocketDamageMultiplier.value; //3 direct rockets to kill? 
+		}
+	}
+
+	if(targ->s.weapon == WP_ROCKET_LAUNCHER &&  mod == MOD_FALLING && g_noSelfDamage.integer){
+		return;
 	}
 
 	// add to the damage inflicted on a player this frame
@@ -1425,9 +1441,9 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 		}
 */
 // JPW NERVE
-		if ( !ent->r.bmodel ) {
-			VectorSubtract( ent->r.currentOrigin,origin,v ); // JPW NERVE simpler centroid check that doesn't have box alignment weirdness
-		} else {
+		// if ( !ent->r.bmodel ) {
+		// 	VectorSubtract( ent->r.currentOrigin,origin,v ); // JPW NERVE simpler centroid check that doesn't have box alignment weirdness
+		// } else {
 			for ( i = 0 ; i < 3 ; i++ ) {
 				if ( origin[i] < ent->r.absmin[i] ) {
 					v[i] = ent->r.absmin[i] - origin[i];
@@ -1437,7 +1453,7 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 					v[i] = 0;
 				}
 			}
-		}
+		//}
 // jpw
 		dist = VectorLength( v );
 		if ( dist >= radius ) {
@@ -1447,9 +1463,9 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 		points = damage * ( 1.0 - dist / radius );
 
 // JPW NERVE -- different radiusdmg behavior for MP -- big explosions should do less damage (over less distance) through failed traces
-		origin[2] += 16.0f; //move the explosion up a little bit to get out of the solid geometry
+		origin[2] += 8.0f; //move the explosion up a little bit to get out of the solid geometry
 		if ( CanDamage( ent, origin ) ) {
-			origin[2] -= 16.0f;
+			origin[2] -= 8.0f;
 			if(mod == MOD_AIRSTRIKE || mod == MOD_ARTILLERY){
 				vec3_t straightUp;
 				VectorCopy(ent->r.currentOrigin, straightUp);
@@ -1470,7 +1486,7 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 		}
 // JPW NERVE --  MP weapons should do 1/8 damage through walls over 1/8th distance
 		else {
-			origin[2] -= 16.0f;
+			origin[2] -= 8.0f;
 			VectorAdd( ent->r.absmin, ent->r.absmax, midpoint );
 			VectorScale( midpoint, 0.5, midpoint );
 			VectorCopy( midpoint, dest );

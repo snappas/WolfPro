@@ -589,6 +589,12 @@ void CG_PredictPlayerState( void ) {
 		cg.pmext.centerangles[ROLL] = AngleNormalize180( cg.pmext.centerangles[ROLL] );
 	}
 
+	if(g_rocketMode.integer && cg_pmove.ps->weapon == WP_ROCKET_LAUNCHER){
+		cg.pmext.rocketMode = qtrue;
+	}else{
+		cg.pmext.rocketMode = qfalse;
+	}
+
 	//DHM - Nerve :: We've gone back to using normal bbox traces
 	//cg_pmove.trace = CG_TraceCapsule;
 	cg_pmove.trace = CG_Trace;

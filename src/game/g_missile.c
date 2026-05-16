@@ -548,7 +548,7 @@ void G_ExplodeMissile( gentity_t *ent ) {
 		}
 		// give big weapons the shakey shakey
 		if ( ent->s.weapon == WP_DYNAMITE || ent->s.weapon == WP_PANZERFAUST || ent->s.weapon == WP_GRENADE_LAUNCHER ||
-				ent->s.weapon == WP_GRENADE_PINEAPPLE || ent->s.weapon == WP_ROCKET_LAUNCHER || ent->s.weapon == WP_MORTAR ||
+				ent->s.weapon == WP_GRENADE_PINEAPPLE || ent->s.weapon == WP_MORTAR ||
 				ent->s.weapon == WP_ARTY ) {
 			Ground_Shaker( ent->r.currentOrigin, ent->splashDamage * 4 );
 		}
@@ -1294,6 +1294,8 @@ fire_rocket
 gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 	gentity_t   *bolt;
 
+	weapon_t currentWeapon = self->client->ps.weapon;
+
 	VectorNormalize( dir );
 
 	bolt = G_Spawn();
@@ -1309,10 +1311,16 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 
 	bolt->r.ownerNum = self->s.number;
 	bolt->parent = self;
-	bolt->damage = G_GetWeaponDamage( WP_ROCKET_LAUNCHER ); // JPW NERVE
-	bolt->splashDamage = G_GetWeaponDamage( WP_ROCKET_LAUNCHER ); // JPW NERVE
-// JPW NERVE
-	bolt->splashRadius = G_GetWeaponDamage( WP_ROCKET_LAUNCHER );
+	if(currentWeapon = WP_ROCKET_LAUNCHER){
+		bolt->damage = 100;
+		bolt->splashDamage = 100; 
+		bolt->splashRadius = 120;
+	}else{
+		bolt->damage = G_GetWeaponDamage( WP_ROCKET_LAUNCHER ); // JPW NERVE
+		bolt->splashDamage = G_GetWeaponDamage( WP_ROCKET_LAUNCHER ); // JPW NERVE
+		bolt->splashRadius = G_GetWeaponDamage( WP_ROCKET_LAUNCHER );
+	}
+	
 	
 // jpw
 	bolt->methodOfDeath = MOD_ROCKET;
@@ -1323,8 +1331,12 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 	bolt->s.pos.trType = TR_LINEAR;
 	bolt->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;     // move a bit on the very first frame
 	VectorCopy( start, bolt->s.pos.trBase );
-// JPW NERVE
-	VectorScale( dir,2500,bolt->s.pos.trDelta );
+	if(currentWeapon = WP_ROCKET_LAUNCHER){
+		VectorScale( dir,900,bolt->s.pos.trDelta );
+	}else{
+		VectorScale( dir,2500,bolt->s.pos.trDelta );
+	}
+	
 	
 // jpw
 	SnapVector( bolt->s.pos.trDelta );          // save net bandwidth

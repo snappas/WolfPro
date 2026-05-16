@@ -296,6 +296,7 @@ typedef struct {
 
 	float bobCycle; //footstep time
 	float weapHeat[MAX_WEAPONS]; //sten/venom heat
+	qboolean rocketMode;
 
 } pmoveExt_t;   // data used both in client and server - store it here
 // generally useful for data you want to manipulate in bg_* and cgame, or bg_* and game

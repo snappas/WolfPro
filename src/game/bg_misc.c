@@ -76,12 +76,14 @@ int weapBanksMultiPlayer[MAX_WEAP_BANKS_MP][MAX_WEAPS_IN_BANK_MP] = {
 	{WP_MP40,               WP_THOMPSON,            WP_STEN,    WP_MAUSER,  WP_GARAND,  WP_PANZERFAUST, WP_VENOM,   WP_FLAMETHROWER     },
 	{WP_GRENADE_LAUNCHER,   WP_GRENADE_PINEAPPLE,   0,          0,          0,          0,              0,          0,          },
 	{WP_MEDIC_SYRINGE,      WP_PLIERS,              WP_SMOKE_GRENADE,       0,          0,              0,          0,          0,      },
-	{WP_DYNAMITE,           WP_MEDKIT,              WP_AMMO,    0,          0,          0,              0,          0           }
+	{WP_DYNAMITE,           WP_MEDKIT,              WP_AMMO,    0,          0,          0,              0,          0           },
+	{WP_ROCKET_LAUNCHER,    0,                      0,          0,          0,          0,              0,          0           }
+	
 };
 // jpw
 
 int reloadableWeapons[] = {
-	WP_MP40, WP_THOMPSON, WP_STEN, WP_MAUSER, WP_GARAND, WP_PANZERFAUST, WP_FLAMETHROWER, WP_COLT, WP_LUGER // BG_AddMagicAmmo
+	WP_MP40, WP_THOMPSON, WP_STEN, WP_MAUSER, WP_GARAND, WP_PANZERFAUST, WP_FLAMETHROWER, WP_COLT, WP_LUGER, WP_ROCKET_LAUNCHER // BG_AddMagicAmmo
 };
 
 // [0] = maxammo		-	max player ammo carrying capacity.
@@ -130,7 +132,7 @@ ammotable_t ammoTable[] = {
 	{   MAX_AMMO_GARAND,1,      5,      2500,   DELAY_HIGH,     1200,   0,      0,      MOD_GARAND              },  //	WP_GARAND				// 15	// NOTE: always 5 round clips
 	{   MAX_AMMO_BAR,   1,      20,     2000,   DELAY_LOW,      200,    0,      0,      MOD_BAR                 },  //	WP_BAR					// 16
 	{   15,             1,      15,     1000,   DELAY_THROW,    1600,   0,      0,      MOD_GRENADE_PINEAPPLE   },  //	WP_GRENADE_PINEAPPLE	// 17
-	{   5,              1,      5,      1000,   DELAY_SHOULDER, 1200,   0,      0,      MOD_ROCKET_LAUNCHER     },  //	WP_ROCKET_LAUNCHER		// 18
+	{   20,              1,     20,      800,   DELAY_SHOULDER, 800,   0,      0,       MOD_ROCKET_LAUNCHER     },  //	WP_ROCKET_LAUNCHER		// 18
 
 	{   MAX_AMMO_MAUSER,1,      10,     3000,   0,              1700,   0,      0,      MOD_SNIPERRIFLE         },  //	WP_SNIPER_GER			// 19
 	{   MAX_AMMO_GARAND,1,      5,      3000,   0,              1200,   0,      0,      MOD_SNOOPERSCOPE        },  //	WP_SNIPER_AM			// 20
@@ -1065,6 +1067,33 @@ model="models\weapons2\mp40\mp40.md3"
 		WP_MP40,
 		"",                  // precache
 		"",                  // sounds
+		{0,0,0,0,0}
+	},
+
+	{
+		"weapon_rocketlauncher",
+		"sound/misc/w_pkup.wav",
+		{   "models/weapons2/panzerfaust/pf.md3",
+			"models/weapons2/panzerfaust/v_pf.md3",
+			0, 0,
+			"models/weapons2/panzerfaust/ss_pf.md3"},
+        // {
+		// "models/weapons2/rocketl/rocketl.md3", 
+		// "models/weapons2/rocketl/rocketl.md3",
+		//  0,
+		//  0,
+		//  "models/weapons2/rocketl/rocketl.md3"
+		// },
+		"icons/iconw_rocket",	//icon
+		"icons/ammo2",       // ammo icon
+		"Rocket Launcher", 	//pickup
+		10,
+		IT_WEAPON,
+		WP_ROCKET_LAUNCHER,
+		WP_PANZERFAUST,
+		WP_PANZERFAUST,
+/* precache */ "",
+/* sounds */ "",
 		{0,0,0,0,0}
 	},
 
@@ -3310,6 +3339,7 @@ qboolean BG_WeaponInWolfMP( int weapon ) {
 	case WP_GRENADE_LAUNCHER:
 	case WP_GRENADE_PINEAPPLE:
 	case WP_PANZERFAUST:
+	case WP_ROCKET_LAUNCHER:
 	case WP_VENOM:
 	case WP_FLAMETHROWER:
 	case WP_AMMO:
