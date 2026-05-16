@@ -686,7 +686,10 @@ void G_RunMissile( gentity_t *ent ) {
 
 		if ( ent->s.eType != ET_MISSILE ) {
 // JPW NERVE
-			Ground_Shaker( ent->r.currentOrigin, ent->splashDamage * 4 );
+			if(ent->s.weapon != WP_ROCKET_LAUNCHER){
+				Ground_Shaker( ent->r.currentOrigin, ent->splashDamage * 4 );
+			}
+			
 // jpw
 			return;     // exploded
 		}

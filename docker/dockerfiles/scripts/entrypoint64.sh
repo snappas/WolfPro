@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set config defaults
-CONF_REDIR=${REDIRECTURL:-"http://rtcw.life/files/mapdb"}
+CONF_REDIR=${REDIRECTURL:-"http://dl.rtcw.eu/maps/rtcw/main"}
 CONF_PORT=${MAP_PORT:-27960}
 CONF_STARTMAP=${STARTMAP:-mp_ice}
 CONF_HOSTNAME=${HOSTNAME:-RTCW}
