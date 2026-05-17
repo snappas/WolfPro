@@ -60,10 +60,16 @@ void RB_DrawBlit(rhiTexture texture, rhiSampler sampler, rhiTexture swapChainIma
     RB_BeginRenderPass("Blit", &renderPass);
 
     if(isBlitted){
-        uint32_t x = (glInfo.winWidth - glConfig.vidWidth) / 2;
-        uint32_t y = (glInfo.winHeight - glConfig.vidHeight) / 2;
-        RHI_CmdSetViewport(x, y, glConfig.vidWidth, glConfig.vidHeight, 0.0f, 1.0f);
-        RHI_CmdSetScissor(x, y, glConfig.vidWidth, glConfig.vidHeight);
+        if (r_fullscreenStretch->integer) {
+            RHI_CmdSetViewport(0, 0, glInfo.winWidth, glInfo.winHeight, 0.0f, 1.0f);
+            RHI_CmdSetScissor(0, 0, glInfo.winWidth, glInfo.winHeight);
+        }
+        else {
+            uint32_t x = (glInfo.winWidth - glConfig.vidWidth) / 2;
+            uint32_t y = (glInfo.winHeight - glConfig.vidHeight) / 2;
+            RHI_CmdSetViewport(x, y, glConfig.vidWidth, glConfig.vidHeight, 0.0f, 1.0f);
+            RHI_CmdSetScissor(x, y, glConfig.vidWidth, glConfig.vidHeight);
+        }
     }else{
         RHI_CmdSetViewport(0, 0, glConfig.vidWidth, glConfig.vidHeight, 0.0f, 1.0f);
         RHI_CmdSetScissor(0, 0, glConfig.vidWidth, glConfig.vidHeight);

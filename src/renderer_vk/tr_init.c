@@ -126,6 +126,7 @@ cvar_t  *r_lodCurveError;
 
 cvar_t  *r_fullscreen;
 cvar_t  *r_fullscreenDesktop;
+cvar_t  *r_fullscreenStretch;
 
 
 cvar_t  *r_windowedWidth;
@@ -746,6 +747,7 @@ void R_Register( void ) {
 	r_overBrightBits = ri.Cvar_Get( "r_overBrightBits", "1", CVAR_ARCHIVE | CVAR_LATCH );
 	r_fullscreen = ri.Cvar_Get( "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH );
 	r_fullscreenDesktop = ri.Cvar_Get( "r_fullscreenDesktop", "1", CVAR_ARCHIVE | CVAR_LATCH );
+	r_fullscreenStretch = ri.Cvar_Get( "r_fullscreenStretch", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_windowedWidth = ri.Cvar_Get( "r_windowedWidth", "1280", CVAR_ARCHIVE | CVAR_LATCH );
 	r_windowedHeight = ri.Cvar_Get( "r_windowedHeight", "720", CVAR_ARCHIVE | CVAR_LATCH );
 	r_fullscreenWidth = ri.Cvar_Get( "r_fullscreenWidth", "1920", CVAR_ARCHIVE | CVAR_LATCH );
@@ -1128,7 +1130,12 @@ void RE_EndRegistration( void ) {
 
 void R_ComputeCursorPosition( int* x, int* y )
 { 
-	if(r_fullscreenDesktop->integer == 0 && r_fullscreen->integer == 1){
+	if(r_fullscreenStretch->integer == 1){
+		const float sx = (float)glConfig.vidWidth / (float)glInfo.winWidth;
+		const float sy = (float)glConfig.vidHeight / (float)glInfo.winHeight;
+		*x *= sx;
+		*y *= sy;
+	}else if(r_fullscreenDesktop->integer == 0 && r_fullscreen->integer == 1){
 		*x += (glConfig.vidWidth - glInfo.winWidth)/2;
 		*y += (glConfig.vidHeight - glInfo.winHeight)/2;
 	}
