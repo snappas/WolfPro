@@ -1080,6 +1080,12 @@ void ClientThink_real( gentity_t *ent ) {
 	} else {
 		pm.tracemask = MASK_PLAYERSOLID;
 	}
+
+	if(g_rocketMode.integer && client->ps.weapon == WP_ROCKET_LAUNCHER){
+		pm.pmext->rocketMode = qtrue;
+	}else{
+		pm.pmext->rocketMode = qfalse;
+	}
 	// MrE: always use capsule for AI and player
 	//pm.trace = trap_TraceCapsule;//trap_Trace;
 	//DHM - Nerve :: We've gone back to using normal bbox traces

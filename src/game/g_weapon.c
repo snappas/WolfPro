@@ -2452,10 +2452,13 @@ void FireWeapon( gentity_t *ent ) {
 	case WP_THOMPSON:
 		Bullet_Fire( ent, THOMPSON_SPREAD * aimSpreadScale, THOMPSON_DAMAGE );
 		break;
+	case WP_ROCKET_LAUNCHER:
 	case WP_PANZERFAUST:
-		ent->client->ps.classWeaponTime = level.time; // JPW NERVE
+		if(ent->s.weapon == WP_PANZERFAUST){ //rocket doesnt use charge
+			ent->client->ps.classWeaponTime = level.time; // JPW NERVE
+		}
 		Weapon_RocketLauncher_Fire( ent );
-		if ( ent->client && !( ent->r.svFlags & SVF_CASTAI ) ) {
+		if ( ent->client && !( ent->r.svFlags & SVF_CASTAI ) && ent->s.weapon == WP_PANZERFAUST) {
 			vec3_t forward;
 			AngleVectors( ent->client->ps.viewangles, forward, NULL, NULL );
 			VectorMA( ent->client->ps.velocity, -64, forward, ent->client->ps.velocity );

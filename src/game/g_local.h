@@ -1609,6 +1609,11 @@ extern vmCvar_t g_gravityModifier;
 extern vmCvar_t g_lowPingAntilag;
 extern vmCvar_t g_lowPingAntilagThreshold;
 
+extern vmCvar_t g_noSelfDamage;
+extern vmCvar_t g_rocketMode;
+extern vmCvar_t g_rocketMidairInstagib;
+extern vmCvar_t g_rocketDamageMultiplier;
+
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );

@@ -1155,8 +1155,8 @@ void CG_RegisterWeapon( int weaponNum ) {
 		weaponInfo->weaponMidpoint[i] = mins[i] + 0.5 * ( maxs[i] - mins[i] );
 	}
 
-	weaponInfo->weaponIcon[0] = trap_R_RegisterShader( item->icon );
-	weaponInfo->weaponIcon[1] = trap_R_RegisterShader( va( "%s_select", item->icon ) );    // get the 'selected' icon as well
+	weaponInfo->weaponIcon[0] = trap_R_RegisterShaderNoMip( item->icon );
+	weaponInfo->weaponIcon[1] = trap_R_RegisterShaderNoMip( va( "%s_select", item->icon ) );    // get the 'selected' icon as well
 
 	// JOSEPH 4-17-00
 	weaponInfo->ammoIcon = trap_R_RegisterShader( item->ammoicon );
@@ -1364,6 +1364,22 @@ void CG_RegisterWeapon( int weaponNum ) {
 	case WP_SILENCER:
 		break;
 
+	case WP_ROCKET_LAUNCHER:
+		weaponInfo->ejectBrassFunc      = CG_PanzerFaustEjectBrass;
+		weaponInfo->missileModel        = trap_R_RegisterModel( "models/ammo/rocket/rocket.md3" );
+		weaponInfo->missileSound        = trap_S_RegisterSound( "sound/weapons/rocket/rockfly.wav" );
+		weaponInfo->missileTrailFunc    = CG_RocketTrail;
+		weaponInfo->missileDlight       = 200;
+		weaponInfo->wiTrailTime         = 2000;
+		weaponInfo->trailRadius         = 64;
+		MAKERGB( weaponInfo->flashDlightColor, 0.75, 0.3, 0.0 );
+		MAKERGB( weaponInfo->missileDlightColor, 0.75, 0.3, 0.0 );
+		weaponInfo->flashSound[0]       = trap_S_RegisterSound( "sound/weapons/rocket/rocket.wav" );
+		weaponInfo->spinupSound         = trap_S_RegisterSound( "sound/multiplayer/p_charge1.wav" ); // JPW NERVE preamble for pfaust balance
+		weaponInfo->flashEchoSound[0]   = trap_S_RegisterSound( "sound/multiplayer/artillery_exp01.wav" );   // JPW NERVE
+		weaponInfo->reloadSound         = trap_S_RegisterSound( "sound/weapons/rocket/rocklf_reload.wav" );
+		cgs.media.rocketExplosionShader = trap_R_RegisterShader( "rocketExplosion" );
+		break;
 	case WP_PANZERFAUST:
 		weaponInfo->ejectBrassFunc      = CG_PanzerFaustEjectBrass;
 		weaponInfo->missileModel        = trap_R_RegisterModel( "models/ammo/rocket/rocket.md3" );
@@ -1379,9 +1395,6 @@ void CG_RegisterWeapon( int weaponNum ) {
 		weaponInfo->flashEchoSound[0]   = trap_S_RegisterSound( "sound/multiplayer/artillery_exp01.wav" );   // JPW NERVE
 		weaponInfo->reloadSound         = trap_S_RegisterSound( "sound/weapons/rocket/rocklf_reload.wav" );
 		cgs.media.rocketExplosionShader = trap_R_RegisterShader( "rocketExplosion" );
-		break;
-
-	case WP_ROCKET_LAUNCHER:
 		break;
 
 	case WP_MORTAR:
@@ -1496,11 +1509,11 @@ void CG_RegisterItemVisuals( int itemNum ) {
 		itemInfo->models[i] = trap_R_RegisterModel( item->world_model[i] );
 
 
-	itemInfo->icons[0] = trap_R_RegisterShader( item->icon );
+	itemInfo->icons[0] = trap_R_RegisterShaderNoMip( item->icon );
 	if ( item->giType == IT_HOLDABLE ) {
 		// (SA) register alternate icons (since holdables can have multiple uses, they might have different icons to represent how many uses are left)
 		for ( i = 1; i < MAX_ITEM_ICONS; i++ )
-			itemInfo->icons[i] = trap_R_RegisterShader( va( "%s%i", item->icon, i + 1 ) );
+			itemInfo->icons[i] = trap_R_RegisterShaderNoMip( va( "%s%i", item->icon, i + 1 ) );
 	}
 
 	if ( item->giType == IT_WEAPON ) {
@@ -2784,7 +2797,6 @@ void CG_DrawWeaponSelect( void ) {
 		case WP_GARAND:
 		case WP_VENOM:
 		case WP_TESLA:
-		case WP_ROCKET_LAUNCHER:
 		case WP_PANZERFAUST:
 		case WP_FLAMETHROWER:
 		case WP_SPEARGUN:
@@ -5159,9 +5171,31 @@ void CG_Shard(centity_t *cent, vec3_t origin, vec3_t dir)
 
 // jpw
 		break;
-	case WP_PANZERFAUST:
-		sfx = cgs.media.sfx_rockexp;
 	case WP_ROCKET_LAUNCHER:
+		sfx = cgs.media.sfx_q3_rockexp;
+		sfx2 = cgs.media.sfx_rockexpDist;
+		sfx2range = 800;
+		mark = cgs.media.burnMarkShader;
+		radius = 64;
+		light = 600;
+		isSprite = qtrue;
+		duration = 1000;
+		lightColor[0] = 0.75;
+		lightColor[1] = 0.5;
+		lightColor[2] = 0.1;
+
+		// explosion sprite animation
+		VectorMA( origin, 24, dir, sprOrg );
+		VectorScale( dir, 64, sprVel );
+
+		CG_ParticleExplosion( "explode1", sprOrg, sprVel, 500, 20, 150 + random() * 10 );
+		CG_AddDebris( origin, dir,
+							400 + random() * 200, // speed
+							rand() % 2000 + 1000, //350,	// duration
+							// 15 + rand()%5 );	// count
+							5 + rand() % 5 ); // count
+		break;
+	case WP_PANZERFAUST:
 	case VERYBIGEXPLOSION:
 //		mod = cgs.media.dishFlashModel;
 //		shader = cgs.media.rocketExplosionShader;

@@ -221,6 +221,11 @@ vmCvar_t g_gravityModifier;
 vmCvar_t g_lowPingAntilag;
 vmCvar_t g_lowPingAntilagThreshold;
 
+vmCvar_t g_noSelfDamage;
+vmCvar_t g_rocketMode;
+vmCvar_t g_rocketMidairInstagib;
+vmCvar_t g_rocketDamageMultiplier;
+
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
 	{ &g_cheats, "sv_cheats", "", 0, qfalse },
@@ -409,6 +414,12 @@ cvarTable_t gameCvarTable[] = {
 
 	{ &g_lowPingAntilag, "g_lowPingAntilag", "1", CVAR_ARCHIVE, 0, qtrue },
 	{ &g_lowPingAntilagThreshold, "g_lowPingAntilagThreshold", "25", CVAR_ARCHIVE, 0, qtrue },
+
+	{ &g_noSelfDamage, "g_noSelfDamage", "1", CVAR_ARCHIVE, 0, qtrue },
+
+	{ &g_rocketMode, "g_rocketMode", "0", CVAR_SYSTEMINFO, 0, qtrue },
+	{ &g_rocketMidairInstagib, "g_rocketMidairInstagib", "1", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_rocketDamageMultiplier, "g_rocketDamageMultiplier", "0.34", CVAR_ARCHIVE, 0, qtrue },
 
 };
 
@@ -2736,7 +2747,7 @@ void CheckVote( void ) {
 		level.voteExecuteTime = 0;
 		trap_SendConsoleCommand( EXEC_APPEND, va( "%s\n", level.voteString ) );
 
-		if(Q_stristr("config", level.voteString)){
+		if(Q_stristr(level.voteString, "config")){
 			if (g_tournament.integer == 1 && g_gamestate.integer == GS_WARMUP_COUNTDOWN) {
 				level.lastRestartTime = level.time;
 				trap_SendConsoleCommand(EXEC_APPEND, va("map_restart 0 %i\n", GS_WARMUP));
@@ -2747,6 +2758,10 @@ void CheckVote( void ) {
 				trap_SendConsoleCommand(EXEC_APPEND, va("map_restart 0 %i\n", GS_WARMUP));
 			}
 		}
+		if(Q_stristr(level.voteString, "g_rocketmode")){
+			trap_SendConsoleCommand(EXEC_APPEND, va("map_restart 0 %i\n", GS_WARMUP));
+		}
+
 	}
 	if ( !level.voteTime ) {
 		return;

@@ -433,6 +433,8 @@ vmCvar_t cg_statsY;
 vmCvar_t cg_topshotsX;
 vmCvar_t cg_topshotsY;
 
+vmCvar_t g_rocketMode;
+
 
 typedef struct {
 	vmCvar_t    *vmCvar;
@@ -762,6 +764,8 @@ cvarTable_t cvarTable[] = {
 	{ &cg_statsY, "cg_statsY", "385", CVAR_ARCHIVE },
 	{ &cg_topshotsX, "cg_topshotsX", "388", CVAR_ARCHIVE },
 	{ &cg_topshotsY, "cg_topshotsY", "385", CVAR_ARCHIVE },
+
+	{ &g_rocketMode, "g_rocketMode", "0", 0 },
 
 	
 };
@@ -1292,6 +1296,7 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.sfx_ric3 = trap_S_RegisterSound( "sound/weapons/machinegun/ric3.wav" );
 //	cgs.media.sfx_railg = trap_S_RegisterSound ("sound/weapons/railgun/railgf1a.wav");
 	cgs.media.sfx_rockexp = trap_S_RegisterSound( "sound/weapons/rocket/rocklx1a.wav" );
+	cgs.media.sfx_q3_rockexp = trap_S_RegisterSound( "sound/weapons/rocket/explosion.wav" );
 	cgs.media.sfx_rockexpDist = trap_S_RegisterSound( "sound/multiplayer/artillery_exp01.wav" ); // JPW NERVE
 	cgs.media.sfx_dynamiteexp = trap_S_RegisterSound( "sound/weapons/dynamite/dynamite_exp.wav" );
 	cgs.media.sfx_dynamiteexpDist = trap_S_RegisterSound( "sound/weapons/dynamite/dynamite_exp_dist.wav" );   //----(SA)	added

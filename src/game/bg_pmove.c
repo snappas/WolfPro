@@ -507,7 +507,7 @@ static qboolean PM_CheckJump( void ) {
 	// JPW NERVE -- jumping in multiplayer uses and requires sprint juice (to prevent turbo skating, sprint + jumps)
 	
 	// don't allow jump accel
-	if ( pm->cmd.serverTime - pm->pmext->jumpTime < 850 ) {
+	if ( pm->cmd.serverTime - pm->pmext->jumpTime < 850  && !pm->pmext->rocketMode) {
 		return qfalse;
 	}
 	
@@ -1199,40 +1199,44 @@ static void PM_CrashLand( void ) {
 		// done
 */
 
-		if ( delta > 77 ) {
-			PM_AddEvent( EV_FALL_NDIE );
-		}
-		//else if (delta > 67)
-		//{
-		//	PM_AddEvent(EV_FALL_DMG_75);
-		//}
-		else if ( delta > 67 ) {
-			PM_AddEvent( EV_FALL_DMG_50 );
-		}
-		//else if (delta > 48)
-		//{
-		//	PM_AddEvent(EV_FALL_DMG_30);
-		//}
-		else if ( delta > 58 ) {
-			// this is a pain grunt, so don't play it if dead
-			if ( pm->ps->stats[STAT_HEALTH] > 0 ) {
-				PM_AddEvent( EV_FALL_DMG_25 );
-			}
-		} else if ( delta > 48 )     {
-			// this is a pain grunt, so don't play it if dead
-			if ( pm->ps->stats[STAT_HEALTH] > 0 ) {
-				PM_AddEvent( EV_FALL_DMG_15 );
-			}
-		} else if ( delta > 38.75 )     {
-			// this is a pain grunt, so don't play it if dead
-			if ( pm->ps->stats[STAT_HEALTH] > 0 ) {
-				PM_AddEvent( EV_FALL_DMG_10 );
-			}
-		} else if ( delta > 7 )   {
+		if(pm->pmext->rocketMode && delta > 7){
 			PM_AddEvent( EV_FALL_SHORT );
-		} else
-		{
-			PM_AddEvent( PM_FootstepForSurface() );
+		}else{
+			if ( delta > 77 ) {
+				PM_AddEvent( EV_FALL_NDIE );
+			}
+			//else if (delta > 67)
+			//{
+			//	PM_AddEvent(EV_FALL_DMG_75);
+			//}
+			else if ( delta > 67 ) {
+				PM_AddEvent( EV_FALL_DMG_50 );
+			}
+			//else if (delta > 48)
+			//{
+			//	PM_AddEvent(EV_FALL_DMG_30);
+			//}
+			else if ( delta > 58 ) {
+				// this is a pain grunt, so don't play it if dead
+				if ( pm->ps->stats[STAT_HEALTH] > 0 ) {
+					PM_AddEvent( EV_FALL_DMG_25 );
+				}
+			} else if ( delta > 48 )     {
+				// this is a pain grunt, so don't play it if dead
+				if ( pm->ps->stats[STAT_HEALTH] > 0 ) {
+					PM_AddEvent( EV_FALL_DMG_15 );
+				}
+			} else if ( delta > 38.75 )     {
+				// this is a pain grunt, so don't play it if dead
+				if ( pm->ps->stats[STAT_HEALTH] > 0 ) {
+					PM_AddEvent( EV_FALL_DMG_10 );
+				}
+			} else if ( delta > 7 )   {
+				PM_AddEvent( EV_FALL_SHORT );
+			} else
+			{
+				PM_AddEvent( PM_FootstepForSurface() );
+			}
 		}
 	}
 
