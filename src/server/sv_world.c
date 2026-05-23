@@ -506,19 +506,15 @@ void SV_ClipToEntity( trace_t *trace, const vec3_t start, const vec3_t mins, con
 	angles = touch->r.currentAngles;
 
 	if ( !touch->r.bmodel ) {
-		angles = vec3_origin;   // boxes don't rotate
+		if ( !( touch->r.svFlags & SVF_CAPSULE ) ) {
+			angles = vec3_origin;   // boxes don't rotate
+		}
 	}
 
-#ifdef __MACOS__
-	// compiler bug with const
-	CM_TransformedBoxTrace( trace, (float *)start, (float *)end,
-							(float *)mins, (float *)maxs, clipHandle,  contentmask,
-							origin, angles, capsule );
-#else
 	CM_TransformedBoxTrace( trace, start, end,
 							mins, maxs, clipHandle, contentmask,
-							origin, angles, capsule );
-#endif
+							origin, angles, (touch->r.svFlags & SVF_CAPSULE) );
+
 	if ( trace->fraction < 1 ) {
 		trace->entityNum = touch->s.number;
 	}
@@ -591,20 +587,16 @@ void SV_ClipMoveToEntities( moveclip_t *clip ) {
 		angles = touch->r.currentAngles;
 
 
-		if ( !touch->r.bmodel ) {
-			angles = vec3_origin;   // boxes don't rotate
+		if (!touch->r.bmodel) {
+			if (!(touch->r.svFlags & SVF_CAPSULE)) {
+				angles = vec3_origin;   // boxes don't rotate
+			}
 		}
 
-#ifdef __MACOS__
-		// compiler bug with const
-		CM_TransformedBoxTrace( &trace, (float *)clip->start, (float *)clip->end,
-								(float *)clip->mins, (float *)clip->maxs, clipHandle,  clip->contentmask,
-								origin, angles, clip->capsule );
-#else
 		CM_TransformedBoxTrace( &trace, clip->start, clip->end,
 								clip->mins, clip->maxs, clipHandle,  clip->contentmask,
-								origin, angles, clip->capsule );
-#endif
+								origin, angles, (touch->r.svFlags & SVF_CAPSULE) );
+
 		if ( trace.allsolid ) {
 			clip->trace.allsolid = qtrue;
 			trace.entityNum = touch->s.number;
@@ -668,7 +660,7 @@ void SV_Trace( trace_t *results, const vec3_t start, const vec3_t mins, const ve
 	clip.mins = mins;
 	clip.maxs = maxs;
 	clip.passEntityNum = passEntityNum;
-	clip.capsule = capsule;
+	clip.capsule = (SV_GentityNum( clip.trace.entityNum )->r.svFlags & SVF_CAPSULE);
 
 	// create the bounding box of the entire move
 	// we can limit it to the part of the move not

@@ -857,6 +857,8 @@ void CG_RailTrail2( clientInfo_t *ci, vec3_t start, vec3_t end ) {
 	re->shaderTime = cg.time / 1000.0f;
 	re->reType = RT_RAIL_CORE;
 	re->customShader = cgs.media.railCoreShader;
+	//use wallhack for debug lines inside player models
+	re->renderfx = RF_DEPTHHACK | RF_LIGHTING_ORIGIN; 
 
 	VectorCopy( start, re->origin );
 	VectorCopy( end, re->oldorigin );

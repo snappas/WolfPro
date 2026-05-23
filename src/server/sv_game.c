@@ -443,6 +443,9 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 		return 0;
 	case G_GETTAG:
 		return MDL_LerpTagExt( VMA(2), VMA( 3 ), VMA( 1 ), 0, VM_QAGAME );
+	case G_GETBONE:
+		return MDL_GetBoneOriginExt( VMA(1), VMA(2), args[3], VM_QAGAME );
+
 
 		//====================================
 

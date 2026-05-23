@@ -245,6 +245,7 @@ typedef enum {
 // done.
 
 	G_GETTAG,
+	G_GETBONE,
 
 	BOTLIB_SETUP = 200,             // ( void );
 	BOTLIB_SHUTDOWN,                // ( void );

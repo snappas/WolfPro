@@ -390,7 +390,10 @@ void    Svcmd_EntityList_f( void ) {
 	gentity_t       *check;
 
 	check = g_entities + 1;
+	int inuse = 0;
+	int total = 0;
 	for ( e = 1; e < level.num_entities ; e++, check++ ) {
+		total++;
 		if ( !check->inuse ) {
 			continue;
 		}
@@ -452,6 +455,9 @@ void    Svcmd_EntityList_f( void ) {
 		case ET_ALARMBOX:
 			G_Printf( "ET_ALARMBOX          " );
 			break;
+		case ET_TEMPHEAD:
+			G_Printf( "ET_TEMPHEAD          " );
+			break;
 		default:
 			G_Printf( "%3i                 ", check->s.eType );
 			break;
@@ -461,7 +467,9 @@ void    Svcmd_EntityList_f( void ) {
 			G_Printf( "%s", check->classname );
 		}
 		G_Printf( "\n" );
+		inuse++;
 	}
+	G_Printf("In use: %d\nTotal: %d\n", inuse, total);
 }
 
 gclient_t   *ClientForString( const char *s ) {
