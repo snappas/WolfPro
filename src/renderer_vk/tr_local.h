@@ -1200,6 +1200,7 @@ extern cvar_t *r_debugInput;
 extern cvar_t *r_mipFilter;
 
 extern cvar_t   *r_fullscreenDesktop;
+extern cvar_t   *r_fullscreenStretch;
 
 extern cvar_t	*r_sleepThreshold;		// time cushion in us for a call to Sleep(1+)
 
