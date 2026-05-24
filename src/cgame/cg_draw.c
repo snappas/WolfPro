@@ -382,8 +382,16 @@ void CG_DrawBBox(centity_t *cent){
 		return;
 	}
 
-	//CG_RailTrail2(NULL, cent->currentState.origin, cent->currentState.origin2);
 	vec3_t start, end, v1, v2, v3, v4, v5, v6, diff;
+
+	//draw capsule start/end line
+	if(cent->currentState.otherEntityNum2 == HITBOX_BODY){ 
+		VectorCopy(cent->currentState.origin, start);
+		VectorCopy(cent->currentState.origin2, end);
+		CG_RailTrail2( NULL, start, end );
+		return;
+	}
+
 	VectorCopy(cent->currentState.origin, start);
 	VectorCopy(cent->currentState.origin2, end);
 

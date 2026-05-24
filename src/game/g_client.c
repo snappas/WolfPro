@@ -1767,16 +1767,8 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	// count current clients and rank for scoreboard
 	CalculateRanks();
 
-	ent->headBBox = G_Spawn();
-	gentity_t *head = ent->headBBox;
-	head->s.eType = ET_TEMPHEAD;
-	head->r.contents = CONTENTS_SOLID;
-	head->clipmask = CONTENTS_SOLID;
-	head->classname = "headbbox";
-	head->s.otherEntityNum = clientNum;
-	head->r.ownerNum = clientNum;
-
-
+	InitHeadHitbox(ent, clientNum);
+	InitPlayerCapsules(ent, clientNum);
 
 	return NULL;
 }
@@ -2329,6 +2321,7 @@ void ClientDisconnect( int clientNum ) {
     }
 
 	FreeHeadEntity(ent);
+	FreePlayerCapsules(ent);
 
 	trap_UnlinkEntity( ent );
 	ent->s.modelindex = 0;

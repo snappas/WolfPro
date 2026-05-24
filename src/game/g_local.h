@@ -181,6 +181,8 @@ void G_Script_ScriptEvent( gentity_t *ent, char *eventStr, char *params );
 
 #define CFOFS( x ) ( (int)&( ( (gclient_t *)0 )->x ) )
 
+#define MAX_PLAYER_CAPSULES 12
+
 struct gentity_s {
 	entityState_t s;                // communicated by server to clients
 	entityShared_t r;               // shared by both the server system and game
@@ -419,6 +421,8 @@ struct gentity_s {
 
 	gentity_t *headBBox;
 	qboolean isHeadshot;
+
+	gentity_t *bodyCapsules[MAX_PLAYER_CAPSULES];
 };
 
 // Ridah
@@ -1614,6 +1618,11 @@ extern vmCvar_t g_rocketMode;
 extern vmCvar_t g_rocketMidairInstagib;
 extern vmCvar_t g_rocketDamageMultiplier;
 
+//capsule radius debugging cvars
+extern vmCvar_t g_debugHitboxes;
+extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
+extern vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
+
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );
@@ -1660,6 +1669,7 @@ void    trap_BotFreeClient( int clientNum );
 void    trap_GetUsercmd( int clientNum, usercmd_t *cmd );
 qboolean    trap_GetEntityToken( char *buffer, int bufferSize );
 int trap_GetTag( char *tagName, orientation_t *or, lerpInfo_t *li);
+qboolean trap_GetBone( int boneIndex, vec3_t outOrigin, lerpInfo_t *li );
 
 int     trap_DebugPolygonCreate( int color, int numPoints, vec3_t *points );
 void    trap_DebugPolygonDelete( int id );
@@ -1924,10 +1934,18 @@ void G_PredictPlayerMove(gentity_t* ent, float frametime);
 qboolean G_refCommandCheck(void);
 void G_refSpeclockTeams_cmd( gentity_t *ent, qboolean fLock );
 
+void InitHeadHitbox(gentity_t *ent, int clientNum);
 void AddHeadEntities(gentity_t* skip, int content, int mask);
 void RemoveHeadEntities(gentity_t* skip);
 void FreeHeadEntity(gentity_t* ent);
 void UpdateHeadPosition(gentity_t *ent);
+
+void InitPlayerCapsules(gentity_t *ent, int clientNum);
+void AddPlayerCapsules(gentity_t *skip, int contents, int mask);
+void RemovePlayerCapsules(gentity_t *skip);
+void FreePlayerCapsules(gentity_t *ent);
+
+
 qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod );
 
 // Macros

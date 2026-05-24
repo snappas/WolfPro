@@ -1326,6 +1326,8 @@ int  submit_curlPost( char* jsonfile, char* matchid );
 
 int MDL_LerpTag(orientation_t* tag, const refEntity_t* refent, const char* tagNameIn, int startIndex, vmType_t vmType);
 int MDL_LerpTagExt( orientation_t *tag, lerpInfo_t *lerpInfo, const char *tagNameIn, int startIndex, vmType_t vmType );
+qboolean MDL_GetBoneOrigin( vec3_t outOrigin, const refEntity_t *refent, int boneIndex, vmType_t vmType );
+qboolean MDL_GetBoneOriginExt( vec3_t outOrigin, lerpInfo_t *lerpInfo, int boneIndex, vmType_t vmType );
 qhandle_t MDL_RegisterModel( const char *name, vmType_t vmType );
 void MDL_CalcBones(mdsHeader_t* header, const refEntity_t* refent, int* boneList, int numBones);
 model_t *MDL_AllocModel( vmType_t vmType );

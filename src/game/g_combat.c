@@ -670,6 +670,9 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 	}
 
 	if( targ->isHeadshot ){
+		if(g_debugBullets.integer > 0){
+			G_Printf("(IsHeadshot) Hit %s\n", traceEnt->classname);
+		}
 		return qtrue;
 	}
 
@@ -684,8 +687,22 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 
 		// trace another shot see if we hit the head
 		trap_UnlinkEntity(&g_entities[targ->s.number]);
-		trap_Trace( &tr, start, NULL, NULL, end, attacker->s.number, MASK_SHOT );
+
+		// Unlink body capsules so they don't intercept the head trace
+		for (int i = 0; i < MAX_PLAYER_CAPSULES; i++) {
+			if (targ->bodyCapsules[i] && targ->bodyCapsules[i]->r.linked) {
+				trap_UnlinkEntity( targ->bodyCapsules[i] );
+			}
+		}
+
+		trap_Trace(&tr, start, NULL, NULL, end, attacker->s.number, MASK_SHOT);
 		trap_LinkEntity(&g_entities[targ->s.number]);
+		// Relink body capsules
+		for (int i = 0; i < MAX_PLAYER_CAPSULES; i++) {
+			if (targ->bodyCapsules[i]) {
+				trap_LinkEntity(targ->bodyCapsules[i]);
+			}
+		}
 
 		head->s.otherEntityNum = oldOwner;
 		head->r.ownerNum = oldOwner;
@@ -705,6 +722,9 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 		}
 
 		if ( traceEnt == head ) {
+			if(g_debugBullets.integer > 0){
+				G_Printf("(IsHeadshot) Hit %s\n", traceEnt->classname);
+			}
 			return qtrue;
 		}
 	}

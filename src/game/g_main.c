@@ -226,6 +226,11 @@ vmCvar_t g_rocketMode;
 vmCvar_t g_rocketMidairInstagib;
 vmCvar_t g_rocketDamageMultiplier;
 
+//capsule radius debugging
+vmCvar_t g_debugHitboxes;
+vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
+vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
+
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
 	{ &g_cheats, "sv_cheats", "", 0, qfalse },
@@ -421,6 +426,20 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_rocketMidairInstagib, "g_rocketMidairInstagib", "1", CVAR_ARCHIVE, 0, qtrue },
 	{ &g_rocketDamageMultiplier, "g_rocketDamageMultiplier", "0.34", CVAR_ARCHIVE, 0, qtrue },
 
+	//capsule radius debugging
+	{ &g_debugHitboxes, "g_debugHitboxes", "0", CVAR_CHEAT, 0, qfalse },
+	{ &g_cr0,  "g_cr0",  "1.0", CVAR_CHEAT, 0, qfalse }, //pelvis
+	{ &g_cr1,  "g_cr1",  "8.2", CVAR_CHEAT, 0, qfalse }, //torso
+	{ &g_cr2,  "g_cr2",  "7.0", CVAR_CHEAT, 0, qfalse }, //L thigh
+	{ &g_cr3,  "g_cr3",  "7.0", CVAR_CHEAT, 0, qfalse }, //L calf
+	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //R thigh
+	{ &g_cr5,  "g_cr5",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
+	{ &g_cr6,  "g_cr6",  "4.0", CVAR_CHEAT, 0, qfalse }, //L foot
+	{ &g_cr7,  "g_cr7",  "4.0", CVAR_CHEAT, 0, qfalse }, //R foot
+	{ &g_cr8,  "g_cr8",  "4.5", CVAR_CHEAT, 0, qfalse }, //L upperarm
+	{ &g_cr9,  "g_cr9",  "3.0", CVAR_CHEAT, 0, qfalse }, //L forearm
+	{ &g_cr10, "g_cr10", "4.5", CVAR_CHEAT, 0, qfalse }, //R upperarm
+	{ &g_cr11, "g_cr11", "3.0", CVAR_CHEAT, 0, qfalse }, //R forearm
 };
 
 // bk001129 - made static to avoid aliasing
@@ -2918,8 +2937,9 @@ void G_RunFrame( int levelTime ) {
 	int i;
 	gentity_t   *ent;
 	int worldspawnflags, gt;
-	if(g_debugBullets.integer > 0){
+	if(g_debugBullets.integer == 1){
 		RemoveHeadEntities(NULL);
+		RemovePlayerCapsules(NULL);
 	}
 
 	// if we are waiting for the level to restart, do nothing
@@ -3148,8 +3168,9 @@ void G_RunFrame( int levelTime ) {
 		// L0 - Check Team Lock status..
 		HandleEmptyTeams();
 	}
-	if(g_debugBullets.integer > 0){
+	if(g_debugBullets.integer == 1){
 		AddHeadEntities(NULL, CONTENTS_CORPSE, 0);
+		AddPlayerCapsules(NULL, CONTENTS_CORPSE, 0);
 	}
 	
 

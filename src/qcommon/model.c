@@ -939,6 +939,87 @@ int R_GetBoneTag( orientation_t *outTag, mdsHeader_t *mds, int startTagIndex, co
 	return i;
 }
 
+/*
+================
+MDL_GetBoneOriginExt
+ 
+Returns the world-space origin of the bone at boneIndex in the MDS model
+referenced by lerpInfo. Builds a refEntity_t from lerpInfo exactly as
+MDL_LerpTagExt does for MDL_LerpTag, then calls MDL_GetBoneOrigin.
+ 
+Returns qtrue on success, qfalse if the model is not an MDS or the bone
+index is out of range.
+================
+*/
+qboolean MDL_GetBoneOriginExt( vec3_t outOrigin, lerpInfo_t *lerpInfo, int boneIndex, vmType_t vmType ) {
+    refEntity_t re;
+    int i;
+ 
+    re.hModel        = lerpInfo->modelHandle;
+    re.oldframe      = lerpInfo->oldFrame;
+    re.frame         = lerpInfo->frame;
+    re.backlerp      = lerpInfo->backlerp;
+    re.torsoFrame    = lerpInfo->torsoFrame;
+    re.oldTorsoFrame = lerpInfo->oldTorsoFrame;
+    re.torsoBacklerp = lerpInfo->torsoBacklerp;
+    for ( i = 0; i < 3; i++ ) {
+        VectorCopy( lerpInfo->torsoAxis[i], re.torsoAxis[i] );
+        VectorCopy( lerpInfo->legsAxis[i],  re.axis[i] );
+    }
+ 
+    return MDL_GetBoneOrigin( outOrigin, &re, boneIndex, vmType );
+}
+ 
+/*
+================
+MDL_GetBoneOrigin
+ 
+Evaluates the bone chain up to boneIndex and returns the bone's
+world-space translation in outOrigin.
+ 
+Mirrors R_GetBoneTag but:
+  - Takes a bone index directly instead of searching by tag name
+  - Returns only the origin (translation), not the full orientation_t
+    since capsule endpoints only need position, not rotation
+================
+*/
+qboolean MDL_GetBoneOrigin( vec3_t outOrigin, const refEntity_t *refent, int boneIndex, vmType_t vmType ) {
+    model_t         *model;
+    mdsHeader_t     *mds;
+    mdsBoneInfo_t   *boneInfoList;
+    int              boneList[MDS_MAX_BONES];
+    int              numBones;
+ 
+    model = MDL_GetModelByHandle( refent->hModel, vmType );
+ 
+    if ( !model || model->type != MOD_MDS || !model->mds ) {
+        VectorClear( outOrigin );
+        return qfalse;
+    }
+ 
+    mds = model->mds;
+ 
+    if ( boneIndex < 0 || boneIndex >= mds->numBones ) {
+        VectorClear( outOrigin );
+        return qfalse;
+    }
+ 
+    /* Build the list of bones needed to evaluate this bone's transform,
+       walking up the parent chain — identical to R_GetBoneTag */
+    boneInfoList = (mdsBoneInfo_t *)( (byte *)mds + mds->ofsBones );
+    numBones = 0;
+    MDL_RecursiveBoneListAdd( boneIndex, boneList, &numBones, boneInfoList );
+ 
+    /* Evaluate the bone chain at the current frame */
+    MDL_CalcBones( mds, refent, boneList, numBones );
+ 
+    /* Extract the translation from the global bones[] array */
+    VectorCopy( bones[boneIndex].translation, outOrigin );
+ 
+    return qtrue;
+}
+
+
 
 /*
 ================

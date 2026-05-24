@@ -1596,6 +1596,422 @@ void RemoveHeadEntities(gentity_t* skip){
 	}
 }
 
+/*
+===========================================================================
+Capsule definitions
+Bone indices derived from body.mds via derive_capsules.py (body.caps).
+
+python -c "
+import sys
+sys.path.insert(0, r'<path to mds_extract.py>')
+from mds_extract import MDSFile
+mds = MDSFile('body.mds')
+for i, b in enumerate(mds.boneInfos):
+    print(f'{i:3d}  parent={b.parent:3d}  dist={b.parentDist:6.2f}  torso={b.torsoWeight:.1f}  {b.name}')
+"
+
+MDS: 'body.mds'  frames=4275  bones=70  surfaces=4
+  surface 'l_legs'  verts=280  tris=430  boneRefs=11
+  surface 'u_body'  verts=305  tris=450  boneRefs=14
+  surface 'u_rthand'  verts=145  tris=194  boneRefs=25
+  surface 'u_lfthand'  verts=145  tris=194  boneRefs=25
+  0  parent= -1  dist= 16.59  torso=0.0  Bip01 Pelvis
+  1  parent=  0  dist=  4.88  torso=0.0  Bip01 Spine
+  2  parent=  1  dist=  0.43  torso=0.3  Bip01 Spine1
+  3  parent=  2  dist=  5.22  torso=0.6  Bip01 Spine2
+  4  parent=  3  dist=  5.08  torso=0.9  Bip01 Spine3
+  5  parent=  4  dist=  6.27  torso=1.0  Bip01 Neck
+  6  parent=  5  dist=  4.56  torso=1.0  Bip01 Head
+  7  parent=  6  dist=  0.33  torso=1.0  tag_head
+  8  parent=  6  dist=  6.39  torso=1.0  tag_mouth
+  9  parent=  5  dist=  1.89  torso=1.0  Bip01 L Clavicle
+ 10  parent=  9  dist=  5.99  torso=1.0  Bip01 L UpperArm
+ 11  parent= 10  dist= 11.70  torso=1.0  Bip01 L Forearm
+ 12  parent= 11  dist= 10.32  torso=1.0  Bip01 L Hand
+ 13  parent= 12  dist=  2.12  torso=1.0  Bip01 L Finger0
+ 14  parent= 13  dist=  1.10  torso=1.0  Bip01 L Finger01
+ 15  parent= 14  dist=  1.57  torso=1.0  Bip01 L Finger02
+ 16  parent= 12  dist=  3.71  torso=1.0  Bip01 L Finger1
+ 17  parent= 16  dist=  1.32  torso=1.0  Bip01 L Finger11
+ 18  parent= 17  dist=  0.79  torso=1.0  Bip01 L Finger12
+ 19  parent= 12  dist=  3.44  torso=1.0  Bip01 L Finger2
+ 20  parent= 19  dist=  1.74  torso=1.0  Bip01 L Finger21
+ 21  parent= 20  dist=  0.87  torso=1.0  Bip01 L Finger22
+ 22  parent= 12  dist=  3.47  torso=1.0  Bip01 L Finger3
+ 23  parent= 22  dist=  1.59  torso=1.0  Bip01 L Finger31
+ 24  parent= 23  dist=  0.72  torso=1.0  Bip01 L Finger32
+ 25  parent= 12  dist=  3.69  torso=1.0  Bip01 L Finger4
+ 26  parent= 25  dist=  1.07  torso=1.0  Bip01 L Finger41
+ 27  parent= 26  dist=  0.72  torso=1.0  Bip01 L Finger42
+ 28  parent= 12  dist=  4.10  torso=1.0  tag_weapon2
+ 29  parent= 10  dist= 11.85  torso=1.0  tag_armleft
+ 30  parent=  5  dist=  1.89  torso=1.0  Bip01 R Clavicle
+ 31  parent= 30  dist=  5.99  torso=1.0  Bip01 R UpperArm
+ 32  parent= 31  dist= 11.70  torso=1.0  Bip01 R Forearm
+ 33  parent= 32  dist= 10.32  torso=1.0  Bip01 R Hand
+ 34  parent= 33  dist=  2.12  torso=1.0  Bip01 R Finger0
+ 35  parent= 34  dist=  1.10  torso=1.0  Bip01 R Finger01
+ 36  parent= 35  dist=  1.57  torso=1.0  Bip01 R Finger02
+ 37  parent= 33  dist=  3.71  torso=1.0  Bip01 R Finger1
+ 38  parent= 37  dist=  1.32  torso=1.0  Bip01 R Finger11
+ 39  parent= 38  dist=  0.79  torso=1.0  Bip01 R Finger12
+ 40  parent= 33  dist=  3.44  torso=1.0  Bip01 R Finger2
+ 41  parent= 40  dist=  1.74  torso=1.0  Bip01 R Finger21
+ 42  parent= 41  dist=  0.87  torso=1.0  Bip01 R Finger22
+ 43  parent= 33  dist=  3.47  torso=1.0  Bip01 R Finger3
+ 44  parent= 43  dist=  1.59  torso=1.0  Bip01 R Finger31
+ 45  parent= 44  dist=  0.72  torso=1.0  Bip01 R Finger32
+ 46  parent= 33  dist=  3.69  torso=1.0  Bip01 R Finger4
+ 47  parent= 46  dist=  1.07  torso=1.0  Bip01 R Finger41
+ 48  parent= 47  dist=  0.72  torso=1.0  Bip01 R Finger42
+ 49  parent= 33  dist=  3.04  torso=1.0  tag_weapon
+ 50  parent= 31  dist= 11.74  torso=1.0  tag_armright
+ 51  parent=  4  dist=  6.26  torso=1.0  tag_back
+ 52  parent=  3  dist=  4.02  torso=1.0  tag_chest
+ 53  parent=  2  dist=  6.57  torso=1.0  tag_bright
+ 54  parent=  2  dist=  6.46  torso=1.0  tag_bleft
+ 55  parent=  1  dist=  0.48  torso=0.0  tag_lbelt
+ 56  parent=  1  dist=  0.48  torso=0.0  tag_ubelt
+ 57  parent=  0  dist=  5.33  torso=0.0  tag_torso
+ 58  parent=  0  dist=  3.88  torso=0.0  Bip01 L Thigh
+ 59  parent= 58  dist= 16.53  torso=0.0  Bip01 L Calf
+ 60  parent= 59  dist= 15.92  torso=0.0  Bip01 L Foot
+ 61  parent= 60  dist=  7.48  torso=0.0  Bip01 L Toe0
+ 62  parent= 60  dist=  0.11  torso=0.0  tag_footleft
+ 63  parent= 58  dist= 16.60  torso=0.0  tag_legleft
+ 64  parent=  0  dist=  3.88  torso=0.0  Bip01 R Thigh
+ 65  parent= 64  dist= 16.53  torso=0.0  Bip01 R Calf
+ 66  parent= 65  dist= 15.92  torso=0.0  Bip01 R Foot
+ 67  parent= 66  dist=  7.48  torso=0.0  Bip01 R Toe0
+ 68  parent= 66  dist=  0.15  torso=0.0  tag_footright
+ 69  parent= 64  dist= 16.59  torso=0.0  tag_legright
+===========================================================================
+*/
+
+typedef struct {
+    int     startBone;
+    int     endBone;
+    float   radius;
+    char    name[16];
+} capsuleDef_t;
+
+static const capsuleDef_t s_capsuleDefs[MAX_PLAYER_CAPSULES] = {
+	{  0,  1,  1.0f,  "Pelvis"      },  /* Bip01 Pelvis     -> Bip01 Spine     0 */
+    {  1,  7,  8.2f,  "Torso"       },  /* Bip01 Spine      -> tag_head     1*/
+    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    2 */
+	{ 59, 60,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot    3 */
+    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   4 */
+	{ 65, 66,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   5  */
+    { 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   6  */
+    { 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    7 */
+    { 10, 11,  4.5f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 8 */
+    { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  9   */
+    { 31, 32,  4.5f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 10 */
+    { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  11  */
+};
+
+
+/*
+================
+UpdateCapsulePosition
+
+Positions a single capsule entity between two bone endpoints.
+================
+*/
+static void UpdateCapsulePosition( gentity_t *capsule, const vec3_t startPos,
+                                     const vec3_t endPos, float radius ) {
+
+	vec3_t  delta, midpoint, angles;
+    float   length, half_length;
+	VectorCopy( startPos, capsule->s.origin );
+	VectorCopy( endPos, capsule->s.origin2 );
+
+    /* Midpoint becomes the entity origin */
+    VectorAdd( startPos, endPos, midpoint );
+    VectorScale( midpoint, 0.5f, midpoint );
+
+    /* Half length of the bone segment */
+    VectorSubtract( endPos, startPos, delta );
+    length      = VectorLength( delta );
+    half_length = length * 0.5f;
+
+    /* Set entity origin */
+    G_SetOrigin( capsule, midpoint );
+    VectorCopy( midpoint, capsule->r.currentOrigin );
+
+    /* Orient along the bone axis.
+       vectoangles gives pitch/yaw pointing along delta.
+       CM_TransformedBoxTrace will rotate sphere.offset by this matrix,
+       aligning the capsule axis with the bone direction.
+       For degenerate zero-length segments fall back to identity. */
+    if ( half_length > 0.1f ) {
+		vectoangles( delta, angles );
+		// CM_TransformedBoxTrace orients the capsule along the rotated Z axis,
+		// but vectoangles maps delta to the forward (X) axis.
+		// Compensate by rotating pitch 90 degrees to align Z with the bone direction.
+		angles[PITCH] -= 90.0f;
+	} else {
+		VectorClear( angles );
+	}
+    VectorCopy( angles, capsule->r.currentAngles );
+    VectorCopy( angles, capsule->s.angles );
+    VectorCopy( angles, capsule->s.apos.trBase );
+
+    /* mins/maxs define the capsule dimensions in local entity space.
+       See function comment above for the derivation. */
+    VectorSet( capsule->r.mins, -radius, -radius, -( half_length + radius ) );
+    VectorSet( capsule->r.maxs,  radius,  radius,   half_length + radius    );
+}
+
+
+/*
+================
+InitPlayerCapsules
+
+Allocates and initialises the capsule entities for a player.
+================
+*/
+void InitPlayerCapsules(gentity_t *ent, int clientNum) {
+    int         i;
+    gentity_t   *capsule;
+
+    for ( i = 0; i < MAX_PLAYER_CAPSULES; i++ ) {
+        capsule = G_Spawn();
+
+       	capsule->classname = s_capsuleDefs[i].name;
+        capsule->s.eType = ET_TEMPHEAD;
+		capsule->s.otherEntityNum2 = HITBOX_BODY;
+        capsule->r.svFlags = SVF_CAPSULE;
+        capsule->r.contents = 0;       /* unlinked until shot is fired */
+        capsule->clipmask = 0;
+        capsule->takedamage = qfalse;
+
+        capsule->r.ownerNum = clientNum;
+        capsule->s.otherEntityNum = clientNum;
+
+        ent->bodyCapsules[i] = capsule;
+    }
+}
+
+/*
+================
+InitHeadHitbox
+
+Allocates and initialises the head hitbox for a player.
+================
+*/
+void InitHeadHitbox(gentity_t *ent, int clientNum){
+	ent->headBBox = G_Spawn();
+	gentity_t *head = ent->headBBox;
+	head->s.eType = ET_TEMPHEAD;
+	head->s.otherEntityNum2 = HITBOX_HEAD;
+	head->r.contents = 0; /* unlinked until shot is fired */
+	head->clipmask = 0;
+	head->classname = "Head";
+	
+	head->s.otherEntityNum = clientNum;
+	head->r.ownerNum = clientNum;
+}
+
+
+/*
+================
+FreePlayerCapsules
+
+Unlinks and frees all capsule entities for a player.
+================
+*/
+void FreePlayerCapsules( gentity_t *ent ) {
+    int i;
+
+    if ( !ent->client ) {
+        return;
+    }
+
+    for ( i = 0; i < MAX_PLAYER_CAPSULES; i++ ) {
+        if ( ent->bodyCapsules[i] ) {
+            if ( ent->bodyCapsules[i]->r.linked ) {
+                trap_UnlinkEntity( ent->bodyCapsules[i] );
+            }
+            G_FreeEntity( ent->bodyCapsules[i] );
+            ent->bodyCapsules[i] = NULL;
+        }
+    }
+}
+
+
+/*
+================
+UpdatePlayerCapsules
+
+Evaluates bone positions via trap_GetBone and repositions all capsule
+entities for a single player. Called from AddPlayerCapsules.
+
+trap_GetBone returns bone translations in model-local space — positions
+are relative to the model origin, not world origin. We add
+ent->r.currentOrigin to bring them into world space.
+
+Note: trap_GetBone calls MDL_CalcBones which writes into a shared global
+bones[] array. This is the same behaviour as trap_GetTag and is safe
+because traces are processed sequentially on the server.
+================
+*/
+void UpdatePlayerCapsules( gentity_t *ent ) {
+    int         i;
+    vec3_t      startPos, endPos;
+    gentity_t   *capsule;
+    lerpInfo_t  *li;
+
+    if ( !ent->client ) {
+        return;
+    }
+
+    li = &ent->client->animationInfo.lerpInfo;
+
+    for ( i = 0; i < MAX_PLAYER_CAPSULES; i++ ) {
+        capsule = ent->bodyCapsules[i];
+        if ( !capsule ) {
+            continue;
+        }
+        if ( !trap_GetBone( s_capsuleDefs[i].startBone, startPos, li ) ) {
+            continue;
+        }
+        if ( !trap_GetBone( s_capsuleDefs[i].endBone, endPos, li ) ) {
+            continue;
+        }
+        
+
+		vec3_t rotatedStart, rotatedEnd;
+		VectorCopy( ent->r.currentOrigin, rotatedStart );
+		for ( int j = 0; j < 3; j++ ) {
+			VectorMA( rotatedStart, startPos[j], li->legsAxis[j], rotatedStart );
+		}
+
+		VectorCopy( ent->r.currentOrigin, rotatedEnd );
+		for ( int j = 0; j < 3; j++ ) {
+			VectorMA( rotatedEnd, endPos[j], li->legsAxis[j], rotatedEnd );
+		}
+
+		VectorCopy( rotatedStart, startPos );
+		VectorCopy( rotatedEnd, endPos );
+
+		if(g_debugHitboxes.integer == 0){
+			UpdateCapsulePosition( capsule, startPos, endPos, s_capsuleDefs[i].radius );
+		}else{
+			//debugging cvars
+			float radii[MAX_PLAYER_CAPSULES] = {
+				g_cr0.value,  g_cr1.value,  g_cr2.value,  g_cr3.value,
+				g_cr4.value,  g_cr5.value,  g_cr6.value,  g_cr7.value,
+				g_cr8.value,  g_cr9.value,  g_cr10.value, g_cr11.value
+			};
+			UpdateCapsulePosition( capsule, startPos, endPos, radii[i] );
+		}
+		
+    }
+}
+
+
+/*
+================
+AddPlayerCapsules
+
+Updates capsule positions and links them into the world for collision.
+================
+*/
+void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
+    int         i, j;
+    gentity_t   *ent;
+    gentity_t   *capsule;
+
+    for ( i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+
+        if ( ent == skip ) {
+            continue;
+        }
+        if ( !ent->client ) {
+            continue;
+        }
+
+        UpdatePlayerCapsules( ent );
+
+        for ( j = 0; j < MAX_PLAYER_CAPSULES; j++ ) {
+            capsule = ent->bodyCapsules[j];
+            if ( !capsule ) {
+                continue;
+            }
+			capsule->r.svFlags = SVF_CAPSULE;
+            capsule->r.contents = contents;
+            capsule->clipmask   = mask;
+			capsule->r.ownerNum       = ent->s.number;
+			capsule->s.otherEntityNum = ent->s.number;
+			
+            trap_LinkEntity( capsule );
+        }
+    }
+	
+}
+
+
+/*
+================
+RemovePlayerCapsules
+
+Unlinks all capsule entities after the trace is complete.
+================
+*/
+void RemovePlayerCapsules( gentity_t *skip ) {
+    int         i, j;
+    gentity_t   *ent;
+
+    for ( i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+
+        if ( ent == skip ) {
+            continue;
+        }
+        if ( !ent->client ) {
+            continue;
+        }
+
+        for ( j = 0; j < MAX_PLAYER_CAPSULES; j++ ) {
+            if ( ent->bodyCapsules[j] &&
+                 ent->bodyCapsules[j]->r.linked ) {
+                trap_UnlinkEntity( ent->bodyCapsules[j] );
+            }
+        }
+    }
+}
+
+
+void UnlinkPlayerBodies( gentity_t *skip ) {
+    int i;
+    gentity_t *ent;
+ 
+    for ( i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+        if ( ent == skip || !ent->client ) {
+            continue;
+        }
+        trap_UnlinkEntity( ent );
+    }
+}
+ 
+
+void LinkPlayerBodies( gentity_t *skip ) {
+    int i;
+    gentity_t *ent;
+ 
+    for ( i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+        if ( ent == skip || !ent->client ) {
+            continue;
+        }
+        trap_LinkEntity( ent );
+    }
+}
+
+
 qboolean CheckAntilagConditions(gentity_t *ent){
 	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
 	{
@@ -1619,15 +2035,21 @@ void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 	if(CheckAntilagConditions(ent)){
 		G_DoTimeShiftFor(ent);
 	}
+
+	UnlinkPlayerBodies(ent);
 	AddHeadEntities(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
+	AddPlayerCapsules(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
 
 	Bullet_Endpos( ent, spread, &end );
 	Bullet_Fire_Extended( ent, ent, muzzleTrace, end, spread, damage );
 
+	RemoveHeadEntities(ent);
+	RemovePlayerCapsules( ent );
+	LinkPlayerBodies(ent);
+
 	if(CheckAntilagConditions(ent)){
 		G_UndoTimeShiftFor(ent);
 	}
-	RemoveHeadEntities(ent);
 }
 
 qboolean LogAccuracyShot(gentity_t* target, gentity_t* attacker) {
@@ -1682,13 +2104,26 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 
 	traceEnt = &g_entities[ tr.entityNum ];
 
-	if(traceEnt->s.eType == ET_TEMPHEAD){
-		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
-		traceEnt->isHeadshot = qtrue;
-		if(traceEnt->health <= 0){
-			traceEnt->isHeadshot = qfalse;
+	if(traceEnt->s.eType == ET_TEMPHEAD &&
+		traceEnt->s.otherEntityNum2 == HITBOX_HEAD &&
+		g_entities[traceEnt->r.ownerNum].client){
+		if(g_debugBullets.integer > 0){
+			G_Printf("Hit %s\n", traceEnt->classname);
 		}
-	}
+		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
+		if(traceEnt->health <= 0){
+			traceEnt = &g_entities[ tr.entityNum ];
+		}else{
+			traceEnt->isHeadshot = qtrue;
+		}
+	}else if (traceEnt->s.eType == ET_TEMPHEAD &&
+				traceEnt->s.otherEntityNum2 == HITBOX_BODY &&
+				g_entities[traceEnt->r.ownerNum].client){
+		if(g_debugBullets.integer > 0){
+			G_Printf("Hit %s\n", traceEnt->classname);
+		}
+        traceEnt = &g_entities[ traceEnt->r.ownerNum ];
+    }
 
 	EmitterCheck( traceEnt, attacker, &tr );
 

@@ -241,6 +241,10 @@ int trap_GetTag( char *tagName, orientation_t* or, lerpInfo_t *li) {
 	return syscall( G_GETTAG, tagName, or, li );
 }
 
+qboolean trap_GetBone(int boneIndex, vec3_t outOrigin, lerpInfo_t *li) {
+    return syscall(G_GETBONE, outOrigin, li, boneIndex);
+}
+
 // BotLib traps start here
 int trap_BotLibSetup( void ) {
 	return syscall( BOTLIB_SETUP );

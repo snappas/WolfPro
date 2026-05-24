@@ -1350,6 +1350,12 @@ qboolean    BG_CanItemBeGrabbed( const entityState_t *ent, const playerState_t *
 #define MASK_MISSILESHOT        ( MASK_SHOT | CONTENTS_MISSILECLIP )
 #define MASK_CAN_DAMAGE         ( CONTENTS_SOLID | CONTENTS_BODY )
 
+typedef enum {
+	HITBOX_HEAD,
+	HITBOX_BODY,
+	NUM_HITBOXES
+} hitbox_t;
+
 //
 // entityState_t->eType
 //
