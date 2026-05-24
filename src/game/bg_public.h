@@ -1886,4 +1886,10 @@ extWeaponStats_t BG_WeapStatForWeapon( weapon_t iWeaponID );
 char* BG_GetTeam(int teamNum);
 char* BG_GetClass(int classNum);
 
+//new omnibot stuff
+typedef enum {
+	STATE_DEFAULT,          // ent is linked, can be used and is solid
+	STATE_INVISIBLE,        // ent is unlinked, can't be used, doesn't think and is not solid
+} entState_t;
+
 #endif

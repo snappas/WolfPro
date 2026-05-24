@@ -1851,6 +1851,8 @@ typedef enum
 	shard_rubble
 } shards_t;
 
+#define BODY_TEAM( ENT ) ENT->s.modelindex
+
 // g_antilag.c
 void G_StoreClientPosition( gentity_t* ent );
 void G_HistoricalTrace( gentity_t* ent, trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passEntityNum, int contentmask );

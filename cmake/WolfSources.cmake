@@ -149,6 +149,9 @@ FILE(GLOB QAGAME_SRC
 	"src/botai/*.c"
 	"src/botai/*.h"
 	"src/game/game.def"
+	"src/game/g_rtcwbot_interface.cpp"
+	"src/game/omnibot/*.h"
+	"src/game/omnibot/common/*.h"
 )
 
 
