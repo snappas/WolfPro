@@ -34,7 +34,7 @@ static void ImGUIDemoWindow(void){
    
 	if(demoWindowActive){
 		if(igBegin("ImGUI Demo", (bool*)&demoWindowActive, 0)){
-			igShowDemoWindow(&demoWindowActive);
+			igShowDemoWindow((bool*)&demoWindowActive);
         }
         igEnd();
     }
@@ -287,7 +287,7 @@ static void HudEditor(void){
 							case CVT_BOOL:
 								{
 									int orig = hudCvars[i].cvar->integer;
-									igCheckbox(va("##%s", hudCvars[i].name), &hudCvars[i].cvar->integer);
+									igCheckbox(va("##%s", hudCvars[i].name), (bool*)&hudCvars[i].cvar->integer);
 									if(orig != hudCvars[i].cvar->integer){
 										trap_Cvar_Set(hudCvars[i].name, va("%d", hudCvars[i].cvar->integer));
 									}

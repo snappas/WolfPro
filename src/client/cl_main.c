@@ -1070,8 +1070,6 @@ CL_Connect_f
 ================
 */
 void CL_Connect_f( void ) {
-	char    *server;
-
 	if ( Cmd_Argc() != 2 ) {
 		Com_Printf( "usage: connect [server]\n" );
 		return;

@@ -141,7 +141,6 @@ tag location
 */
 void CG_PositionRotatedEntityOnTag( refEntity_t *entity, const refEntity_t *parent,
 									char *tagName ) {
-	int i;
 	orientation_t lerped;
 
 //AxisClear( entity->axis );
