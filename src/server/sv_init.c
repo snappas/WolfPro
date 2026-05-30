@@ -532,7 +532,6 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 	int i;
 	int checksum;
 	qboolean isBot;
-	char systemInfo[MAX_INFO_STRING];
 	const char  *p;
 
 	// shut down the existing game if it is running
