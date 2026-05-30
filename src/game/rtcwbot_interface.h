@@ -84,4 +84,5 @@ void Bot_AddDynamiteGoal( gentity_t *_ent, int _team, const char *_tag );
 void Bot_AddFallenTeammateGoals( gentity_t *_teammate, int _team );
 void AddDeferredGoal( gentity_t *ent );
 
+const char *_GetEntityName( gentity_t *_ent );
 #endif

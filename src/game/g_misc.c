@@ -1643,7 +1643,27 @@ void Fire_Lead( gentity_t *ent, gentity_t *activator, float spread, int damage )
 }
 
 
-float AngleDifference( float ang1, float ang2 );
+/*
+==============
+AngleDifference
+==============
+*/
+float AngleDifference( float ang1, float ang2 ) {
+	float diff;
+
+	diff = ang1 - ang2;
+	if ( ang1 > ang2 ) {
+		if ( diff > 180.0 ) {
+			diff -= 360.0;
+		}
+	} else {
+		if ( diff < -180.0 ) {
+			diff += 360.0;
+		}
+	}
+	return diff;
+}
+
 // NOTE: use this value, and THEN the cl_input.c scales to tweak the feel
 #define MG42_IDLEYAWSPEED   80.0    // degrees per second (while returning to base)
 
@@ -1812,9 +1832,7 @@ void mg42_think( gentity_t *self ) {
 			self->nextthink = level.time + 50;
 			self->timestamp = level.time + 1000;
 
-			if ( !( owner->r.svFlags & SVF_CASTAI ) ) {
-				clamp_playerbehindgun( self, owner, vec3_origin );
-			}
+			clamp_playerbehindgun( self, owner, vec3_origin );
 			return;
 		}
 	}
@@ -2276,284 +2294,6 @@ damage = damage caused by each bullet
 
 #define MG42_SPREAD         200
 #define MG42_DAMAGE_AI      9
-
-void miscGunnerEnemyScan( gentity_t *ent, vec3_t angles ) {
-	gentity_t *t;
-	vec3_t v, tang;
-
-	for ( t = g_entities; t < g_entities + level.maxclients; t++ ) {
-		if ( !t->inuse ) {
-			continue;
-		}
-		if ( t->health < 0 ) {
-			continue;
-		}
-		if ( ent->aiTeam == t->aiTeam ) {
-			continue;
-		}
-		if ( VectorDistance( ent->r.currentOrigin, t->r.currentOrigin ) > ent->radius ) {
-			continue;
-		}
-		VectorSubtract( t->r.currentOrigin, ent->r.currentOrigin, v );
-		vectoangles( v, tang );
-		if ( !AICast_InFieldOfVision( angles, ent->harc, tang ) ) {
-			continue;
-		}
-		if ( !AICast_VisibleFromPos( ent->r.currentOrigin, ent->s.number, t->r.currentOrigin, t->s.number, qfalse ) ) {
-			continue;
-		}
-		// found an enemy
-		ent->enemy = t;
-		break;
-	}
-}
-
-
-void miscGunnerThink( gentity_t *ent ) {
-	gentity_t   *truck, *gun, *enemy;
-	vec3_t vec, trang, gspot, gang;
-	vec3_t fwd, r, u;
-	qboolean fire = qfalse;
-	float yawspeed, diff;
-	vec3_t dang;
-	int i;
-
-	// find the entities
-	gun = &g_entities[ent->mg42BaseEnt];
-	truck = &g_entities[gun->mg42BaseEnt];
-
-	// calculate our position based on that of the truck and gun angles
-	BG_EvaluateTrajectory( &truck->s.apos, level.time, trang );
-	AngleVectors( trang, fwd, r, u );
-	BG_EvaluateTrajectory( &truck->s.pos, level.time, gspot );
-	VectorMA( gspot, ent->dl_color[0], fwd, gspot );
-	VectorMA( gspot, -ent->dl_color[1], r, gspot );
-	VectorMA( gspot, ent->dl_color[2], u, gspot );
-	G_SetOrigin( ent, gspot );
-	G_SetOrigin( gun, gspot );
-
-	// calculate our facing angles
-	//VectorAdd( trang, gun->r.currentAngles, gang );
-	if ( !gun->s.density ) {
-		VectorCopy( trang, gang );
-	} else {
-		BG_EvaluateTrajectory( &gun->s.apos, level.time, gang );
-	}
-
-	// look for an enemy
-	if ( ent->enemy ) {
-		if ( ent->enemy->health <= 0 ) {
-			ent->enemy = NULL;
-		} else if ( AICast_VisibleFromPos( ent->r.currentOrigin, ent->s.number, ent->enemy->r.currentOrigin, ent->enemy->s.number, qfalse ) ) {
-			fire = qtrue;
-		}
-	}
-
-	if ( !fire ) {
-		miscGunnerEnemyScan( ent, trang );
-		if ( ent->enemy ) {
-			fire = qtrue;
-
-			// if we have just found our first enemy, release us from the "fixed tag" angles
-			// so we can track them
-			if ( !gun->s.density ) {
-				gun->s.density = 1;
-				// start facing the same direct, so we don't snap to a different angle immediately
-				BG_EvaluateTrajectory( &truck->s.apos, level.time, ent->s.angles );
-				VectorCopy( gun->s.angles, gun->s.apos.trBase );
-				gun->s.apos.trTime = level.time;
-				gun->s.apos.trDuration = 0;
-				gun->s.apos.trType = TR_STATIONARY;
-				VectorClear( gun->s.apos.trDelta );
-			}
-		}
-	}
-
-	// third, attack that enemy if possible
-	if ( fire ) {
-
-		// get the enemy
-		enemy = ent->enemy;
-
-		// rotate to them
-		VectorSubtract( enemy->r.currentOrigin, gun->r.currentOrigin, vec );
-		vectoangles( vec, gun->TargetAngles );
-		VectorCopy( gun->TargetAngles, dang );
-		for ( i = 0; i < 3; i++ ) {
-			dang[i] = AngleNormalize180( dang[i] );
-		}
-
-		// restrict vertical range
-		if ( dang[0] < 0 && fabs( dang[0] ) > ( gun->varc / 2 ) ) {
-			if ( dang[0] < 0 ) {
-				dang[0] = -( gun->varc / 2 );
-			} else {
-				dang[0] =  ( gun->varc / 2 );
-			}
-		}
-
-		// dang is now the ideal angles, restrict movement by speed
-		yawspeed = 60;
-		for ( i = 0; i < 3; i++ ) {
-			BG_EvaluateTrajectory( &gun->s.apos, level.time, gun->r.currentAngles );
-			diff = AngleDifference( dang[i], gun->r.currentAngles[i] );
-			if ( fabs( diff ) > ( yawspeed * ( (float)FRAMETIME / 1000.0 ) ) ) {
-				if ( diff > 0 ) {
-					dang[i] = AngleMod( gun->r.currentAngles[i] + ( yawspeed * ( (float)FRAMETIME / 1000.0 ) ) );
-				} else {
-					dang[i] = AngleMod( gun->r.currentAngles[i] - ( yawspeed * ( (float)FRAMETIME / 1000.0 ) ) );
-				}
-			}
-		}
-
-		// move to the position over the next frame
-		VectorSubtract( dang, gun->r.currentAngles, gun->s.apos.trDelta );
-		for ( i = 0; i < 3; i++ ) {
-			gun->s.apos.trDelta[i] = AngleNormalize180( gun->s.apos.trDelta[i] );
-		}
-		VectorCopy( gun->r.currentAngles, gun->s.apos.trBase );
-		VectorScale( gun->s.apos.trDelta, 1000 / 50, gun->s.apos.trDelta );
-		gun->s.apos.trTime = level.time;
-		gun->s.apos.trType = TR_LINEAR_STOP;
-		gun->s.apos.trDuration = 50;
-
-		// if we are facing them, fire
-		if ( fabs( AngleNormalize180( gun->r.currentAngles[YAW] - gun->TargetAngles[YAW] ) ) < 10 ) {
-			AngleVectors( gun->r.currentAngles, forward, right, up );
-			VectorCopy( gspot, muzzle );
-
-			VectorMA( muzzle, 16, forward, muzzle );
-			VectorMA( muzzle, 16, up, muzzle );
-
-			// snap to integer coordinates for more efficient network bandwidth usage
-			SnapVector( muzzle );
-
-			if ( gun->damage ) {
-				Fire_Lead( gun, gun, MG42_SPREAD / gun->accuracy, gun->damage );
-			} else {
-				Fire_Lead( gun, gun, MG42_SPREAD / gun->accuracy, MG42_DAMAGE_AI );
-			}
-		}
-	}
-
-	ent->think = miscGunnerThink;
-	ent->nextthink = level.time + 50;
-}
-
-void miscGunnerSpawn( gentity_t *ent ) {
-	gentity_t *sp, *veh;
-
-	veh = G_Find( NULL, FOFS( targetname ), ent->target );
-	if ( !veh ) {
-		G_Error( "can't find vehicle with targetname \"%s\" for mounted gunner", ent->target );
-	}
-
-	// create the ring (base)
-	sp = G_Spawn();
-	sp->classname = "misc_gunner_ring";
-	sp->r.contents = 0;
-	sp->s.eType = ET_GENERAL;
-	sp->s.modelindex = G_ModelIndex( "models/mapobjects/weapons/turret_c.md3" );
-	sp->tagParent = veh;
-	sp->tagName = "tag_ring";    // tag to connect to
-	G_ProcessTagConnect( sp );
-	trap_LinkEntity( sp );
-
-	// create the gun
-	sp = G_Spawn();
-	sp->classname = "misc_gunner_gun";
-	sp->r.contents = 0;
-	sp->s.eType = ET_GENERAL;
-	sp->s.modelindex = G_ModelIndex( "models/mapobjects/weapons/turret_a.md3" );
-	sp->tagParent = veh;
-	sp->tagName = "tag_rider";   // tag to connect to
-	G_ProcessTagConnect( sp );
-	trap_LinkEntity( sp );
-
-	sp->mg42BaseEnt = veh->s.number;
-	sp->varc = ent->varc;
-	sp->health = ent->health;
-	sp->accuracy = ent->accuracy;
-	sp->damage = ent->damage;
-
-	// setup the gunner ready for action
-	sp->r.contents = 0; // fixme, make damagable so we can shoot them
-	sp->s.eType = ET_GENERAL;
-	ent->s.modelindex = G_ModelIndex( "models/mapobjects/weapons/turret_b.md3" );
-	ent->tagParent = sp;
-	ent->tagName = "tag_hand";   // tag to connect to
-	G_ProcessTagConnect( ent );
-	trap_LinkEntity( ent );
-
-	ent->mg42BaseEnt = sp->s.number;
-
-	// start us thinking
-	ent->think = miscGunnerThink;
-	ent->nextthink = level.time + 50;
-}
-
-void miscGunnerTriggerSpawn( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
-	miscGunnerSpawn( ent );
-}
-
-void SP_misc_mounted_gunner( gentity_t *self ) {
-	char        *damage;
-	char        *accuracy;
-
-//	if (VectorCompare(vec3_origin, self->dl_color)) {
-	if ( VectorCompare( vec3_origin, self->rotate ) ) {
-		G_Error( "misc_mounted_gunner requires an offset position (color field)\n" );
-	}
-	if ( !self->delay ) {
-		G_Error( "misc_mounted_gunner requires an offset distance from gun mount (delay field)\n" );
-	}
-
-	if ( !self->harc ) {
-		self->harc = 115;
-	} else
-	{
-		if ( self->harc < 45 ) {
-			self->harc = 45;
-		}
-	}
-
-	if ( !self->varc ) {
-		self->varc = 90.0;
-	}
-
-	if ( !self->health ) {
-		self->health = 100;
-	}
-
-	if ( !self->radius ) {
-		self->radius = 4096;
-	}
-
-	snd_noammo = G_SoundIndex( "sound/weapons/noammo.wav" );
-
-	if ( G_SpawnString( "damage", "0", &damage ) ) {
-		self->damage = atoi( damage );
-	}
-
-	G_SpawnString( "accuracy", "1.0", &accuracy );
-
-	self->accuracy = atof( accuracy );
-
-	if ( !self->accuracy ) {
-		self->accuracy = 1;
-	}
-
-	// we are idle at this point
-	self->enemy = NULL;
-
-	if ( self->spawnflags & 1 ) {     // TRIGGER_SPAWN
-		self->use = miscGunnerTriggerSpawn;
-	} else {
-		// delay the actual spawning, so we are sure everything else exists
-		self->think = miscGunnerSpawn;
-		self->nextthink = level.time + FRAMETIME;
-	}
-}
 
 void firetrail_die( gentity_t *ent ) {
 	G_FreeEntity( ent );

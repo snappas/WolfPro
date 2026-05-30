@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
+#include "rtcwbot_interface.h"
 
 // g_client.c -- client functions that don't happen every frame
 
@@ -344,7 +345,9 @@ void CopyToBodyQue( gentity_t *ent ) {
 	body = level.bodyQue[ level.bodyQueIndex ];
 	level.bodyQueIndex = ( level.bodyQueIndex + 1 ) % BODY_QUEUE_SIZE;
 
-	trap_UnlinkEntity( body );
+	if(!ent->r.svFlags & SVF_BOT){
+		trap_UnlinkEntity( body );
+	}
 
 	body->s = ent->s;
 	body->s.eFlags = EF_DEAD;       // clear EF_TALK, etc
@@ -466,7 +469,14 @@ void limbo( gentity_t *ent, qboolean makeCorpse ) {
 		// dhm
 
 		ent->client->ps.pm_flags |= PMF_LIMBO;
-		ent->client->ps.pm_flags |= PMF_FOLLOW;
+
+		if ( !(ent->r.svFlags & SVF_BOT) ) {
+			ent->client->ps.pm_flags |= PMF_FOLLOW;
+		}
+
+		if ( !ent->client->sess.botSuicidePersist || g_gamestate.integer != GS_PLAYING ) {
+			ent->client->sess.botSuicide = qfalse;
+		}
 
 		if ( makeCorpse ) {
 			CopyToBodyQue( ent ); // make a nice looking corpse
@@ -486,15 +496,22 @@ void limbo( gentity_t *ent, qboolean makeCorpse ) {
 			TossClientItems( ent );
 		}
 
-		ent->client->sess.spectatorClient = startclient;
-		Cmd_FollowCycle_f( ent,1 ); // get fresh spectatorClient
-
-		if ( ent->client->sess.spectatorClient == startclient ) {
-			// No one to follow, so just stay put
+		if ( ent->r.svFlags & SVF_BOT ) {
+			ent->client->sess.spectatorClient = ent->client->ps.clientNum;
 			ent->client->sess.spectatorState = SPECTATOR_FREE;
-		} else {
-			ent->client->sess.spectatorState = SPECTATOR_FOLLOW;
+		}else{
+			ent->client->sess.spectatorClient = startclient;
+			Cmd_FollowCycle_f( ent,1 ); // get fresh spectatorClient
+
+			if ( ent->client->sess.spectatorClient == startclient ) {
+				// No one to follow, so just stay put
+				ent->client->sess.spectatorState = SPECTATOR_FREE;
+			} else {
+				ent->client->sess.spectatorState = SPECTATOR_FOLLOW;
+			}
 		}
+
+		
 
 //		ClientUserinfoChanged( ent->client - level.clients );		// NERVE - SMF - don't do this
 		if ( ent->client->sess.sessionTeam == TEAM_RED ) {
@@ -829,13 +846,18 @@ void AddMedicTeamBonus(gclient_t* client)
 }
 
 
-void SetWolfSpawnWeapons( gclient_t *client ) {
+void SetWolfSpawnWeapons( gentity_t *ent ) {
 
+	gclient_t *client = ent->client;
 	int pc = client->sess.playerType;
 	int starthealth = 100,i,numMedics = 0;   // JPW NERVE
 
 	if ( client->sess.sessionTeam == TEAM_SPECTATOR ) {
 		return;
+	}
+
+	if(g_OmniBotEnable.integer){
+		Bot_Event_ResetWeapons( client->ps.clientNum );
 	}
 
 	// Reset special weapon time
@@ -1162,6 +1184,14 @@ void SetWolfSpawnWeapons( gclient_t *client ) {
 		}
 	}
 	// jpw
+
+	if(g_OmniBotEnable.integer){
+		for(i = 0; i < WP_NUM_WEAPONS; i++){
+			if(COM_BitCheck(client->ps.weapons, i)){
+				Bot_Event_AddWeapon( client->ps.clientNum, Bot_WeaponGameToBot( i ) );
+			}
+		}
+	}
 }
 // dhm - end
 
@@ -1745,23 +1775,20 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	if ( isBot ) {
 		ent->r.svFlags |= SVF_BOT;
 		ent->inuse = qtrue;
-		if ( !G_BotConnect( clientNum, !firstTime ) ) {
-			return "BotConnectfailed";
-		}
 	}
 
 	// get and distribute relevent paramters
 	G_LogPrintf( "ClientConnect: %i\n", clientNum );
 	ClientUserinfoChanged( clientNum );
 
+	if(g_OmniBotEnable.integer){
+		Bot_Event_ClientConnected( clientNum, isBot );
+	}
+
 	// don't do the "xxx connected" messages if they were caried over from previous level
 	if ( firstTime ) {
-		// Ridah
-		if ( !(ent->r.svFlags & SVF_CASTAI) ) {
-			// done.
-			trap_SendServerCommand( -1, va( "netnameprint \"[lof]%s" S_COLOR_WHITE " [lon]connected\n\"", client->pers.netname ) );
-			trap_SendServerCommand( -1, va( "usernameprint \"[lof]%s" S_COLOR_WHITE " [lon]connected\n\"", client->pers.username ) );
-		}
+		trap_SendServerCommand( -1, va( "netnameprint \"[lof]%s" S_COLOR_WHITE " [lon]connected\n\"", client->pers.netname ) );
+		trap_SendServerCommand( -1, va( "usernameprint \"[lof]%s" S_COLOR_WHITE " [lon]connected\n\"", client->pers.username ) );
 	}
 
 	// count current clients and rank for scoreboard
@@ -1790,13 +1817,6 @@ void ClientBegin( int clientNum ) {
 	int spawn_count;                // DHM - Nerve
 
 	ent = g_entities + clientNum;
-
-	if ( ent->botDelayBegin ) {
-		G_QueueBotBegin( clientNum );
-		ent->botDelayBegin = qfalse;
-		return;
-	}
-
 	client = level.clients + clientNum;
 
 	if ( ent->r.linked ) {
@@ -1834,6 +1854,12 @@ void ClientBegin( int clientNum ) {
 	client->pers.complaintClient = -1;
 	client->pers.complaintEndTime = -1;
 
+	//clear stats? save across reconnect
+	//CS: make sure this isn't set
+	client->sess.botSuicide = qfalse;
+	client->sess.botSuicidePersist = qfalse;
+	client->sess.botPush = ent->r.svFlags & SVF_BOT ? qtrue : qfalse;
+
 	// locate ent at a spawn point
 	ClientSpawn( ent, qfalse );
 
@@ -1857,8 +1883,7 @@ void ClientBegin( int clientNum ) {
 
 	// DHM - Nerve :: Start players in limbo mode if they change teams during the match
 	if ( g_gametype.integer >= GT_WOLF && client->sess.sessionTeam != TEAM_SPECTATOR
-		 && (((g_tournament.integer) && ( level.time - client->pers.connectTime ) > 1000)
-         || ( level.time - client->pers.connectTime ) > 6000)) {
+		 && ( level.time - level.startTime > FRAMETIME * GAME_INIT_FRAMES ) ) {
 		ent->client->ps.pm_type = PM_DEAD;
 		ent->r.contents = CONTENTS_CORPSE;
 		ent->health = 0;
@@ -1871,22 +1896,6 @@ void ClientBegin( int clientNum ) {
 		limbo( ent, qfalse );
 	}
 
-	// Ridah, trigger a spawn event
-
-	if ( client->sess.sessionTeam != TEAM_SPECTATOR ) {
-		// send event
-		// DHM - Nerve :: Add back if we decide to have a spawn effect
-		//tent = G_TempEntity( ent->client->ps.origin, EV_PLAYER_TELEPORT_IN );
-		//tent->s.clientNum = ent->s.clientNum;
-
-		// if ( g_gametype.integer != GT_TOURNAMENT ) {
-		// 	// Ridah
-		// 	if ( !(ent->r.svFlags & SVF_CASTAI) ) {
-		// 		// done.
-		// 		trap_SendServerCommand( -1, va( "print \"[lof]%s" S_COLOR_WHITE " [lon]entered the game\n\"", client->pers.netname ) );
-		// 	}
-		// }
-	}
 	G_LogPrintf( "ClientBegin: %i\n", clientNum );
 
 	// Xian - Check for maxlives enforcement
@@ -2039,17 +2048,10 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	ent->client = &level.clients[index];
 	ent->takedamage = qtrue;
 	ent->inuse = qtrue;
-	if ( !( ent->r.svFlags & SVF_CASTAI ) ) {
-		ent->classname = "player";
-	}
-	ent->r.contents = CONTENTS_BODY;
+	ent->classname = "player";
 
-	// RF, AI should be clipped by monsterclip brushes
-	if ( ent->r.svFlags & SVF_CASTAI ) {
-		ent->clipmask = MASK_PLAYERSOLID | CONTENTS_MONSTERCLIP;
-	} else {
-		ent->clipmask = MASK_PLAYERSOLID;
-	}
+	ent->r.contents = CONTENTS_BODY;
+	ent->clipmask = MASK_PLAYERSOLID;
 
 	// DHM - Nerve :: Init to -1 on first spawn;
 	if ( !revived ) {
@@ -2131,7 +2133,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 		}
 
 		// End Xian
-		SetWolfSpawnWeapons( client ); // JPW NERVE -- increases stats[STAT_MAX_HEALTH] based on # of medics in game
+		SetWolfSpawnWeapons( ent ); // JPW NERVE -- increases stats[STAT_MAX_HEALTH] based on # of medics in game
 	}
 	// dhm - end
 
@@ -2223,6 +2225,10 @@ void ClientDisconnect( int clientNum ) {
 	ent = g_entities + clientNum;
 	if ( !ent->client ) {
 		return;
+	}
+
+	if(g_OmniBotEnable.integer){
+		Bot_Event_ClientDisConnected( clientNum );
 	}
 
 	// stop any following clients
@@ -2338,11 +2344,6 @@ void ClientDisconnect( int clientNum ) {
 	CalculateRanks();
 
 	HandleEmptyTeams();
-
-	if ( ent->r.svFlags & SVF_BOT ) {
-		BotAIShutdownClient( clientNum );
-	}
-
 	
 }
 

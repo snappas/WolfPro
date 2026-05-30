@@ -306,35 +306,6 @@ void SP_props_box_48( gentity_t *self );
 void SP_props_box_64( gentity_t *self );
 // END JOSEPH
 
-// Ridah
-void SP_ai_soldier( gentity_t *ent );
-void SP_ai_american( gentity_t *ent );
-void SP_ai_zombie( gentity_t *ent );
-void SP_ai_warzombie( gentity_t *ent );
-void SP_ai_femzombie( gentity_t *ent );
-void SP_ai_undead( gentity_t *ent );
-void SP_ai_marker( gentity_t *ent );
-void SP_ai_effect( gentity_t *ent );
-void SP_ai_trigger( gentity_t *ent );
-void SP_ai_venom( gentity_t *ent );
-void SP_ai_loper( gentity_t *ent );
-void SP_ai_sealoper( gentity_t *ent );
-void SP_ai_boss_helga( gentity_t *ent );
-void SP_ai_boss_heinrich( gentity_t *ent ); //----(SA)	added
-void SP_ai_eliteguard( gentity_t *ent );
-void SP_ai_stimsoldier_dual( gentity_t *ent );
-void SP_ai_stimsoldier_rocket( gentity_t *ent );
-void SP_ai_stimsoldier_tesla( gentity_t *ent );
-void SP_ai_supersoldier( gentity_t *ent );
-void SP_ai_blackguard( gentity_t *ent );
-void SP_ai_protosoldier( gentity_t *ent );
-void SP_ai_rejectxcreature( gentity_t *ent );
-void SP_ai_frogman( gentity_t *ent );
-void SP_ai_partisan( gentity_t *ent );
-void SP_ai_civilian( gentity_t *ent );
-void SP_ai_chimp( gentity_t *ent ); //----(SA)	added
-// done.
-
 // Rafael particles
 void SP_Snow( gentity_t *ent );
 void SP_target_smoke( gentity_t *ent );
@@ -427,7 +398,6 @@ void SP_script_model_med( gentity_t *ent );
 void SP_script_mover( gentity_t *ent );
 void SP_script_multiplayer( gentity_t *ent );         // DHM - Nerve
 
-void SP_misc_mounted_gunner( gentity_t *ent );
 void SP_props_footlocker( gentity_t *self );
 void SP_misc_firetrails( gentity_t *ent );
 void SP_trigger_deathCheck( gentity_t *ent );
@@ -546,7 +516,6 @@ spawn_t spawns[] = {
 	{"misc_mg42", SP_mg42},
 	// done.
 	{"misc_flak", SP_misc_flak},
-	{"misc_mounted_gunner",SP_misc_mounted_gunner},
 	{"misc_firetrails", SP_misc_firetrails},
 
 	{"shooter_rocket", SP_shooter_rocket},
@@ -577,37 +546,6 @@ spawn_t spawns[] = {
 // jpw
 
 	{"team_WOLF_checkpoint", SP_team_WOLF_checkpoint},       // DHM - Nerve
-
-	// Ridah
-	{"ai_soldier", SP_ai_soldier},
-	{"ai_american", SP_ai_american},
-	{"ai_zombie", SP_ai_zombie},
-	{"ai_warzombie", SP_ai_warzombie},
-	{"ai_femzombie", SP_ai_femzombie},
-	{"ai_undead", SP_ai_undead},
-	{"ai_venom", SP_ai_venom},
-	{"ai_loper", SP_ai_loper},
-	{"ai_sealoper", SP_ai_sealoper},
-	{"ai_boss_helga", SP_ai_boss_helga},
-	{"ai_boss_heinrich", SP_ai_boss_heinrich},   //----(SA)
-	{"ai_eliteguard", SP_ai_eliteguard},
-	{"ai_stimsoldier_dual", SP_ai_stimsoldier_dual},
-	{"ai_stimsoldier_rocket", SP_ai_stimsoldier_rocket},
-	{"ai_stimsoldier_tesla", SP_ai_stimsoldier_tesla},
-	{"ai_supersoldier", SP_ai_supersoldier},
-	{"ai_protosoldier", SP_ai_protosoldier},
-	{"ai_rejectxcreature", SP_ai_rejectxcreature},
-	{"ai_frogman", SP_ai_frogman},
-	{"ai_blackguard", SP_ai_blackguard},
-	{"ai_partisan", SP_ai_partisan},
-	{"ai_civilian", SP_ai_civilian},
-	{"ai_chimp", SP_ai_chimp},   //----(SA)	added
-
-
-	{"ai_marker", SP_ai_marker},
-	{"ai_effect", SP_ai_effect},
-	{"ai_trigger", SP_ai_trigger},
-	// done.
 
 	// Rafael particles
 	{"misc_snow256", SP_Snow},
@@ -889,6 +827,12 @@ void G_SpawnGEntityFromSpawnVars( void ) {
 		{
 			ent->allowteams |= ALLOW_ALLIED_TEAM;
 		}
+	}
+
+	if ( ent->targetname && *ent->targetname ) {
+		ent->targetnamehash = BG_StringHashValue( ent->targetname );
+	} else {
+		ent->targetnamehash = -1;
 	}
 
 	// move editor origin to pos

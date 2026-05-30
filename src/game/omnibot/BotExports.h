@@ -3,10 +3,10 @@
 #ifndef __BOTEXPORTS_H__
 #define __BOTEXPORTS_H__
 
-#include "Common/Functions_Bot.h"
-#include "Common/Omni-Bot_Types.h"
-#include "Common/Omni-Bot_Events.h"
-#include "Common/IEngineInterface.h"
+#include "Functions_Bot.h"
+#include "Omni-Bot_Types.h"
+#include "Omni-Bot_Events.h"
+#include "IEngineInterface.h"
 
 //////////////////////////////////////////////////////////////////////////
 // Export the function on platforms that require it.

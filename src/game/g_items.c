@@ -39,7 +39,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
-
+#include "rtcwbot_interface.h"
 
 
 #define RESPAWN_SP          -1
@@ -410,6 +410,11 @@ int Pickup_Weapon( gentity_t *ent, gentity_t *other ) {
 			}
 		}
 
+		//omni-bot event
+		if ( g_OmniBotEnable.integer && ent->parent ) {
+			Bot_Event_RecievedAmmo( other - g_entities, ent->parent );
+		}
+
 		// everybody likes grenades -- abuse weapon var as grenade type and i as max # grenades class can carry
 		i = BG_GrenadesForClass( other->client->ps.stats[STAT_PLAYER_CLASS] );
 
@@ -517,6 +522,10 @@ int Pickup_Weapon( gentity_t *ent, gentity_t *other ) {
 		return g_weaponTeamRespawn.integer;
 	}
 
+	if(g_OmniBotEnable.integer){
+		Bot_Event_AddWeapon( other->client->ps.clientNum, Bot_WeaponGameToBot( ent->item->giTag ) );
+	}
+
 	return g_weaponRespawn.integer;
 }
 
@@ -547,6 +556,11 @@ int Pickup_Health( gentity_t *ent, gentity_t *other ) {
 	}
 
 // jpw
+
+	//omni-bot event
+	if ( g_OmniBotEnable.integer && ent->parent ) {
+		Bot_Event_Healed( other - g_entities, ent->parent );
+	}
 
 
 
@@ -912,6 +926,7 @@ gentity_t *LaunchItem( gitem_t *item, vec3_t origin, vec3_t velocity, int ownerN
 	dropped->s.eFlags |= EF_BOUNCE_HALF;
 
 	if ( item->giType == IT_TEAM ) { // Special case for CTF flags
+		dropped->s.otherEntityNum =	g_entities[ownerNum].client->flagParent;	// store the entitynum of our original flag spawner
 		dropped->think = Team_DroppedFlagThink;
 		dropped->nextthink = level.time + 30000;
 	} else { // auto-remove after 30 seconds

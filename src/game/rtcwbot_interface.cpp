@@ -8,7 +8,7 @@
 
 extern "C"
 {
-#include "g_rtcwbot_interface.h"
+#include "rtcwbot_interface.h"
 };
 
 #include "omnibot/BotExports.h"
@@ -815,7 +815,7 @@ static int _GetEntityClass( gentity_t *_ent ) {
 	}
 	case ET_PLAYER:
 	{
-		if ( !_ent->client || ( _ent->entstate == STATE_INVISIBLE ) ||
+		if ( !_ent->client ||
 			 ( _ent->client->sess.sessionTeam != TEAM_RED &&
 			   _ent->client->sess.sessionTeam != TEAM_BLUE ) ) {
 			return ENT_CLASS_GENERIC_SPECTATOR;
@@ -851,11 +851,7 @@ static int _GetEntityClass( gentity_t *_ent ) {
 		case WP_PANZERFAUST:
 			return RTCW_CLASSEX_ROCKET;
 		case WP_SMOKE_GRENADE:
-			// smoke grenade without server flags is an a/s cannister ...
-			if ( !(_ent->r.svFlags & SVF_SMOKEGRENADE) ) {
-				return RTCW_CLASSEX_AIRSTRIKE;
-			}
-			break;
+			return RTCW_CLASSEX_AIRSTRIKE;
 		case WP_SMOKETRAIL:
 		case WP_ARTY:
 			// cs: the airstrike bombs are also wp_arty. added aiName so a new client wouldn't
@@ -917,8 +913,7 @@ static int _GetEntityClass( gentity_t *_ent ) {
             }*/
 	case ET_MG42_BARREL:
 	{
-		if ( ( _ent->health > 0 ) &&
-			 ( _ent->entstate != STATE_INVISIBLE ) ) {
+		if ( ( _ent->health > 0 )) {
 			return RTCW_CLASSEX_MG42MOUNT;
 		}
 		break;
@@ -1217,7 +1212,7 @@ obResult ChangeTeam( int _client, int _newteam, const MessageHelper *_data ) {
 		}
 	}
 
-	SetTeam( bot, teamName, qfalse );
+	SetTeam( bot, teamName);
 	//ReTransmitWeapons(bot);
 	return Success;
 }
@@ -1667,7 +1662,7 @@ obResult GetEntityCategory( const GameEntity _ent, BitFlag32 &_category ) {
 	}
 	case ET_PLAYER:
 	{
-		if ( !pEnt->client || ( pEnt->entstate == STATE_INVISIBLE ) ||
+		if ( !pEnt->client   ||
 			 ( pEnt->client->ps.pm_type == PM_SPECTATOR ) ||
 			 ( pEnt->client->sess.sessionTeam != TEAM_RED &&
 			   pEnt->client->sess.sessionTeam != TEAM_BLUE ) ) {
@@ -1799,8 +1794,7 @@ obResult GetEntityCategory( const GameEntity _ent, BitFlag32 &_category ) {
 	    }*/
 	case ET_MG42_BARREL:
 	{
-		if ( ( pEnt->health > 0 ) &&
-			 ( pEnt->entstate != STATE_INVISIBLE ) ) {
+		if ( ( pEnt->health > 0 ) ) {
 			_category.SetFlag( ENT_CAT_MOUNTEDWEAPON );
 			_category.SetFlag( ENT_CAT_SHOOTABLE );
 		} else {
@@ -1893,7 +1887,7 @@ obResult GetEntityFlags( const GameEntity _ent, BitFlag64 &_flags ) {
 			}
 		}
 
-		if ( pEnt->poisoned ) {
+		if ( 0 /*pEnt->poisoned*/ ) {
 			_flags.SetFlag( RTCW_ENT_FLAG_POISONED );
 		}
 
@@ -1990,8 +1984,7 @@ obResult GetEntityFlags( const GameEntity _ent, BitFlag64 &_flags ) {
 		}
 		case ET_MG42_BARREL:
 		{
-			if ( ( pEnt->health < 0 ) ||
-				 ( pEnt->entstate == STATE_INVISIBLE ) ) {
+			if ( ( pEnt->health < 0 ) ) {
 				_flags.SetFlag( ENT_FLAG_DEAD );
 			}
 
@@ -2021,7 +2014,7 @@ obResult GetEntityPowerups( const GameEntity _ent, BitFlag64 &_flags ) {
 		if ( pEnt->client->ps.powerups[PW_INVULNERABLE] || ( pEnt->flags & FL_GODMODE ) ) {
 			_flags.SetFlag( PWR_INVINCIBLE );
 		}
-		if ( pEnt->client->ps.powerups[PW_FIRE] ) {
+		if ( 0 /*pEnt->client->ps.powerups[PW_FIRE]*/ ) {
 			_flags.SetFlag( RTCW_PWR_FIRE );
 		}
 		if ( pEnt->client->ps.powerups[PW_ELECTRIC] ) {
@@ -2831,37 +2824,37 @@ obResult InterfaceSendMessage( const MessageHelper &_data, const GameEntity _ent
 		OB_GETMSG( Msg_EntityStat );
 		if ( pMsg && pEnt && pEnt->client ) {
 			if ( !strcmp( pMsg->m_StatName, "kills" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.kills );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.kills );
 			} else if ( !strcmp( pMsg->m_StatName, "deaths" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.deaths );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.deaths );
 			} else if ( !strcmp( pMsg->m_StatName, "gibs" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.gibs );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.gibs );
 			} else if ( !strcmp( pMsg->m_StatName, "shots" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.acc_shots );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.acc_shots );
 			} else if ( !strcmp( pMsg->m_StatName, "hits" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.acc_hits );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.acc_hits );
 			} else if ( !strcmp( pMsg->m_StatName, "headshots" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.headshots );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.headshots );
 			} else if ( !strcmp( pMsg->m_StatName, "ammo" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.ammoPacks );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.ammo_given );
 			} else if ( !strcmp( pMsg->m_StatName, "health" ) ) {
-				pMsg->m_Result = obUserData( pEnt->client->pers.medPacks );
+				pMsg->m_Result = obUserData( pEnt->client->sess.stats.med_given );
 			} else if ( !strcmp( pMsg->m_StatName, "accuracy" ) ) {
 				float acc = 0.0f;
-				if ( pEnt->client->pers.acc_shots > 0 ) {
-					acc = ( (float)pEnt->client->pers.acc_hits / (float)pEnt->client->pers.acc_shots ) * 100.0f;
+				if ( pEnt->client->sess.stats.acc_shots > 0 ) {
+					acc = ( (float)pEnt->client->sess.stats.acc_hits / (float)pEnt->client->sess.stats.acc_shots ) * 100.0f;
 				}
 				pMsg->m_Result = obUserData( acc );
 			} else if ( !strcmp( pMsg->m_StatName, "hspercent" ) )        {
 				float p = 0.0f;
-				if ( pEnt->client->pers.headshots > 0 ) {
-					p = ( (float)pEnt->client->pers.headshots / (float)pEnt->client->pers.acc_hits ) * 100.0f;
+				if ( pEnt->client->sess.stats.headshots > 0 ) {
+					p = ( (float)pEnt->client->sess.stats.headshots / (float)pEnt->client->sess.stats.acc_hits ) * 100.0f;
 				}
 				pMsg->m_Result = obUserData( p );
 			} else if ( !strcmp( pMsg->m_StatName, "killratio" ) )        {
-				float kr = pEnt->client->pers.kills;
-				if ( pEnt->client->pers.deaths > 0 ) {
-					kr = (float)pEnt->client->pers.kills / (float)pEnt->client->pers.deaths;
+				float kr = pEnt->client->sess.stats.kills;
+				if ( pEnt->client->sess.stats.deaths > 0 ) {
+					kr = (float)pEnt->client->sess.stats.kills / (float)pEnt->client->sess.stats.deaths;
 				}
 				pMsg->m_Result = obUserData( kr );
 			} else if ( !strcmp( pMsg->m_StatName, "respawns_left" ) ) {
@@ -2967,12 +2960,10 @@ obResult InterfaceSendMessage( const MessageHelper &_data, const GameEntity _ent
 			} else if ( pEnt && pEnt->inuse && pEnt->client ) {
 				if ( pEnt->client->sess.sessionTeam == TEAM_RED ) {
 					pMsg->m_ReinforceTime = g_redlimbotime.integer -
-											( ( level.dwRedReinfOffset + level.time - level.startTime ) %
-											  g_redlimbotime.integer );
+											( (level.redReinfOffset + level.timeCurrent - level.startTime) % g_redlimbotime.integer);
 				} else if ( pEnt->client->sess.sessionTeam == TEAM_BLUE ) {
 					pMsg->m_ReinforceTime = g_bluelimbotime.integer -
-											( ( level.dwBlueReinfOffset + level.time - level.startTime ) %
-											  g_bluelimbotime.integer );
+											( (level.blueReinfOffset + level.timeCurrent - level.startTime) % g_bluelimbotime.integer);
 				}
 			}
 		}
@@ -2984,7 +2975,7 @@ obResult InterfaceSendMessage( const MessageHelper &_data, const GameEntity _ent
 		if ( pMsg ) {
 			gentity_t *pGunEntity = EntityFromHandle( pMsg->m_MG42Entity );
 			if ( pGunEntity && pGunEntity->inuse && pGunEntity->r.linked &&
-				 pGunEntity->entstate == STATE_DEFAULT ) {
+				 1 /*pGunEntity->entstate == STATE_DEFAULT*/ ) {
 				if ( pGunEntity->mg42BaseEnt != -1 ) {
 					pMsg->m_Health = g_entities[pGunEntity->mg42BaseEnt].health;
 				} else {
@@ -3032,7 +3023,7 @@ obResult InterfaceSendMessage( const MessageHelper &_data, const GameEntity _ent
 		if ( pMsg ) {
 			gentity_t *pGunEntity = EntityFromHandle( pMsg->m_MG42Entity );
 			if ( pEnt && pGunEntity && pGunEntity->inuse ) {
-				pMsg->m_Repairable = G_EmplacedGunIsRepairable( pGunEntity, pEnt ) == qtrue ? True : False;
+				pMsg->m_Repairable = /*G_EmplacedGunIsRepairable( pGunEntity, pEnt ) == qtrue ? True :*/ False;
 			} else {
 				pMsg->m_Repairable = False;
 			}
@@ -3075,8 +3066,8 @@ obResult InterfaceSendMessage( const MessageHelper &_data, const GameEntity _ent
 		if ( pMsg ) {
 			if ( pEnt && pEnt->inuse && pEnt->client ) {
 				if ( _data.GetMessageId() == RTCW_MSG_PICKWEAPON2 ) {
-					pEnt->client->sess.playerWeapon2 = _weaponBotToGame( pMsg->m_Selection );
-					pEnt->client->sess.latchPlayerWeapon2 = _weaponBotToGame( pMsg->m_Selection );
+					/*pEnt->client->sess.playerWeapon2 = _weaponBotToGame( pMsg->m_Selection );
+					pEnt->client->sess.latchPlayerWeapon2 = _weaponBotToGame( pMsg->m_Selection );*/
 				} else {
 					//CS: /kill 2 seconds before next spawn
 					if ( !( pEnt->client->ps.pm_flags & PMF_LIMBO ) && pEnt->client->sess.playerWeapon != _weaponBotToMpWeapon( pMsg->m_Selection ) ) {
@@ -3193,7 +3184,7 @@ obResult InterfaceSendMessage( const MessageHelper &_data, const GameEntity _ent
 		OB_GETMSG( RTCW_SendPM );
 		if ( pMsg ) {
 			if ( pEnt && pEnt->client ) {
-				G_PrivateMessage( pEnt, pMsg->m_TargetName, pMsg->m_Message, qtrue );
+				/*G_PrivateMessage( pEnt, pMsg->m_TargetName, pMsg->m_Message, qtrue );*/
 			}
 		}
 		break;
@@ -3601,7 +3592,7 @@ qboolean Bot_Util_CheckForSuicide( gentity_t *ent ) {
 		// Omni-bot: used for class changes, bot will /kill 2 seconds before spawn
 		if ( ent->client->sess.botSuicide == qtrue ) {
 			if ( ent->client->sess.sessionTeam == TEAM_RED && !ent->client->ps.powerups[PW_BLUEFLAG] ) {
-				if ( ( g_redlimbotime.integer - ( ( level.dwRedReinfOffset + level.time - level.startTime ) % g_redlimbotime.integer ) ) < 2000 ) {
+				if ( ( g_redlimbotime.integer - ( (level.redReinfOffset + level.timeCurrent - level.startTime) % g_redlimbotime.integer) ) < 2000 ) {
 					Cmd_Kill_f( ent );
 					if ( !ent->client->sess.botSuicidePersist || g_gamestate.integer != GS_PLAYING ) {
 						ent->client->sess.botSuicide = qfalse;
@@ -3610,7 +3601,7 @@ qboolean Bot_Util_CheckForSuicide( gentity_t *ent ) {
 					return qtrue;
 				}
 			} else if ( ent->client->sess.sessionTeam == TEAM_BLUE && !ent->client->ps.powerups[PW_REDFLAG] )      {
-				if ( ( g_bluelimbotime.integer - ( ( level.dwBlueReinfOffset + level.time - level.startTime ) % g_bluelimbotime.integer ) ) < 2000 ) {
+				if ( ( g_bluelimbotime.integer - ( (level.blueReinfOffset + level.timeCurrent - level.startTime) % g_bluelimbotime.integer) ) < 2000 ) {
 					Cmd_Kill_f( ent );
 					if ( !ent->client->sess.botSuicidePersist || g_gamestate.integer != GS_PLAYING ) {
 						ent->client->sess.botSuicide = qfalse;
@@ -3790,9 +3781,9 @@ void Bot_Event_ChatMessage( int _to, gentity_t *_source, int _type, const char *
 				//		case SAY_TEAMNL:
 				iMsg = PERCEPT_HEAR_TEAMCHATMSG;
 				break;
-			case PRIVATE_MESSAGE:
+			/*case PRIVATE_MESSAGE:
 				iMsg = PERCEPT_HEAR_PRIVCHATMSG;
-				break;
+				break;*/
 			}
 
 			Event_ChatMessage d;

@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
+#include "rtcwbot_interface.h"
 /*
 ==================
 DeathmatchScoreboardMessage
@@ -1854,9 +1855,7 @@ void Cmd_Activate_f( gentity_t *ent ) {
 					cl->pmext.centerangles[YAW] = AngleNormalize180( cl->pmext.centerangles[YAW] );
 					cl->pmext.centerangles[ROLL] = AngleNormalize180( cl->pmext.centerangles[ROLL] );
 
-					if ( !( ent->r.svFlags & SVF_CASTAI ) ) {
-						G_UseTargets( traceEnt, ent );   //----(SA)	added for Mike so mounting an MG42 can be a trigger event (let me know if there's any issues with this)
-					}
+					G_UseTargets( traceEnt, ent );   //----(SA)	added for Mike so mounting an MG42 can be a trigger event (let me know if there's any issues with this)
 				}
 			}
 		} else if ( ( ( Q_stricmp( traceEnt->classname, "func_door" ) == 0 ) || ( Q_stricmp( traceEnt->classname, "func_door_rotating" ) == 0 ) ) )           {
@@ -1889,186 +1888,6 @@ void Cmd_Activate_f( gentity_t *ent ) {
 		oldactivatetime = activatetime;
 	}
 }
-
-// Rafael WolfKick
-//===================
-//	Cmd_WolfKick
-//===================
-
-#define WOLFKICKDISTANCE    96
-int Cmd_WolfKick_f( gentity_t *ent ) {
-	trace_t tr;
-	vec3_t end;
-	gentity_t   *traceEnt;
-	vec3_t forward, right, up, offset;
-	gentity_t   *tent;
-	static int oldkicktime = 0;
-	int kicktime = level.time;
-	qboolean solidKick = qfalse;    // don't play "hit" sound on a trigger unless it's an func_invisible_user
-
-	int damage = 15;
-
-	// DHM - Nerve :: No kick in wolf multiplayer
-	if ( g_gametype.integer >= GT_WOLF ) {
-		return 0;
-	}
-
-	if ( ent->client->ps.leanf ) {
-		return 0;   // no kick when leaning
-
-	}
-	if ( oldkicktime > kicktime ) {
-		return ( 0 );
-	} else {
-		oldkicktime = kicktime + 1000;
-	}
-
-	// play the anim
-	BG_AnimScriptEvent( &ent->client->ps, ANIM_ET_KICK, qfalse, qtrue );
-
-	ent->client->ps.persistant[PERS_WOLFKICK] = 1;
-
-	AngleVectors( ent->client->ps.viewangles, forward, right, up );
-
-	CalcMuzzlePointForActivate( ent, forward, right, up, offset );
-
-	// note to self: we need to determine the usable distance for wolf
-	VectorMA( offset, WOLFKICKDISTANCE, forward, end );
-
-	trap_Trace( &tr, offset, NULL, NULL, end, ent->s.number, ( CONTENTS_SOLID | CONTENTS_BODY | CONTENTS_CORPSE | CONTENTS_TRIGGER ) );
-
-	if ( tr.surfaceFlags & SURF_NOIMPACT || tr.fraction == 1.0 ) {
-		tent = G_TempEntity( tr.endpos, EV_WOLFKICK_MISS );
-		tent->s.eventParm = ent->s.number;
-		return ( 1 );
-	}
-
-	traceEnt = &g_entities[ tr.entityNum ];
-
-	if ( !ent->melee ) { // because we dont want you to open a door with a prop
-		if ( ( Q_stricmp( traceEnt->classname, "func_door_rotating" ) == 0 )
-			 && ( traceEnt->s.apos.trType == TR_STATIONARY && traceEnt->s.pos.trType == TR_STATIONARY )
-			 && traceEnt->active == qfalse ) {
-			if ( traceEnt->key < 0 ) { // door force locked
-				//----(SA)	play kick "hit" sound
-				tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_WALL );
-				tent->s.otherEntityNum = ent->s.number;	\
-				//----(SA)	end
-
-				AICast_AudibleEvent( ent->s.clientNum, tr.endpos, HEAR_RANGE_DOOR_KICKLOCKED ); // "someone kicked a locked door near me!"
-
-				if ( traceEnt->soundPos3 ) {
-					G_AddEvent( traceEnt, EV_GENERAL_SOUND, traceEnt->soundPos3 );
-				} else {
-					G_AddEvent( traceEnt, EV_GENERAL_SOUND, G_SoundIndex( "sound/movers/doors/default_door_locked.wav" ) );
-				}
-				return 1;   //----(SA)	changed.  shows boot for locked doors
-			}
-
-			if ( traceEnt->key > 0 ) { // door requires key
-				gitem_t *item = BG_FindItemForKey( traceEnt->key, 0 );
-				if ( !( ent->client->ps.stats[STAT_KEYS] & ( 1 << item->giTag ) ) ) {
-					//----(SA)	play kick "hit" sound
-					tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_WALL );
-					tent->s.otherEntityNum = ent->s.number;	\
-					//----(SA)	end
-
-					AICast_AudibleEvent( ent->s.clientNum, tr.endpos, HEAR_RANGE_DOOR_KICKLOCKED ); // "someone kicked a locked door near me!"
-
-					// player does not have key
-					if ( traceEnt->soundPos3 ) {
-						G_AddEvent( traceEnt, EV_GENERAL_SOUND, traceEnt->soundPos3 );
-					} else {
-						G_AddEvent( traceEnt, EV_GENERAL_SOUND, G_SoundIndex( "sound/movers/doors/default_door_locked.wav" ) );
-					}
-					return 1;   //----(SA)	changed.  shows boot animation for locked doors
-				}
-			}
-
-			if ( traceEnt->teammaster && traceEnt->team && traceEnt != traceEnt->teammaster ) {
-				traceEnt->teammaster->active = qtrue;
-				traceEnt->teammaster->flags |= FL_KICKACTIVATE;
-				Use_BinaryMover( traceEnt->teammaster, ent, ent );
-				G_UseTargets( traceEnt->teammaster, ent );
-			} else
-			{
-				traceEnt->active = qtrue;
-				traceEnt->flags |= FL_KICKACTIVATE;
-				Use_BinaryMover( traceEnt, ent, ent );
-				G_UseTargets( traceEnt, ent );
-			}
-		} else if ( ( Q_stricmp( traceEnt->classname, "func_button" ) == 0 )
-					&& ( traceEnt->s.apos.trType == TR_STATIONARY && traceEnt->s.pos.trType == TR_STATIONARY )
-					&& traceEnt->active == qfalse ) {
-			Use_BinaryMover( traceEnt, ent, ent );
-			traceEnt->active = qtrue;
-
-		} else if ( !Q_stricmp( traceEnt->classname, "func_invisible_user" ) )     {
-			traceEnt->flags |= FL_KICKACTIVATE;     // so cell doors know they were kicked
-													// It doesn't hurt to pass this along since only ent use() funcs who care about it will check.
-													// However, it may become handy to put a "KICKABLE" or "NOTKICKABLE" flag on the invisible_user
-			traceEnt->use( traceEnt, ent, ent );
-			traceEnt->flags &= ~FL_KICKACTIVATE;    // reset
-
-			solidKick = qtrue;  //----(SA)
-		} else if ( !Q_stricmp( traceEnt->classname, "props_flippy_table" ) && traceEnt->use )       {
-			traceEnt->use( traceEnt, ent, ent );
-		}
-	}
-
-	// snap the endpos to integers, but nudged towards the line
-	SnapVectorTowards( tr.endpos, offset );
-
-	// send bullet impact
-	if ( traceEnt->takedamage && traceEnt->client ) {
-		tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_FLESH );
-		tent->s.eventParm = traceEnt->s.number;
-		if ( LogAccuracyHit( traceEnt, ent ) ) {
-			ent->client->ps.persistant[PERS_ACCURACY_HITS]++;
-		}
-	} else {
-		// Ridah, bullet impact should reflect off surface
-		vec3_t reflect;
-		float dot;
-
-		if ( traceEnt->r.contents >= 0 && ( traceEnt->r.contents & CONTENTS_TRIGGER ) && !solidKick ) {
-			tent = G_TempEntity( tr.endpos, EV_WOLFKICK_MISS ); // (SA) don't play the "hit" sound if you kick most triggers
-		} else {
-			tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_WALL );
-		}
-
-
-		dot = DotProduct( forward, tr.plane.normal );
-		VectorMA( forward, -2 * dot, tr.plane.normal, reflect );
-		VectorNormalize( reflect );
-
-		tent->s.eventParm = DirToByte( reflect );
-		// done.
-
-		if ( ent->melee ) {
-			ent->active = qfalse;
-			ent->melee->health = 0;
-		}
-	}
-
-	tent->s.otherEntityNum = ent->s.number;
-
-	// try to swing chair
-	if ( traceEnt->takedamage ) {
-
-		if ( ent->melee ) {
-			ent->active = qfalse;
-			ent->melee->health = 0;
-			ent->client->ps.eFlags &= ~EF_MELEE_ACTIVE;
-
-		}
-
-		G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, 0, MOD_KICKED );   //----(SA)	modified
-	}
-
-	return ( 1 );
-}
-// done
 
 
 // NERVE - SMF
@@ -2108,17 +1927,6 @@ void ClientDamage( gentity_t *clent, int entnum, int enemynum, int id ) {
 		if ( !( enemy->client->buttons & BUTTON_ATTACK ) ) {
 			break;
 		}
-		//if ( AICast_GetCastState( enemy->s.number )->lastWeaponFiredWeaponNum != WP_TESLA )
-		//	break;
-		//if ( AICast_GetCastState( enemy->s.number )->lastWeaponFired < level.time - 400 )
-		//	break;
-
-		if (    ( ent->aiCharacter == AICHAR_PROTOSOLDIER ) ||
-				( ent->aiCharacter == AICHAR_SUPERSOLDIER ) ||
-				( ent->aiCharacter == AICHAR_LOPER ) ||
-				( ent->aiCharacter >= AICHAR_STIMSOLDIER1 && ent->aiCharacter <= AICHAR_STIMSOLDIER3 ) ) {
-			break;
-		}
 
 		if ( ent->takedamage /*&& !AICast_NoFlameDamage(ent->s.number)*/ ) {
 			VectorSubtract( ent->r.currentOrigin, enemy->r.currentOrigin, vec );
@@ -2155,70 +1963,6 @@ void Cmd_ClientDamage_f( gentity_t *clent ) {
 	id = atoi( s );
 
 	ClientDamage( clent, entnum, enemynum, id );
-}
-
-/*
-==============
-Cmd_EntityCount_f
-==============
-*/
-#define AITEAM_NAZI     0
-#define AITEAM_ALLIES   1
-#define AITEAM_MONSTER  2
-void Cmd_EntityCount_f( gentity_t *ent ) {
-	if ( !g_cheats.integer ) {
-		return;
-	}
-
-	G_Printf( "entity count = %i\n", level.num_entities );
-
-	{
-		int kills[2];
-		int nazis[2];
-		int monsters[2];
-		int i;
-		gentity_t *ent;
-
-		// count kills
-		kills[0] = kills[1] = 0;
-		nazis[0] = nazis[1] = 0;
-		monsters[0] = monsters[1] = 0;
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			ent = &g_entities[i];
-
-			if ( !ent->inuse ) {
-				continue;
-			}
-
-			if ( !( ent->r.svFlags & SVF_CASTAI ) ) {
-				continue;
-			}
-
-			if ( ent->aiTeam == AITEAM_ALLIES ) {
-				continue;
-			}
-
-			kills[1]++;
-
-			if ( ent->health <= 0 ) {
-				kills[0]++;
-			}
-
-			if ( ent->aiTeam == AITEAM_NAZI ) {
-				nazis[1]++;
-				if ( ent->health <= 0 ) {
-					nazis[0]++;
-				}
-			} else {
-				monsters[1]++;
-				if ( ent->health <= 0 ) {
-					monsters[0]++;
-				}
-			}
-		}
-		G_Printf( "kills %i/%i nazis %i/%i monsters %i/%i \n",kills[0], kills[1], nazis[0], nazis[1], monsters[0], monsters[1] );
-
-	}
 }
 
 // NERVE - SMF
@@ -2453,8 +2197,6 @@ void ClientCommand( int clientNum ) {
 		Cmd_Vote_f( ent );
 	}else if ( Q_stricmp( cmd, "setviewpos" ) == 0 ) {
 		Cmd_SetViewpos_f( ent );
-	} else if ( Q_stricmp( cmd, "entitycount" ) == 0 )  {
-		Cmd_EntityCount_f( ent );
 	} else if ( Q_stricmp( cmd, "setspawnpt" ) == 0 )  {
 		Cmd_SetSpawnPoint_f( ent );
 	} else if (!Q_stricmp(cmd, "forcetapout")) {
@@ -2570,4 +2312,22 @@ int ClientNumberFromString( gentity_t *to, char *s ) {
 	return( -1 );
 }
 
+/*
+==================
+Cmd_BotTapOut_f
 
+Simple jump command for bots to tap out rather than calling limbo on the bot entity.
+The main reason for this is so tapout reports work for them ...
+
+==================
+*/
+void Cmd_BotTapOut_f( gentity_t *ent ) {
+	static usercmd_t cmd;
+
+	memset( &cmd, 0, sizeof( cmd ) );
+	cmd.identClient = ent - g_entities;
+	cmd.serverTime = level.time;
+	cmd.upmove += 127;
+
+	trap_BotUserCommand( ent - g_entities, &cmd );
+}

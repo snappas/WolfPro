@@ -78,12 +78,6 @@ void Touch_Multi( gentity_t *self, gentity_t *other, trace_t *trace ) {
 	if ( !other->client ) {
 		return;
 	}
-
-	if ( !( self->spawnflags & 1 ) ) { // denotes AI_Touch flag
-		if ( other->aiCharacter ) {
-			return;
-		}
-	}
 	multi_trigger( self, other );
 }
 
@@ -229,11 +223,6 @@ trigger_push
 */
 
 void trigger_push_touch( gentity_t *self, gentity_t *other, trace_t *trace ) {
-
-	if ( ( self->spawnflags & 4 ) && other->r.svFlags & SVF_CASTAI ) {
-		return;
-	}
-
 	if ( !other->client ) {
 		return;
 	}
@@ -702,32 +691,6 @@ void trigger_aidoor_stayopen( gentity_t * ent, gentity_t * other, trace_t * trac
 
 		if ( door->moverState == MOVER_POS2ROTATE ) { // door is in open state waiting to close keep it open
 			door->nextthink = level.time + door->wait + 3000;
-		}
-
-		// Ridah, door isn't ready, find a free ai_marker, and wait there until it's open
-		if ( other->r.svFlags & SVF_CASTAI ) {
-
-			if ( door->key ) {    // we dont have keys, so assume we are not trying to get through this door
-				return;
-			}
-
-			G_Activate( door, other );
-
-			// if the door isn't currently opening for us, we should move out the way
-			// Ridah, had to change this, since it was causing AI to wait at door when the door is open, and won't close because they are sitting on the aidoor brush
-			//if (!(door->activator == other && (door->moverState == MOVER_1TO2ROTATE || door->moverState == MOVER_POS2ROTATE))) {
-			// NOTE TTimo: SP has a slightly different test? (this is prolly outdated)
-			if (
-				!(
-					( door->activator == other )
-					&& ( door->moverState != MOVER_POS1 )
-					&& ( door->moverState != MOVER_POS1ROTATE )
-					)
-				&& ( door->moverState != MOVER_POS2ROTATE )
-				&& ( door->moverState != MOVER_POS2 ) ) {
-				// if we aren't already heading for an ai_marker, look for one we can go to
-				AICast_AIDoor_Touch( other, ent, door );
-			}
 		}
 	}
 

@@ -1,7 +1,7 @@
 #ifndef __RTCW_CONFIG_H__
 #define __RTCW_CONFIG_H__
 
-#include "Common/Omni-Bot_Events.h"
+#include "Omni-Bot_Events.h"
 
 typedef enum eRTCW_Version
 {

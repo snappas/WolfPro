@@ -693,6 +693,12 @@ int Team_TouchEnemyFlag( gentity_t *ent, gentity_t *other, int team ) {
 	}
 	cl->pers.teamState.flagsince = level.time;
 
+	// store the entitynum of our original flag spawner
+	if(ent->flags & FL_DROPPED_ITEM)
+		cl->flagParent = ent->s.otherEntityNum;
+	else
+		cl->flagParent = ent->s.number;
+
 	return -1; // Do not respawn this automatically, but do delete it if it was FL_DROPPED
 }
 
@@ -1050,13 +1056,7 @@ gentity_t *SelectRandomTeamSpawnPoint( int teamstate, team_t team, int spawnObje
 	gentity_t   *spots[MAX_TEAM_SPAWN_POINTS];
 	char        *classname;
 	qboolean initialSpawn = qfalse;     // DHM - Nerve
-	int i = 0,j;       // JPW NERVE
-	int closest;         // JPW NERVE
-	float shortest,tmp;       // JPW NERVE
-	vec3_t target;      // JPW NERVE
-	vec3_t farthest;      // JPW NERVE FIXME this is temp
-	char cs[MAX_STRING_CHARS];          // NERVE - SMF
-	char        *def;
+	int i = 0;       // JPW NERVE
 	qboolean defender = qfalse;
 
 	if ( level.defendingTeam && team == TEAM_BLUE ) {         // allies

@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
+#include "rtcwbot_interface.h"
 
 level_locals_t level;
 
@@ -230,6 +231,14 @@ vmCvar_t g_rocketDamageMultiplier;
 vmCvar_t g_debugHitboxes;
 vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
 vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
+
+vmCvar_t g_OmniBotPath;
+vmCvar_t g_OmniBotEnable;
+vmCvar_t g_OmniBotFlags;
+vmCvar_t g_OmniBotPlaying;
+vmCvar_t g_OmniBotGib;
+vmCvar_t g_botTeam;
+
 
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
@@ -440,6 +449,14 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_cr9,  "g_cr9",  "3.0", CVAR_CHEAT, 0, qfalse }, //L forearm
 	{ &g_cr10, "g_cr10", "4.5", CVAR_CHEAT, 0, qfalse }, //R upperarm
 	{ &g_cr11, "g_cr11", "3.0", CVAR_CHEAT, 0, qfalse }, //R forearm
+
+	{ &g_OmniBotPath,               "omnibot_path",                 "",                     CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
+	{ &g_OmniBotEnable,             "omnibot_enable",               "1",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
+	{ &g_OmniBotPlaying,            "omnibot_playing",              "0",                    CVAR_SERVERINFO | CVAR_ROM,                         0,          qfalse },
+	{ &g_OmniBotFlags,              "omnibot_flags",                "0",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
+	{ &g_OmniBotGib,                "g_botGib",                     "1",                    0,                                                  0,          qfalse },
+	{ &g_botTeam,                   "g_botTeam",                    "0",                    0,                                                  0,          qfalse },
+	
 };
 
 // bk001129 - made static to avoid aliasing
@@ -450,13 +467,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart );
 void G_RunFrame( int levelTime );
 void G_ShutdownGame( int restart );
 void CheckExitRules( void );
-
-// Ridah, Cast AI
-qboolean AICast_VisibleFromPos( vec3_t srcpos, int srcnum,
-								vec3_t destpos, int destnum, qboolean updateVisPos );
-qboolean AICast_CheckAttackAtPos( int entnum, int enemy, vec3_t pos, qboolean ducking, qboolean allowHitWorld );
-void AICast_Init( void );
-// done.
 
 void G_RetrieveMoveSpeedsFromClient( int entnum, char *text );
 
@@ -477,9 +487,16 @@ intptr_t vmMain(intptr_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2, i
 #endif
 	switch ( command ) {
 	case GAME_INIT:
+		Bot_Interface_InitHandles();
 		G_InitGame( arg0, arg1, arg2 );
+		if ( !Bot_Interface_Init() ) {
+			G_Printf( S_COLOR_RED "Unable to Initialize Omni-Bot.\n" );
+		}
 		return 0;
 	case GAME_SHUTDOWN:
+	if ( !Bot_Interface_Shutdown() ) {
+			G_Printf( S_COLOR_RED "Error shutting down Omni-Bot.\n" );
+		}
 		G_ShutdownGame( arg0 );
 		return 0;
 	case GAME_CLIENT_CONNECT:
@@ -501,16 +518,17 @@ intptr_t vmMain(intptr_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2, i
 		return 0;
 	case GAME_RUN_FRAME:
 		G_RunFrame( arg0 );
+		Bot_Interface_Update();
 		return 0;
 	case GAME_CONSOLE_COMMAND:
 		return ConsoleCommand();
 	case BOTAI_START_FRAME:
-		return BotAIStartFrame( arg0 );
+		return 0;
 		// Ridah, Cast AI
 	case AICAST_VISIBLEFROMPOS:
-		return AICast_VisibleFromPos( (float *)arg0, arg1, (float *)arg2, arg3, arg4 );
+		return qfalse;
 	case AICAST_CHECKATTACKATPOS:
-		return AICast_CheckAttackAtPos( arg0, arg1, (float *)arg2, arg3, arg4 );
+		return qfalse;
 		// done.
 
 	case GAME_RETRIEVE_MOVESPEEDS_FROM_CLIENT:
@@ -1391,6 +1409,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			char serverinfo[MAX_INFO_STRING];
 
 			trap_GetServerinfo( serverinfo, sizeof( serverinfo ) );
+			Q_strncpyz( level.rawmapname, Info_ValueForKey( serverinfo, "mapname" ), sizeof( level.rawmapname ) );
 
 			G_LogPrintf( "------------------------------------------------------------\n" );
 			G_LogPrintf( "InitGame: %s\n", serverinfo );
@@ -1546,12 +1565,6 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	G_loadMatchGame();
 
-
-	if ( trap_Cvar_VariableIntegerValue( "bot_enable" ) ) {
-		BotAISetup( restart );
-		BotAILoadMap( restart );
-	}
-
 	G_RemapTeamShaders();
 
 	// Disconnect while paused is handled in client side.
@@ -1585,29 +1598,11 @@ void G_ShutdownGame( int restart ) {
 		G_LogPrintf( "ShutdownGame:\n" );
 		G_LogPrintf( "------------------------------------------------------------\n" );
 		trap_FS_FCloseFile( level.logFile );
+		level.logFile = 0;
 	}
-
-	// Ridah, shutdown the Botlib, so weapons and things get reset upon doing a "map xxx" command
-	if ( trap_Cvar_VariableIntegerValue( "bot_enable" ) ) {
-		int i;
-
-		// Ridah, kill AI cast's
-		for ( i = 0 ; i < g_maxclients.integer ; i++ ) {
-			if ( g_entities[i].r.svFlags & SVF_CASTAI ) {
-				trap_DropClient( i, "Drop Cast AI" );
-			}
-		}
-		// done.
-	}
-	// done.
 
 	// write all the client session data so we can get it back
 	G_WriteSessionData();
-
-
-	if ( trap_Cvar_VariableIntegerValue( "bot_enable" ) ) {
-		BotAIShutdown( restart );
-	}
 }
 
 
@@ -2280,6 +2275,9 @@ void LogExit( const char *string ) {
 		trap_Cvar_Set( "g_currentRound", va( "%i", !g_currentRound.integer ) );
 	}
 	// -NERVE - SMF
+	if(g_OmniBotEnable.integer){
+		Bot_Util_SendTrigger( NULL, NULL, "Round End.", va("%i", level.winningTeam) );
+	}
 }
 
 

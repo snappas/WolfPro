@@ -356,8 +356,9 @@ int Pmove( pmove_t *pmove );
 #define PC_MEDIC                1   //	heal stuff
 #define PC_ENGINEER             2   //	build stuff
 #define PC_LT                   3   //	bomb stuff
-#define PC_MEDIC_CHARGETIME     30000   // FIXME just for testing, this will change to server cvars for each class
 // jpw
+
+#define NUM_PLAYER_CLASSES      3
 
 // player_state->stats[] indexes
 typedef enum {
@@ -657,6 +658,7 @@ typedef struct ammotable_s {
 	int coolRate;           // how fast the weapon cools down. (per second)
 //----(SA)	end
 	int mod;                // means of death
+	int numClips;			// cs: added for correct ammo limits
 } ammotable_t;
 
 extern ammotable_t ammoTable[];     // defined in bg_misc.c
@@ -1891,5 +1893,10 @@ typedef enum {
 	STATE_DEFAULT,          // ent is linked, can be used and is solid
 	STATE_INVISIBLE,        // ent is unlinked, can't be used, doesn't think and is not solid
 } entState_t;
+
+#define BG_PlayerMounted( eFlags ) ( ( eFlags & EF_MG42_ACTIVE ) )
+#define MAX_WP_HEAT         1500.f
+
+long BG_StringHashValue( const char *fname );
 
 #endif

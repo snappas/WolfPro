@@ -1,7 +1,7 @@
 #ifndef __RTCW_MESSAGES_H__
 #define __RTCW_MESSAGES_H__
 
-#include "Common/Base_Messages.h"
+#include "Base_Messages.h"
 
 #pragma pack(push)
 #pragma pack(4)

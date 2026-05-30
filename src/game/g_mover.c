@@ -298,11 +298,6 @@ qboolean G_TryPushingEntity( gentity_t *check, gentity_t *pusher, vec3_t move, v
 		// make sure the client's view rotates when on a rotating mover
 		// RF, this is done client-side now
 		check->client->ps.delta_angles[YAW] += ANGLE2SHORT( amove[YAW] );
-		//
-		// RF, AI's need their ideal angle adjusted instead
-		if ( check->aiCharacter ) {
-			AICast_AdjustIdealYawForMover( check->s.number, ANGLE2SHORT( amove[YAW] ) );
-		}
 	}
 
 	// figure movement due to the pusher's amove
@@ -827,13 +822,6 @@ void SetMoverState( gentity_t *ent, moverState_t moverState, int time ) {
 
 	if ( !( ent->r.svFlags & SVF_NOCLIENT ) || ( ent->r.contents ) ) {    // RF, added this for bats, but this is safe for all movers, since if they aren't solid, and aren't visible to the client, they don't need to be linked
 		trap_LinkEntity( ent );
-		// if this entity is blocking AAS, then update it
-		if ( ent->AASblocking && ent->s.pos.trType == TR_STATIONARY ) {
-			// reset old blocking areas
-			G_SetAASBlockingEntity( ent, qfalse );
-			// set new areas
-			G_SetAASBlockingEntity( ent, qtrue );
-		}
 	}
 }
 
@@ -1412,16 +1400,10 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 		// starting sound
 		if ( !nosound ) {
 			if ( ent->flags & FL_KICKACTIVATE ) {  // kicked
-				if ( activator ) {
-					AICast_AudibleEvent( activator->s.number, ent->s.origin, HEAR_RANGE_DOOR_OPEN );    // "someone kicked open a door near me!"
-				}
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->soundKicked );
 			} else if ( ent->flags & FL_SOFTACTIVATE ) {
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->soundSoftopen );
 			} else {
-				if ( activator ) {
-					AICast_AudibleEvent( activator->s.number, ent->s.origin, HEAR_RANGE_DOOR_KICKOPEN );    // "someone kicked open a door near me!"
-				}
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->sound1to2 );
 			}
 		}
@@ -1484,16 +1466,10 @@ void Use_BinaryMover( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 		// play starting sound
 		if ( !nosound ) {
 			if ( ent->flags & FL_KICKACTIVATE ) {  // kicked
-				if ( activator ) {
-					AICast_AudibleEvent( activator->s.number, ent->s.origin, HEAR_RANGE_DOOR_KICKOPEN );    // "someone kicked open a door near me!"
-				}
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->soundKicked );
 			} else if ( ent->flags & FL_SOFTACTIVATE ) {
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->soundSoftopen );
 			} else {
-				if ( activator ) {
-					AICast_AudibleEvent( activator->s.number, ent->s.origin, HEAR_RANGE_DOOR_OPEN );    // "someone opened a door near me!"
-				}
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->sound1to2 );
 			}
 		}
@@ -2029,10 +2005,6 @@ void finishSpawningKeyedMover( gentity_t *ent ) {
 	}
 //----(SA)	end
 
-	if ( ent->key ) {
-		G_SetAASBlockingEntity( ent, qtrue );
-	}
-
 	ent->nextthink = level.time + FRAMETIME;
 
 	if ( !( ent->flags & FL_TEAMSLAVE ) ) {
@@ -2055,10 +2027,6 @@ void finishSpawningKeyedMover( gentity_t *ent ) {
 			}
 
 			slave->key = ent->key;
-
-			if ( slave->key ) {
-				G_SetAASBlockingEntity( slave, qtrue );
-			}
 		}
 	}
 }
@@ -2149,9 +2117,6 @@ void G_TryDoor( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 		if ( ent->active == qfalse ) {
 			// RTCWPro - allowteams ET - port
 			if ( ent->key < 0 || !G_AllowTeamsAllowed( ent, activator ) ) { // door force locked
-				if ( !walking && activator ) { // only send audible event if not trying to open slowly
-					AICast_AudibleEvent( activator->s.clientNum, ent->s.origin, HEAR_RANGE_DOOR_LOCKED );   // "someone tried locked door near me!"
-				}
 				G_AddEvent( ent, EV_GENERAL_SOUND, ent->soundPos3 );
 				return;
 			}
@@ -2161,9 +2126,6 @@ void G_TryDoor( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 					gitem_t *item = BG_FindItemForKey( ent->key, 0 );
 					// RTCWPro - allowteams - ET port
 					if ( !( activator->client->ps.stats[STAT_KEYS] & ( 1 << item->giTag ) ) || !G_AllowTeamsAllowed( ent, activator ) ) {
-						if ( !walking ) {  // only send audible event if not trying to open slowly
-							AICast_AudibleEvent( activator->s.clientNum, ent->s.origin, HEAR_RANGE_DOOR_LOCKED );   // "someone tried locked door near me!"
-						}
 						// player does not have key
 						G_AddEvent( ent, EV_GENERAL_SOUND, ent->soundPos3 );
 						return;
@@ -2176,10 +2138,6 @@ void G_TryDoor( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 				ent->teammaster->active = qtrue;
 				if ( walking ) {
 					ent->teammaster->flags |= FL_SOFTACTIVATE;      // no noise generated
-				} else {
-					if ( activator ) {
-						AICast_AudibleEvent( activator->s.clientNum, ent->s.origin, HEAR_RANGE_DOOR_OPEN ); // "someone opened door near me!"
-					}
 				}
 
 				Use_BinaryMover( ent->teammaster, activator, activator );
@@ -2189,10 +2147,6 @@ void G_TryDoor( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 				ent->active = qtrue;
 				if ( walking ) {
 					ent->flags |= FL_SOFTACTIVATE;      // no noise
-				} else {
-					if ( activator ) {
-						AICast_AudibleEvent( activator->s.clientNum, ent->s.origin, HEAR_RANGE_DOOR_OPEN ); // "someone opened door near me!"
-					}
 				}
 
 				Use_BinaryMover( ent, activator, activator );
@@ -3098,7 +3052,7 @@ void BatMoveThink( gentity_t *bat ) {
 		// check for hurting someone
 		if ( bat->damage < level.time ) {
 			trap_Trace( &tr, bat->r.currentOrigin, NULL, NULL, bat->r.currentOrigin, bat->s.number, CONTENTS_BODY );
-			if ( tr.startsolid && tr.entityNum < MAX_CLIENTS && !g_entities[tr.entityNum].aiCharacter ) {
+			if ( tr.startsolid && tr.entityNum < MAX_CLIENTS ) {
 				G_Damage( &g_entities[tr.entityNum], bat, bat, vec3_origin, bat->r.currentOrigin, 1 + rand() % 3, DAMAGE_NO_KNOCKBACK, MOD_BAT );
 
 				// !! TODO: bat biting sound and view feedback
@@ -3458,16 +3412,8 @@ Use_Static
 void Use_Static( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 	if ( ent->r.linked ) {
 		trap_UnlinkEntity( ent );
-		// DISABLED since func_static will carve up AAS anyway, so blocking makes no sense
-		// RF, AAS areas are now free
-		//if (ent->model)
-		//	G_SetAASBlockingEntity( ent, qfalse );
 	} else {
 		trap_LinkEntity( ent );
-		// DISABLED since func_static will carve up AAS anyway, so blocking makes no sense
-		// RF, AAS areas are now occupied
-		//if (ent->model)
-		//	G_SetAASBlockingEntity( ent, qtrue );
 	}
 }
 
@@ -3505,11 +3451,6 @@ void Static_Pain( gentity_t *ent, gentity_t *attacker, int damage, vec3_t point 
 }
 
 void G_BlockThink( gentity_t *ent ) {
-	if ( ent->r.linked ) {
-		G_SetAASBlockingEntity( ent, qtrue );
-	} else {
-		G_SetAASBlockingEntity( ent, qfalse );
-	}
 }
 
 
@@ -4075,11 +4016,6 @@ void func_explosive_explode( gentity_t *self, gentity_t *inflictor, gentity_t *a
 	vec3_t dir = {0, 0, 1};
 	gentity_t   *tent = 0;
 
-	// RF, AAS areas are now free
-	if ( !( self->spawnflags & 16 ) ) {
-		G_SetAASBlockingEntity( self, qfalse );
-	}
-
 	self->takedamage = qfalse;          // don't allow anything try to hurt me now that i'm exploding
 
 	self->think = BecomeExplosion;
@@ -4188,11 +4124,6 @@ void func_explosive_spawn( gentity_t *self, gentity_t *other, gentity_t *activat
 	trap_LinkEntity( self );
 	self->use = func_explosive_use;
 	// turn the brush to visible
-
-	// RF, AAS areas are now occupied
-	if ( !( self->spawnflags & 16 ) ) {
-		G_SetAASBlockingEntity( self, qtrue );
-	}
 }
 
 
@@ -4444,16 +4375,7 @@ void use_invisible_user( gentity_t *ent, gentity_t *other, gentity_t *activator 
 		}
 
 		if ( ent->spawnflags & 2 && !( ent->spawnflags & 1 ) ) {
-			if ( ent->aiName ) {
-				player = AICast_FindEntityForName( "player" );
-				if ( player ) {
-					AICast_ScriptEvent( AICast_GetCastState( player->s.number ), "trigger", ent->target );
-				}
-			}
-
 			G_UseTargets( ent, other );
-
-			// G_Printf ("ent%s used by %s\n", ent->classname, other->classname);
 		}
 
 		return;
@@ -4465,13 +4387,6 @@ void use_invisible_user( gentity_t *ent, gentity_t *other, gentity_t *activator 
 		// not usable by player.  turned off.
 		G_Sound( ent, ent->soundPos1 );
 		return;
-	}
-
-	if ( ent->aiName ) {
-		player = AICast_FindEntityForName( "player" );
-		if ( player ) {
-			AICast_ScriptEvent( AICast_GetCastState( player->s.number ), "trigger", ent->target );
-		}
 	}
 
 	G_UseTargets( ent, other ); //----(SA)	how about this so the triggered targets have an 'activator' as well as an 'other'?
