@@ -1297,7 +1297,7 @@ fire_rocket
 gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 	gentity_t   *bolt;
 
-	weapon_t currentWeapon = self->client->ps.weapon;
+	weapon_t currentWeapon = self->s.weapon;
 
 	VectorNormalize( dir );
 
@@ -1314,7 +1314,7 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 
 	bolt->r.ownerNum = self->s.number;
 	bolt->parent = self;
-	if(currentWeapon = WP_ROCKET_LAUNCHER){
+	if(currentWeapon == WP_ROCKET_LAUNCHER){
 		bolt->damage = 100;
 		bolt->splashDamage = 100; 
 		bolt->splashRadius = 120;
@@ -1334,7 +1334,7 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 	bolt->s.pos.trType = TR_LINEAR;
 	bolt->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;     // move a bit on the very first frame
 	VectorCopy( start, bolt->s.pos.trBase );
-	if(currentWeapon = WP_ROCKET_LAUNCHER){
+	if(currentWeapon == WP_ROCKET_LAUNCHER){
 		VectorScale( dir,900,bolt->s.pos.trDelta );
 	}else{
 		VectorScale( dir,2500,bolt->s.pos.trDelta );
