@@ -194,7 +194,14 @@ fi
 
 
 
-
+OMNIBOT_DIR=`pwd`/omni-bot
+if [ ! -d "$OMNIBOT_DIR" ]; then
+VER=$(curl --silent -qI https://github.com/jswigart/omni-bot/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');
+wget https://api.github.com/repos/jswigart/omni-bot/tarball/$VER
+tar xvfz $VER
+rm $VER
+mv *omni-bot* omni-bot
+fi
 
 
 

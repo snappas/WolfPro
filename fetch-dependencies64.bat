@@ -137,6 +137,21 @@ rem ***************************************************************************
 	) else (
 		set SKIP_JANSSON=1
 	)
+
+	if not exist "omni-bot" (
+		echo omni-bot...
+		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/jswigart/omni-bot/releases)[0].zipball_url;"^
+						"Write-Host $source;"^
+						"$file=$(Split-Path -Path $source -Leaf);"^
+						"Invoke-WebRequest -Uri $source -Out $file;"^
+						"Get-ChildItem $file | move-item -Destination omni-bot.zip"
+		call powershell "Expand-Archive -Path """omni-bot.zip""" -DestinationPath """omni-bot""""
+		call powershell "Get-ChildItem """omni-bot\*\*""" | move-item -Destination """omni-bot\""
+		call powershell "rm omni-bot.zip"
+	) else (
+		set SKIP_OMNIBOT=1
+	)
+
 :buildDeps
 	call "%PF%\%VC_PATH%\VC\Auxiliary\Build\vcvars64.bat"
 	set ROOT_DEP_DIR=%cd%
