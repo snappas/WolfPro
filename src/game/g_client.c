@@ -1472,31 +1472,38 @@ void ClientUserinfoChanged( int clientNum ) {
         trap_DropClient(clientNum, "Empty or invalid rtcwkey");
 	}
 
-
-	// check the item prediction
-	s = Info_ValueForKey( userinfo, "cg_predictItems" );
-	if ( !atoi( s ) ) {
-		client->pers.predictItemPickup = qfalse;
-	} else {
-		client->pers.predictItemPickup = qtrue;
-	}
-
-	// check the auto activation
-	s = Info_ValueForKey( userinfo, "cg_autoactivate" );
-	if ( !atoi( s ) ) {
-		client->pers.autoActivate = PICKUP_ACTIVATE;
-	} else {
+	if ( ent->r.svFlags & SVF_BOT ) {
 		client->pers.autoActivate = PICKUP_TOUCH;
-	}
-
-	// check the auto reload setting
-	s = Info_ValueForKey( userinfo, "cg_autoReload" );
-	if ( atoi( s ) ) {
 		client->pers.bAutoReloadAux = qtrue;
 		client->pmext.bAutoReload = qtrue;
+		client->pers.predictItemPickup = qfalse;
+		client->pers.pmoveFixed = qfalse;
 	} else {
-		client->pers.bAutoReloadAux = qfalse;
-		client->pmext.bAutoReload = qfalse;
+		// check the item prediction
+		s = Info_ValueForKey( userinfo, "cg_predictItems" );
+		if ( !atoi( s ) ) {
+			client->pers.predictItemPickup = qfalse;
+		} else {
+			client->pers.predictItemPickup = qtrue;
+		}
+
+		// check the auto activation
+		s = Info_ValueForKey( userinfo, "cg_autoactivate" );
+		if ( !atoi( s ) ) {
+			client->pers.autoActivate = PICKUP_ACTIVATE;
+		} else {
+			client->pers.autoActivate = PICKUP_TOUCH;
+		}
+
+		// check the auto reload setting
+		s = Info_ValueForKey( userinfo, "cg_autoReload" );
+		if ( atoi( s ) ) {
+			client->pers.bAutoReloadAux = qtrue;
+			client->pmext.bAutoReload = qtrue;
+		} else {
+			client->pers.bAutoReloadAux = qfalse;
+			client->pmext.bAutoReload = qfalse;
+		}
 	}
 
 	// set name
