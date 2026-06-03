@@ -237,8 +237,8 @@ void trap_SnapVector( float *v ) {
 	return;
 }
 
-int trap_GetTag( char *tagName, orientation_t* or, lerpInfo_t *li) {
-	return syscall( G_GETTAG, tagName, or, li );
+int trap_GetTag( char *tagName, orientation_t* ori, lerpInfo_t *li) {
+	return syscall( G_GETTAG, tagName, ori, li );
 }
 
 qboolean trap_GetBone(int boneIndex, vec3_t outOrigin, lerpInfo_t *li) {

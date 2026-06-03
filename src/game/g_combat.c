@@ -734,10 +734,10 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 }
 
 void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
-	orientation_t or;           // DHM - Nerve
+	orientation_t ori;           // DHM - Nerve
 
-	if ( g_preciseHeadHitbox.integer && trap_GetTag( "tag_head", &or, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
-		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &or);
+	if ( g_preciseHeadHitbox.integer && trap_GetTag( "tag_head", &ori, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
+		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &ori);
 		G_SetOrigin( head, head->r.currentOrigin);
 	} else {
 		float height, dest;

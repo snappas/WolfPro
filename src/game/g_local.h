@@ -1669,7 +1669,7 @@ int     trap_BotAllocateClient( void );
 void    trap_BotFreeClient( int clientNum );
 void    trap_GetUsercmd( int clientNum, usercmd_t *cmd );
 qboolean    trap_GetEntityToken( char *buffer, int bufferSize );
-int trap_GetTag( char *tagName, orientation_t *or, lerpInfo_t *li);
+int trap_GetTag( char *tagName, orientation_t *ori, lerpInfo_t *li);
 qboolean trap_GetBone( int boneIndex, vec3_t outOrigin, lerpInfo_t *li );
 
 int     trap_DebugPolygonCreate( int color, int numPoints, vec3_t *points );
