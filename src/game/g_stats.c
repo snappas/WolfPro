@@ -892,6 +892,10 @@ void G_matchInfoDump( unsigned int dwDumpType ) {
 			continue;
 		}
 
+		if ( ent->r.svFlags & SVF_BOT ) {
+			continue;
+		}
+
 		if ( dwDumpType == EOM_WEAPONSTATS )
 		{
 			// If client doesn't want to write stats to a file, don't auto send this stuff
