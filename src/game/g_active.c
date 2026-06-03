@@ -160,6 +160,10 @@ void P_WorldEffects( gentity_t *ent ) {
 						ent->damage = 15;
 					}
 
+					if(g_OmniBotEnable.integer){
+						Bot_Event_Drowning( ent-g_entities );
+					}
+
 					// play a gurp sound instead of a normal pain sound
 					if ( ent->health <= ent->damage ) {
 						G_Sound( ent, G_SoundIndex( "*drown.wav" ) );

@@ -1003,6 +1003,10 @@ void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, const char 
 		trap_SendServerCommand( other - g_entities, va( "%s \"%s%c%c%s\" %i",
 														mode == SAY_TEAM ? "usernametchat" : "usernamechat",
 														username, Q_COLOR_ESCAPE, color, message, localize ) );
+		if(g_OmniBotEnable.integer){
+			// Omni-bot: Tell the bot about the chat message
+			Bot_Event_ChatMessage( other - g_entities, ent, mode, message );
+		}
 	}
 }
 
@@ -1183,6 +1187,12 @@ static void G_VoiceTo( gentity_t *ent, gentity_t *other, int mode, const char *i
 	} else {
 		color = COLOR_GREEN;
 		cmd = "vchat";
+	}
+
+	if ( g_OmniBotEnable.integer && other->r.svFlags & SVF_BOT ) {
+	    // Omni-bot Send this voice macro to the bot as an event.
+	    Bot_Event_VoiceMacro( other - g_entities, ent, mode, id );
+	    return;
 	}
 
 	trap_SendServerCommand( other - g_entities, va( "%s %d %d %d %s %i %i %i", cmd, voiceonly, ent->s.number, color, id,
