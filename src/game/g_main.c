@@ -518,7 +518,9 @@ intptr_t vmMain(intptr_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2, i
 		return 0;
 	case GAME_RUN_FRAME:
 		G_RunFrame( arg0 );
-		Bot_Interface_Update();
+		if (g_OmniBotEnable.integer) {
+			Bot_Interface_Update();
+		}
 		return 0;
 	case GAME_CONSOLE_COMMAND:
 		return ConsoleCommand();
@@ -631,7 +633,7 @@ void G_CheckForCursorHints( gentity_t *ent ) {
 //	if(!servercursorhints)
 //		return;
 
-	if ( !ent->client ) {
+	if ( !ent->client || ent->r.svFlags & SVF_BOT ) {
 		return;
 	}
 
@@ -1223,6 +1225,16 @@ void G_UpdateCvars( void ) {
 						trap_Cvar_Set("g_spawnOffset", "9");
 					}
 				}
+
+				if(cv->vmCvar == &g_OmniBotEnable){
+					if(g_OmniBotEnable.integer < 1){
+						trap_SendConsoleCommand(EXEC_NOW, "bot kickall");
+						trap_SendConsoleCommand(EXEC_APPEND, va("map_restart 1 %i\n", GS_RESET));
+					}else if(g_OmniBotEnable.integer == 1){
+						//trap_SendConsoleCommand(EXEC_APPEND, va("map %s", level.rawmapname));
+						trap_SendConsoleCommand(EXEC_APPEND, va("map_restart 1 %i\n", GS_RESET));
+					}
+				}
 			}
 		}
 	}
@@ -1498,7 +1510,8 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	if ( g_gametype.integer >= GT_WOLF ) {
 		trap_GetConfigstring( CS_MULTI_INFO, cs, sizeof( cs ) );
 		Info_SetValueForKey( cs, "numspawntargets", "0" );
-		trap_SetConfigstring( CS_MULTI_INFO, cs );
+		reset_numobjectives();
+		trap_SetConfigstring(CS_MULTI_INFO, cs);
 
 		for ( i = CS_MULTI_SPAWNTARGETS; i < CS_MULTI_SPAWNTARGETS + MAX_MULTI_SPAWNTARGETS; i++ ) {
 			trap_SetConfigstring( i, "" );

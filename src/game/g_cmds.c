@@ -455,6 +455,16 @@ Cmd_Kill_f
 =================
 */
 void Cmd_Kill_f( gentity_t *ent ) {
+	// bots always need to go to limbo or it causes problems
+	// since we use latchedPlayerClass in GetEntityClass
+	if ( ent->health <= 0 ) {
+		if (ent->r.svFlags & SVF_BOT) {
+			limbo(ent,qtrue);
+		}
+
+		return;
+	}
+
 	if ( ent->client->sess.sessionTeam == TEAM_SPECTATOR ||
 		 ( ent->client->ps.pm_flags & PMF_LIMBO ) ||
 		 ent->health <= 0 || level.paused != PAUSE_NONE ) {
@@ -719,9 +729,7 @@ void StopFollowing( gentity_t *ent ) {
 		SetClientViewAngle( ent, angle );
 	} else
 	{
-		// legacy code, FIXME: useless?
 		ent->client->sess.spectatorState = SPECTATOR_FREE;
-		ent->r.svFlags &= ~SVF_BOT;
 		ent->client->ps.clientNum = ent - g_entities;
 	}
 }
@@ -785,6 +793,11 @@ Cmd_Follow_f
 void Cmd_Follow_f( gentity_t *ent ) {
 	int i;
 	char arg[MAX_TOKEN_CHARS];
+
+	//CS: don't let bots do this
+	if ( ent->r.svFlags & SVF_BOT ) {
+		return;
+	}
 
 	if ( trap_Argc() != 2 ) {
 		if ( ent->client->sess.spectatorState == SPECTATOR_FOLLOW ) {
@@ -903,6 +916,11 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir ) {
 		}
 		if ( clientnum < 0 ) {
 			clientnum = level.maxclients - 1;
+		}
+
+		//CS: don't let bots do this
+		if ( ent->r.svFlags & SVF_BOT ) {
+			continue;
 		}
 
 		// can only follow connected clients
@@ -1267,122 +1285,6 @@ static void Cmd_Voice_f( gentity_t *ent, int mode, qboolean arg0, qboolean voice
 	G_Voice( ent, NULL, mode, p, voiceonly );
 }
 
-// TTimo gcc: defined but not used
-#if 0
-/*
-==================
-Cmd_VoiceTell_f
-==================
-*/
-static void Cmd_VoiceTell_f( gentity_t *ent, qboolean voiceonly ) {
-	int targetNum;
-	gentity_t   *target;
-	char        *id;
-	char arg[MAX_TOKEN_CHARS];
-
-	if ( trap_Argc() < 2 ) {
-		return;
-	}
-
-	trap_Argv( 1, arg, sizeof( arg ) );
-	targetNum = atoi( arg );
-	if ( targetNum < 0 || targetNum >= level.maxclients ) {
-		return;
-	}
-
-	target = &g_entities[targetNum];
-	if ( !target || !target->inuse || !target->client ) {
-		return;
-	}
-
-	id = ConcatArgs( 2 );
-
-	G_LogPrintf( "vtell: %s to %s: %s\n", ent->client->pers.netname, target->client->pers.netname, id );
-	G_Voice( ent, target, SAY_TELL, id, voiceonly );
-	// don't tell to the player self if it was already directed to this player
-	// also don't send the chat back to a bot
-	if ( ent != target && !( ent->r.svFlags & SVF_BOT ) ) {
-		G_Voice( ent, ent, SAY_TELL, id, voiceonly );
-	}
-}
-#endif
-
-// TTimo gcc: defined but not used
-#if 0
-/*
-==================
-Cmd_VoiceTaunt_f
-==================
-*/
-static void Cmd_VoiceTaunt_f( gentity_t *ent ) {
-	gentity_t *who;
-	int i;
-
-	if ( !ent->client ) {
-		return;
-	}
-
-	// insult someone who just killed you
-	if ( ent->enemy && ent->enemy->client && ent->enemy->client->lastkilled_client == ent->s.number ) {
-		// i am a dead corpse
-		if ( !( ent->enemy->r.svFlags & SVF_BOT ) ) {
-//			G_Voice( ent, ent->enemy, SAY_TELL, VOICECHAT_DEATHINSULT, qfalse );
-		}
-		if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//			G_Voice( ent, ent,        SAY_TELL, VOICECHAT_DEATHINSULT, qfalse );
-		}
-		ent->enemy = NULL;
-		return;
-	}
-	// insult someone you just killed
-	if ( ent->client->lastkilled_client >= 0 && ent->client->lastkilled_client != ent->s.number ) {
-		who = g_entities + ent->client->lastkilled_client;
-		if ( who->client ) {
-			// who is the person I just killed
-			if ( who->client->lasthurt_mod == MOD_GAUNTLET ) {
-				if ( !( who->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, who, SAY_TELL, VOICECHAT_KILLGAUNTLET, qfalse );	// and I killed them with a gauntlet
-				}
-				if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, ent, SAY_TELL, VOICECHAT_KILLGAUNTLET, qfalse );
-				}
-			} else {
-				if ( !( who->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, who, SAY_TELL, VOICECHAT_KILLINSULT, qfalse );	// and I killed them with something else
-				}
-				if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, ent, SAY_TELL, VOICECHAT_KILLINSULT, qfalse );
-				}
-			}
-			ent->client->lastkilled_client = -1;
-			return;
-		}
-	}
-
-	if ( g_gametype.integer >= GT_TEAM ) {
-		// praise a team mate who just got a reward
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			who = g_entities + i;
-			if ( who->client && who != ent && who->client->sess.sessionTeam == ent->client->sess.sessionTeam ) {
-				if ( who->client->rewardTime > level.time ) {
-					if ( !( who->r.svFlags & SVF_BOT ) ) {
-//						G_Voice( ent, who, SAY_TELL, VOICECHAT_PRAISE, qfalse );
-					}
-					if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//						G_Voice( ent, ent, SAY_TELL, VOICECHAT_PRAISE, qfalse );
-					}
-					return;
-				}
-			}
-		}
-	}
-
-	// just say something
-//	G_Voice( ent, NULL, SAY_ALL, VOICECHAT_TAUNT, qfalse );
-}
-// -NERVE - SMF
-#endif
-
 
 /*
 ==================
@@ -1505,20 +1407,26 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %s", arg1, gameNames[i] );
 	} else if ( !Q_stricmp( arg1, "kick" ) || !Q_stricmp( arg1, "clientkick" ) ) {
 		int i,kicknum = MAX_CLIENTS;
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			if ( level.clients[i].pers.connected != CON_CONNECTED ) {
-				continue;
-			}
-// strip the color crap out
-			Q_strncpyz( cleanName, level.clients[i].pers.username, sizeof( cleanName ) );
-			Q_CleanStr( cleanName );
-			if ( !Q_stricmp( cleanName, arg2 ) ) {
-				kicknum = i;
+		kicknum = ClientNumberFromString(ent, arg2);
+		if (kicknum < 0) {
+			kicknum = MAX_CLIENTS;
+			for (i = 0; i < MAX_CLIENTS; i++) {
+				if (level.clients[i].pers.connected != CON_CONNECTED) {
+					continue;
+				}
+				// strip the color crap out
+				Q_strncpyz(cleanName, level.clients[i].pers.username, sizeof(cleanName));
+				Q_CleanStr(cleanName);
+				if (!Q_stricmp(cleanName, arg2)) {
+					kicknum = i;
+				}
 			}
 		}
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "kick %s", level.clients[kicknum].pers.username );
-		if ( kicknum != MAX_CLIENTS ) { // found a client # to kick, so override votestring with better one
+		if ( kicknum != MAX_CLIENTS && !( g_entities[kicknum].r.svFlags & SVF_BOT ) ) { // found a client # to kick, so override votestring with better one
 			Com_sprintf( level.voteString, sizeof( level.voteString ),"clientkick \"%d\"",kicknum );
+		} else if (g_OmniBotEnable.integer && g_entities[kicknum].r.svFlags & SVF_BOT ) {
+			Com_sprintf( level.voteString, sizeof( level.voteString ),"bot kickbot \"%d\"",kicknum );
 		} else { // if it can't do a name match, don't allow kick (to prevent votekick text spam wars)
 			trap_SendServerCommand( ent - g_entities, "print \"Client not on server.\n\"" );
 			return;
@@ -1543,9 +1451,44 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		i = atoi( arg2 );
 		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %d", arg1, i );
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %d", arg1, i );
+
+	} else if ( !Q_stricmp( arg1, "difficulty" ) ) {
+		if(g_OmniBotEnable.integer == 0){
+			trap_SendServerCommand( ent - g_entities, va( "print \"^3Omnibot is not enabled^7\n\"") );
+		    return;
+		}
+
+		int botDifficulty = atoi(arg2);
+		if (  botDifficulty < -1 || botDifficulty == 0 || botDifficulty > 7 ) {
+		    trap_SendServerCommand( ent - g_entities, va( "print \"^3Difficulty must be -1 for random or between 1 and 7^7\n\"") );
+		    return;
+		}
+
+		Com_sprintf( level.voteString, sizeof( level.voteString ),"bot difficulty %i", botDifficulty );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
+
+	} else if ( !Q_stricmp( arg1, "maxbots" ) ) {
+		if(g_OmniBotEnable.integer == 0){
+			trap_SendServerCommand( ent - g_entities, va( "print \"^3Omnibot is not enabled^7\n\"") );
+		    return;
+		}
+
+		int maxBots = atoi(arg2);
+		maxBots = maxBots == 0 ? -1 : maxBots;
+
+		if ( maxBots < -1 || maxBots > g_maxclients.integer ) {
+			trap_SendServerCommand( ent - g_entities, va( "print \"^3maxbots must be -1 for or between 1 and %i^7\n\"", g_maxclients.integer ) );
+			return;
+		}
+
+		Com_sprintf( level.voteString, sizeof( level.voteString ),"bot minbots -1" );
+		Com_sprintf( level.voteString, sizeof( level.voteString ),"bot maxbots %i", maxBots );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
+
  	} else {
 		trap_SendServerCommand( ent - g_entities, "print \"Invalid vote string.\n\"" );
-		trap_SendServerCommand( ent - g_entities, "print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit, g_rocketmode [1|0]\n\"" );
+		trap_SendServerCommand( ent - g_entities, va("print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit, g_rocketmode <1|0>%s\n\"",
+													g_OmniBotEnable.integer? ", difficulty <-1 to 7>, maxbots <-1 to maxclients>": "") );
 		return;
 	}
 

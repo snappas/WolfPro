@@ -1176,6 +1176,9 @@ void G_ProcessTagConnect( gentity_t *ent );
 qboolean G_AllowTeamsAllowed(gentity_t* ent, gentity_t* activator); // RTCWPro - allowteams ET - port
 int G_FindMatchingMaps(gentity_t* ent, char* mapName);
 
+// g_team.c
+void reset_numobjectives(void);
+
 //
 // g_combat.c
 //

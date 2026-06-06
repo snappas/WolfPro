@@ -142,6 +142,12 @@ g_script_event_define_t gScriptEvents[] =
 	{"death",            NULL},          // RIP
 	{"activate",     G_Script_EventMatch_StringEqual},   // something has triggered us (always followed by an identifier)
 	{"stopcam",          NULL},
+	//added for omni support
+	{"dynamited",       NULL},
+	{"defused",         NULL},
+	{"destroyed",       NULL},
+	{"exploded",        NULL},
+	{"playerstart",     NULL}, //CS: get rid of the error in debug mode. see clientspawn
 
 	{NULL,              NULL}
 };

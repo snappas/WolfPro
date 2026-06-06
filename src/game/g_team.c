@@ -1535,6 +1535,11 @@ static int numobjectives = 0; // TTimo
 #define OBJ_ALLIES 1
 #define OBJ_OTHER 2
 
+void reset_numobjectives(void)
+{
+	numobjectives = 0;
+}
+
 void objective_Register( gentity_t *self ) {
 
 	char numspawntargets[128];
@@ -2093,6 +2098,8 @@ qboolean G_playersReady( void ) {
 		return( qtrue );
 	}
 
+	int botPlayers = 0;
+
 	// Ensure we have enough real players
 	if ( level.numNonSpectatorClients >= match_minplayers.integer ){ //&& level.voteInfo.numVotingClients > 0 ) {
 		// Step through all active clients
@@ -2100,12 +2107,20 @@ qboolean G_playersReady( void ) {
 		for ( i = 0; i < level.numConnectedClients; i++ ) {
 			cl = level.clients + level.sortedClients[i];
 
+			if(g_entities[level.sortedClients[i]].r.svFlags & SVF_BOT){
+				botPlayers++;
+			}
+
 			if ( cl->pers.connected != CON_CONNECTED || cl->sess.sessionTeam == TEAM_SPECTATOR ) {
 				continue;
 			} else if ( cl->pers.ready || level.ref_allready || ( g_entities[level.sortedClients[i]].r.svFlags & SVF_BOT ) ) {
 				ready++;
 			} else { notReady++;}
 		}
+	}
+
+	if(botPlayers == ready){
+		return qfalse; //dont start if there's only bots
 	}
 
 	notReady = ( notReady > 0 || ready > 0 ) ? notReady : match_minplayers.integer;

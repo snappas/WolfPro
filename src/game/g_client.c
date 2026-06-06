@@ -400,7 +400,7 @@ void CopyToBodyQue( gentity_t *ent ) {
 	
 	// dhm
 
-	body->r.svFlags = ent->r.svFlags;
+	body->r.svFlags = ent->r.svFlags & ~SVF_BOT;
 	VectorCopy( ent->r.mins, body->r.mins );
 	VectorCopy( ent->r.maxs, body->r.maxs );
 	VectorCopy( ent->r.absmin, body->r.absmin );
@@ -496,6 +496,7 @@ void limbo( gentity_t *ent, qboolean makeCorpse ) {
 			TossClientItems( ent );
 		}
 
+		//bots can't follow
 		if ( ent->r.svFlags & SVF_BOT ) {
 			ent->client->sess.spectatorClient = ent->client->ps.clientNum;
 			ent->client->sess.spectatorState = SPECTATOR_FREE;
@@ -523,6 +524,9 @@ void limbo( gentity_t *ent, qboolean makeCorpse ) {
 		}
 
 		for ( i = 0 ; i < level.maxclients ; i++ ) {
+			if ( ( &g_entities[i] )->r.svFlags & SVF_BOT ) {
+				continue;
+			}
 			if ( level.clients[i].ps.pm_flags & PMF_LIMBO
 				 && level.clients[i].sess.spectatorClient == ent->s.number
 				 &&  level.clients[i].sess.sessionTeam == ent->client->sess.sessionTeam) {
@@ -1658,17 +1662,10 @@ void ClientUserinfoChanged( int clientNum ) {
 
 //----(SA) modified these for head separation
 
-	if ( ent->r.svFlags & SVF_BOT ) {
 
-		s = va( "n\\%s\\t\\%i\\model\\%s\\head\\%s\\c1\\%s\\hc\\%i\\w\\%i\\l\\%i\\skill\\%s\\un\\%s",
-				client->pers.netname, client->sess.sessionTeam, model, head, c1,
-				client->pers.maxHealth, client->sess.wins, client->sess.losses,
-				Info_ValueForKey( userinfo, "skill" ), client->pers.username );
-	} else {
-		s = va( "n\\%s\\t\\%i\\model\\%s\\head\\%s\\c1\\%s\\hc\\%i\\w\\%i\\l\\%i\\un\\%s",
-				client->pers.netname, client->sess.sessionTeam, model, head, c1,
-				client->pers.maxHealth, client->sess.wins, client->sess.losses, client->pers.username );
-	}
+	s = va( "n\\%s\\t\\%i\\model\\%s\\head\\%s\\c1\\%s\\hc\\%i\\w\\%i\\l\\%i\\un\\%s",
+			client->pers.netname, client->sess.sessionTeam, model, head, c1,
+			client->pers.maxHealth, client->sess.wins, client->sess.losses, client->pers.username );
 
 //----(SA) end
 
@@ -1958,12 +1955,6 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 		VectorCopy( ent->s.angles, spawn_angles );
 	} else
 	{
-		ent->aiName = "player";  // needed for script AI
-		//ent->aiTeam = 1;		// member of allies
-		//ent->client->ps.teamNum = ent->aiTeam;
-		//AICast_ScriptParse( AICast_GetCastState(ent->s.number) );
-		// done.
-
 		if ( client->sess.sessionTeam == TEAM_SPECTATOR ) {
 			spawnPoint = SelectSpectatorSpawnPoint(
 				spawn_origin, spawn_angles );
@@ -1984,15 +1975,6 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 						client->ps.origin,
 						spawn_origin, spawn_angles );
 				}
-
-				if ( ( spawnPoint->flags & FL_NO_BOTS ) && ( ent->r.svFlags & SVF_BOT ) ) {
-					continue;   // try again
-				}
-				// just to be symetric, we have a nohumans option...
-				if ( ( spawnPoint->flags & FL_NO_HUMANS ) && !( ent->r.svFlags & SVF_BOT ) ) {
-					continue;   // try again
-				}
-
 				break;
 
 			} while ( 1 );

@@ -531,12 +531,17 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	
 	self->s.angles[2] = 0;
-	LookAtKiller( self, inflictor, attacker );
 
-	VectorCopy( self->s.angles, self->client->ps.viewangles );
+	if ( !( self->r.svFlags & SVF_BOT ) ) {
+		VectorCopy( self->s.angles, self->client->ps.viewangles );
+		LookAtKiller( self, inflictor, attacker );
+	}
+	
 	self->s.loopSound = 0;
+	if ( !( self->r.svFlags & SVF_BOT ) ) {
+		trap_UnlinkEntity( self ); //???
+	}
 
-	trap_UnlinkEntity( self );
 	self->r.maxs[2] = 0;
 	self->client->ps.maxs[2] = 0;
 	trap_LinkEntity( self );

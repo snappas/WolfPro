@@ -235,6 +235,10 @@ G_SetClientSound
 ===============
 */
 void G_SetClientSound( gentity_t *ent ) {
+	if ( ent->r.svFlags & SVF_BOT ) {
+		return;
+	}
+
 	if ( ent->waterlevel && ( ent->watertype & CONTENTS_LAVA ) ) { //----(SA)	modified since slime is no longer deadly
 		ent->s.loopSound = level.snd_fry;
 	} else {
@@ -268,9 +272,17 @@ void ClientImpacts( gentity_t *ent, pmove_t *pm ) {
 		}
 		other = &g_entities[ pm->touchents[i] ];
 
-		if ( ( ent->r.svFlags & SVF_BOT ) && ( ent->touch ) ) {
-			ent->touch( ent, other, &trace );
-		}
+		// cs: modified so they push inv humans too (for annoying revives)
+		// if ( ( ent->client ) &&
+		// 	 ( ( other->r.svFlags & SVF_BOT ) || ( other->client && other->client->ps.powerups[PW_INVULNERABLE] ) ) ) {
+		// 	PushBot( ent, other );
+		// }
+
+		// // if we are standing on their head, then we should be pushed also
+		// if ( ( ent->r.svFlags & SVF_BOT || ( other->client && other->client->ps.powerups[PW_INVULNERABLE] ) ) &&
+		// 	 ( ent->s.groundEntityNum == other->s.number && other->client ) ) {
+		// 	PushBot( other, ent );
+		// }
 
 		if ( !other->touch ) {
 			continue;
@@ -352,9 +364,6 @@ void    G_TouchTriggers( gentity_t *ent ) {
 			hit->touch( hit, ent, &trace );
 		}
 
-		if ( ( ent->r.svFlags & SVF_BOT ) && ( ent->touch ) ) {
-			ent->touch( ent, hit, &trace );
-		}
 	}
 }
 
@@ -1116,7 +1125,7 @@ void ClientThink_real( gentity_t *ent ) {
 	Pmove( &pm );
 
 	// server cursor hints
-	if ( ent->lastHintCheckTime < level.time ) {
+	if (!(ent->r.svFlags & SVF_BOT) && ent->lastHintCheckTime < level.time ) {
 		G_CheckForCursorHints( ent );
 
 		ent->lastHintCheckTime = level.time + FRAMETIME;
