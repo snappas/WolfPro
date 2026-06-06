@@ -286,8 +286,8 @@ void G_DoTimeShiftFor( gentity_t *ent ) {
 	//int wpflag = wpflags[ent->client->ps.weapon];
 	int time;
 
-	// don't time shift for mistakes or bots
-	if ( !ent->inuse || !ent->client || (ent->r.svFlags & SVF_BOT) ) {
+	// don't time shift for mistakes
+	if ( !ent->inuse || !ent->client ) {
 		return;
 	}
 
@@ -368,8 +368,8 @@ Put everyone except for this client back where they were
 */
 void G_UndoTimeShiftFor( gentity_t *ent ) {
 
-	// don't un-time shift for mistakes or bots
-	if ( !ent->inuse || !ent->client || (ent->r.svFlags & SVF_BOT) ) {
+	// don't un-time shift for mistakes
+	if ( !ent->inuse || !ent->client ) {
 		return;
 	}
 
