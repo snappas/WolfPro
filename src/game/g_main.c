@@ -450,7 +450,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_cr10, "g_cr10", "4.5", CVAR_CHEAT, 0, qfalse }, //R upperarm
 	{ &g_cr11, "g_cr11", "3.0", CVAR_CHEAT, 0, qfalse }, //R forearm
 
-	{ &g_OmniBotPath,               "omnibot_path",                 "",                     CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
+	{ &g_OmniBotPath,               "omnibot_path",                 "./wolfpro/omni-bot",   CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotEnable,             "omnibot_enable",               "1",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotPlaying,            "omnibot_playing",              "0",                    CVAR_SERVERINFO | CVAR_ROM,                         0,          qfalse },
 	{ &g_OmniBotFlags,              "omnibot_flags",                "0",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
