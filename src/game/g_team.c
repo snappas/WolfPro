@@ -1333,7 +1333,12 @@ void TeamplayInfoMessage( team_t team) {
 			playerAmmo = player->client->ps.ammo[BG_FindAmmoForWeapon(playerWeapon)];
 			playerNades += player->client->ps.ammoclip[BG_FindClipForWeapon(WP_GRENADE_LAUNCHER)];
 			playerNades += player->client->ps.ammoclip[BG_FindClipForWeapon(WP_GRENADE_PINEAPPLE)];
-			latchPlayerType = (player->client->pers.cmd.mpSetup & MP_CLASS_MASK) >> MP_CLASS_OFFSET;
+			if(player->r.svFlags & SVF_BOT){
+				latchPlayerType = player->client->ps.teamNum;
+			}else{
+				latchPlayerType = (player->client->pers.cmd.mpSetup & MP_CLASS_MASK) >> MP_CLASS_OFFSET;
+			}
+			
 
 			Com_sprintf(entry, sizeof(entry),
 				" %i %i %i %i %i %i %i %i %i %i %i %i",
