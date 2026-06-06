@@ -145,8 +145,13 @@ FILE(GLOB OMNIBOT_MOD_SRC
 	"src/game/rtcwbot_interface.cpp"
 	"src/game/rtcwbot_interface.h"
 	"src/game/omnibot/*.h"
-	"../omni-bot/0.83/Omnibot/Common/BotLoadLibrary.cpp"
 )
+
+if(WOLF_64BITS)
+	LIST(APPEND OMNIBOT_MOD_SRC "deps64/omni-bot/0.83/Omnibot/Common/BotLoadLibrary.cpp")
+else()
+	LIST(APPEND OMNIBOT_MOD_SRC "deps/omni-bot/0.83/Omnibot/Common/BotLoadLibrary.cpp")
+endif()
 
 FILE(GLOB QAGAME_SRC
 	"src/game/g_*.c"
