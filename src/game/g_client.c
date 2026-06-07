@@ -1482,6 +1482,10 @@ void ClientUserinfoChanged( int clientNum ) {
 		client->pmext.bAutoReload = qtrue;
 		client->pers.predictItemPickup = qfalse;
 		client->pers.pmoveFixed = qfalse;
+		client->pers.antilag = qtrue;
+		client->pers.hitSoundType = HITSOUND_HEAD | HITSOUND_BODY | HITSOUND_TEAM;
+		client->pers.hitSoundBodyStyle = 2;
+		client->pers.hitSoundHeadStyle = 1;
 	} else {
 		// check the item prediction
 		s = Info_ValueForKey( userinfo, "cg_predictItems" );

@@ -2036,7 +2036,7 @@ void LinkPlayerBodies( gentity_t *skip ) {
 
 
 qboolean CheckAntilagConditions(gentity_t *ent){
-	if (!ent->r.svFlags & SVF_BOT && ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
+	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
 	{
 		if(g_lowPingAntilag.integer == 0 && ent->client->ps.ping <= g_lowPingAntilagThreshold.integer){
 			return qfalse;
