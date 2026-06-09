@@ -81,6 +81,10 @@ void BuildPlayerStats(gclient_t *client, qboolean clientDisconnected)
         {
             cl = client; // used passed in client
 
+            if(Q_stristr(cl->sess.guid, "b07b07b07") != NULL){ //BOT GUID
+                return;
+            }
+
             DecolorString(cl->pers.username, n1);
             SanitizeString(n1, n2);
             Q_CleanStr(n2);
@@ -155,7 +159,13 @@ void BuildPlayerStats(gclient_t *client, qboolean clientDisconnected)
         // loop for amount of players playing and how many have already quit
         for (int i = 0; i < level.numPlayingClients; i++)
         {
-            cl = level.clients + level.sortedClients[i];
+            int entNum = level.sortedClients[i];
+            cl = level.clients + entNum;
+
+            gentity_t *ent = &g_entities[entNum];
+            if(ent->r.svFlags & SVF_BOT){
+                continue;
+            }
 
             if (cl->pers.connected != CON_CONNECTED)
                 continue;

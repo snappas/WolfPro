@@ -1486,6 +1486,7 @@ void ClientUserinfoChanged( int clientNum ) {
 		client->pers.hitSoundType = HITSOUND_HEAD | HITSOUND_BODY | HITSOUND_TEAM;
 		client->pers.hitSoundBodyStyle = 2;
 		client->pers.hitSoundHeadStyle = 1;
+		Q_strncpyz(client->sess.guid, va("b07b07b07b07b07b07b07b07b07b0%02d", clientNum), sizeof(client->sess.guid));
 	} else {
 		// check the item prediction
 		s = Info_ValueForKey( userinfo, "cg_predictItems" );
