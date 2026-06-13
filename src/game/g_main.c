@@ -1284,7 +1284,6 @@ void LoadMapList(void)
 {
 	char maps[MAX_ARENAS_TEXT] = {'\0'};
 	char noext[MAX_QPATH] = {'\0'};
-	int i;
 
 	level.mapcount = trap_FS_GetFileList("maps", ".bsp", maps, sizeof(maps));
 	char* mapName = maps;

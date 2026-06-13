@@ -4358,8 +4358,6 @@ they /don't/ need to be all uppercase
 */
 
 void use_invisible_user( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
-	gentity_t *player;
-
 	if ( ent->wait < level.time ) {
 		ent->wait = level.time + ent->delay;
 	} else {
