@@ -35,6 +35,9 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "g_local.h"
 
+void Bot_Queue_EntityCreated( gentity_t *pEnt );
+void Bot_Event_EntityDeleted( gentity_t *pEnt );
+
 typedef struct {
 	char oldShader[MAX_QPATH];
 	char newShader[MAX_QPATH];
@@ -397,6 +400,11 @@ void G_InitGentity( gentity_t *e ) {
 
 	// RF, init scripting
 	e->scriptStatus.scriptEventIndex = -1;
+
+	if(g_OmniBotEnable.integer){
+		// Notify omni-bot
+		Bot_Queue_EntityCreated( e );
+	}
 }
 
 /*
@@ -490,6 +498,9 @@ Marks the entity as free
 =================
 */
 void G_FreeEntity( gentity_t *ed ) {
+	if(g_OmniBotEnable.integer){
+		Bot_Event_EntityDeleted( ed );
+	}
 	trap_UnlinkEntity( ed );     // unlink from world
 
 	if ( ed->neverFree ) {
@@ -668,7 +679,6 @@ void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 	gentity_t *e;
 	e = &g_entities[client];
 	G_AddEvent( e, EV_GENERAL_SOUND, soundIndex );
-	AICast_RecordScriptSound( client );
 }
 
 //==============================================================================
@@ -885,4 +895,61 @@ int G_FindMatchingMaps(gentity_t* ent, char* mapName) {
 		CP(va("print \"^3%s ^7is not on the server.\n\"", mapName));
 		return -1;
 	}
+}
+
+
+/*
+=============
+G_FindByTargetname
+=============
+*/
+gentity_t* G_FindByTargetname( gentity_t *from, const char* match ) {
+	gentity_t* max = &g_entities[level.num_entities];
+	int hash = BG_StringHashValue( match );
+
+	if ( !from ) {
+		from = g_entities;
+	} else {
+		from++;
+	}
+
+	for ( ; from < max ; from++ ) {
+		if ( !from->inuse ) {
+			continue;
+		}
+
+		if ( from->targetnamehash == hash && !Q_stricmp( from->targetname, match ) ) {
+			return from;
+		}
+	}
+
+	return NULL;
+}
+
+// CS: Some used functions from old bot code
+/*
+===============
+AICast_FindEntityForName
+===============
+*/
+gentity_t *AICast_FindEntityForName( char *name ) {
+	gentity_t *trav;
+	int i;
+
+	for ( trav = g_entities, i = 0; i < level.maxclients; i++, trav++ ) {
+		if ( !trav->inuse ) {
+			continue;
+		}
+		if ( !trav->client ) {
+			continue;
+		}
+		if ( !trav->aiName ) {
+			continue;
+		}
+		if ( strcmp( trav->aiName, name ) ) {
+			continue;
+		}
+		return trav;
+	}
+	return NULL;
 }

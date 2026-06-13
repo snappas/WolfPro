@@ -141,16 +141,37 @@ FILE(GLOB CGAME_SRC
 
 LIST(APPEND CGAME_SRC ${UI_SHARED})
 
+FILE(GLOB OMNIBOT_MOD_SRC
+	"src/game/rtcwbot_interface.cpp"
+	"src/game/rtcwbot_interface.h"
+	"src/game/omnibot/*.h"
+)
+
+if(WOLF_64BITS)
+	LIST(APPEND OMNIBOT_MOD_SRC "deps64/omni-bot/0.83/Omnibot/Common/BotLoadLibrary.cpp")
+else()
+	LIST(APPEND OMNIBOT_MOD_SRC "deps/omni-bot/0.83/Omnibot/Common/BotLoadLibrary.cpp")
+endif()
+
 FILE(GLOB QAGAME_SRC
-	"src/game/*.c"
-	"src/game/*.h"
+	"src/game/g_*.c"
+	"src/game/g_*.h"
+	"src/game/bg_*.c"
+	"src/game/bg_*.h"
 	"src/game/q_math.c"
 	"src/game/q_shared.c"
-	"src/botai/*.c"
-	"src/botai/*.h"
 	"src/game/game.def"
 )
 
+if(ENABLE_OMNIBOT)
+	LIST(APPEND QAGAME_SRC ${OMNIBOT_MOD_SRC})
+else()
+	LIST(APPEND QAGAME_SRC "src/game/rtcwbot_interface_stub.c")
+endif()
+
+LIST(REMOVE_ITEM QAGAME_SRC
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/game/g_bot.c"
+)
 
 FILE(GLOB UI_SRC
 	"src/ui/*.c"

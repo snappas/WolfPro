@@ -693,6 +693,12 @@ int Team_TouchEnemyFlag( gentity_t *ent, gentity_t *other, int team ) {
 	}
 	cl->pers.teamState.flagsince = level.time;
 
+	// store the entitynum of our original flag spawner
+	if(ent->flags & FL_DROPPED_ITEM)
+		cl->flagParent = ent->s.otherEntityNum;
+	else
+		cl->flagParent = ent->s.number;
+
 	return -1; // Do not respawn this automatically, but do delete it if it was FL_DROPPED
 }
 
@@ -1050,13 +1056,7 @@ gentity_t *SelectRandomTeamSpawnPoint( int teamstate, team_t team, int spawnObje
 	gentity_t   *spots[MAX_TEAM_SPAWN_POINTS];
 	char        *classname;
 	qboolean initialSpawn = qfalse;     // DHM - Nerve
-	int i = 0,j;       // JPW NERVE
-	int closest;         // JPW NERVE
-	float shortest,tmp;       // JPW NERVE
-	vec3_t target;      // JPW NERVE
-	vec3_t farthest;      // JPW NERVE FIXME this is temp
-	char cs[MAX_STRING_CHARS];          // NERVE - SMF
-	char        *def;
+	int i = 0;       // JPW NERVE
 	qboolean defender = qfalse;
 
 	if ( level.defendingTeam && team == TEAM_BLUE ) {         // allies
@@ -1333,7 +1333,12 @@ void TeamplayInfoMessage( team_t team) {
 			playerAmmo = player->client->ps.ammo[BG_FindAmmoForWeapon(playerWeapon)];
 			playerNades += player->client->ps.ammoclip[BG_FindClipForWeapon(WP_GRENADE_LAUNCHER)];
 			playerNades += player->client->ps.ammoclip[BG_FindClipForWeapon(WP_GRENADE_PINEAPPLE)];
-			latchPlayerType = (player->client->pers.cmd.mpSetup & MP_CLASS_MASK) >> MP_CLASS_OFFSET;
+			if(player->r.svFlags & SVF_BOT){
+				latchPlayerType = player->client->ps.teamNum;
+			}else{
+				latchPlayerType = (player->client->pers.cmd.mpSetup & MP_CLASS_MASK) >> MP_CLASS_OFFSET;
+			}
+			
 
 			Com_sprintf(entry, sizeof(entry),
 				" %i %i %i %i %i %i %i %i %i %i %i %i",
@@ -1534,6 +1539,11 @@ static int numobjectives = 0; // TTimo
 #define OBJ_AXIS 0
 #define OBJ_ALLIES 1
 #define OBJ_OTHER 2
+
+void reset_numobjectives(void)
+{
+	numobjectives = 0;
+}
 
 void objective_Register( gentity_t *self ) {
 
@@ -2093,6 +2103,8 @@ qboolean G_playersReady( void ) {
 		return( qtrue );
 	}
 
+	int botPlayers = 0;
+
 	// Ensure we have enough real players
 	if ( level.numNonSpectatorClients >= match_minplayers.integer ){ //&& level.voteInfo.numVotingClients > 0 ) {
 		// Step through all active clients
@@ -2100,12 +2112,20 @@ qboolean G_playersReady( void ) {
 		for ( i = 0; i < level.numConnectedClients; i++ ) {
 			cl = level.clients + level.sortedClients[i];
 
+			if(g_entities[level.sortedClients[i]].r.svFlags & SVF_BOT){
+				botPlayers++;
+			}
+
 			if ( cl->pers.connected != CON_CONNECTED || cl->sess.sessionTeam == TEAM_SPECTATOR ) {
 				continue;
 			} else if ( cl->pers.ready || level.ref_allready || ( g_entities[level.sortedClients[i]].r.svFlags & SVF_BOT ) ) {
 				ready++;
 			} else { notReady++;}
 		}
+	}
+
+	if(botPlayers == ready){
+		return qfalse; //dont start if there's only bots
 	}
 
 	notReady = ( notReady > 0 || ready > 0 ) ? notReady : match_minplayers.integer;

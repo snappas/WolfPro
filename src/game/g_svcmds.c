@@ -32,6 +32,7 @@ If you have questions concerning this license or the applicable additional terms
 // this file holds commands that can be executed by the server console, but not remote clients
 
 #include "g_local.h"
+#include "rtcwbot_interface.h"
 
 
 /*
@@ -758,9 +759,9 @@ void G_OverrideSpawnPoint_f(team_t team){
 
 	vec3_t *override;
 	if(team == TEAM_RED){
-		override = level.axisOverrideSpawns[index][level.numAxisOverrideSpawns[index]];
+		override = &level.axisOverrideSpawns[index][level.numAxisOverrideSpawns[index]];
 	}else{
-		override = level.alliesOverrideSpawns[index][level.numAlliesOverrideSpawns[index]];
+		override = &level.alliesOverrideSpawns[index][level.numAlliesOverrideSpawns[index]];
 	}
 
 	
@@ -808,11 +809,6 @@ qboolean    ConsoleCommand( void ) {
 
 	if ( Q_stricmp( cmd, "game_memory" ) == 0 ) {
 		Svcmd_GameMem_f();
-		return qtrue;
-	}
-
-	if ( Q_stricmp( cmd, "addbot" ) == 0 ) {
-		Svcmd_AddBot_f();
 		return qtrue;
 	}
 
@@ -887,6 +883,11 @@ qboolean    ConsoleCommand( void ) {
 
 	if (Q_stricmp(cmd, "ref") == 0) {
 		return G_refCommandCheck();
+	}
+
+	if ( Q_stricmp( cmd, "bot" ) == 0 ) {
+		Bot_Interface_ConsoleCommand();
+		return qtrue;
 	}
 
 

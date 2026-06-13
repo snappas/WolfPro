@@ -633,6 +633,8 @@ typedef int fixed16_t;
 #define M_PI        3.14159265358979323846f // matches value in gcc v2 math.h
 #endif
 
+#define SQR( a ) ( ( a ) * ( a ) )
+
 #define NUMVERTEXNORMALS    162
 extern vec3_t bytedirs[NUMVERTEXNORMALS];
 
@@ -885,6 +887,8 @@ void PerpendicularVector( vec3_t dst, const vec3_t src );
 void GetPerpendicularViewVector( const vec3_t point, const vec3_t p1, const vec3_t p2, vec3_t up );
 void ProjectPointOntoVector( vec3_t point, vec3_t vStart, vec3_t vEnd, vec3_t vProj );
 // done.
+
+float DistanceFromLineSquared( vec3_t p, vec3_t lp1, vec3_t lp2 );
 
 //=============================================
 

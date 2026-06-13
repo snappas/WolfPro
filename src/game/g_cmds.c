@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
+#include "rtcwbot_interface.h"
 /*
 ==================
 DeathmatchScoreboardMessage
@@ -454,6 +455,16 @@ Cmd_Kill_f
 =================
 */
 void Cmd_Kill_f( gentity_t *ent ) {
+	// bots always need to go to limbo or it causes problems
+	// since we use latchedPlayerClass in GetEntityClass
+	if ( ent->health <= 0 ) {
+		if (ent->r.svFlags & SVF_BOT) {
+			limbo(ent,qtrue);
+		}
+
+		return;
+	}
+
 	if ( ent->client->sess.sessionTeam == TEAM_SPECTATOR ||
 		 ( ent->client->ps.pm_flags & PMF_LIMBO ) ||
 		 ent->health <= 0 || level.paused != PAUSE_NONE ) {
@@ -718,9 +729,7 @@ void StopFollowing( gentity_t *ent ) {
 		SetClientViewAngle( ent, angle );
 	} else
 	{
-		// legacy code, FIXME: useless?
 		ent->client->sess.spectatorState = SPECTATOR_FREE;
-		ent->r.svFlags &= ~SVF_BOT;
 		ent->client->ps.clientNum = ent - g_entities;
 	}
 }
@@ -784,6 +793,11 @@ Cmd_Follow_f
 void Cmd_Follow_f( gentity_t *ent ) {
 	int i;
 	char arg[MAX_TOKEN_CHARS];
+
+	//CS: don't let bots do this
+	if ( ent->r.svFlags & SVF_BOT ) {
+		return;
+	}
 
 	if ( trap_Argc() != 2 ) {
 		if ( ent->client->sess.spectatorState == SPECTATOR_FOLLOW ) {
@@ -904,6 +918,11 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir ) {
 			clientnum = level.maxclients - 1;
 		}
 
+		//CS: don't let bots do this
+		if ( ent->r.svFlags & SVF_BOT ) {
+			continue;
+		}
+
 		// can only follow connected clients
 		if ( level.clients[ clientnum ].pers.connected != CON_CONNECTED ) {
 			continue;
@@ -1002,6 +1021,10 @@ void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, const char 
 		trap_SendServerCommand( other - g_entities, va( "%s \"%s%c%c%s\" %i",
 														mode == SAY_TEAM ? "usernametchat" : "usernamechat",
 														username, Q_COLOR_ESCAPE, color, message, localize ) );
+		if(g_OmniBotEnable.integer){
+			// Omni-bot: Tell the bot about the chat message
+			Bot_Event_ChatMessage( other - g_entities, ent, mode, message );
+		}
 	}
 }
 
@@ -1184,6 +1207,12 @@ static void G_VoiceTo( gentity_t *ent, gentity_t *other, int mode, const char *i
 		cmd = "vchat";
 	}
 
+	if ( g_OmniBotEnable.integer && other->r.svFlags & SVF_BOT ) {
+	    // Omni-bot Send this voice macro to the bot as an event.
+	    Bot_Event_VoiceMacro( other - g_entities, ent, mode, id );
+	    return;
+	}
+
 	trap_SendServerCommand( other - g_entities, va( "%s %d %d %d %s %i %i %i", cmd, voiceonly, ent->s.number, color, id,
 													(int)ent->s.pos.trBase[0], (int)ent->s.pos.trBase[1], (int)ent->s.pos.trBase[2] ) );
 }
@@ -1255,122 +1284,6 @@ static void Cmd_Voice_f( gentity_t *ent, int mode, qboolean arg0, qboolean voice
 
 	G_Voice( ent, NULL, mode, p, voiceonly );
 }
-
-// TTimo gcc: defined but not used
-#if 0
-/*
-==================
-Cmd_VoiceTell_f
-==================
-*/
-static void Cmd_VoiceTell_f( gentity_t *ent, qboolean voiceonly ) {
-	int targetNum;
-	gentity_t   *target;
-	char        *id;
-	char arg[MAX_TOKEN_CHARS];
-
-	if ( trap_Argc() < 2 ) {
-		return;
-	}
-
-	trap_Argv( 1, arg, sizeof( arg ) );
-	targetNum = atoi( arg );
-	if ( targetNum < 0 || targetNum >= level.maxclients ) {
-		return;
-	}
-
-	target = &g_entities[targetNum];
-	if ( !target || !target->inuse || !target->client ) {
-		return;
-	}
-
-	id = ConcatArgs( 2 );
-
-	G_LogPrintf( "vtell: %s to %s: %s\n", ent->client->pers.netname, target->client->pers.netname, id );
-	G_Voice( ent, target, SAY_TELL, id, voiceonly );
-	// don't tell to the player self if it was already directed to this player
-	// also don't send the chat back to a bot
-	if ( ent != target && !( ent->r.svFlags & SVF_BOT ) ) {
-		G_Voice( ent, ent, SAY_TELL, id, voiceonly );
-	}
-}
-#endif
-
-// TTimo gcc: defined but not used
-#if 0
-/*
-==================
-Cmd_VoiceTaunt_f
-==================
-*/
-static void Cmd_VoiceTaunt_f( gentity_t *ent ) {
-	gentity_t *who;
-	int i;
-
-	if ( !ent->client ) {
-		return;
-	}
-
-	// insult someone who just killed you
-	if ( ent->enemy && ent->enemy->client && ent->enemy->client->lastkilled_client == ent->s.number ) {
-		// i am a dead corpse
-		if ( !( ent->enemy->r.svFlags & SVF_BOT ) ) {
-//			G_Voice( ent, ent->enemy, SAY_TELL, VOICECHAT_DEATHINSULT, qfalse );
-		}
-		if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//			G_Voice( ent, ent,        SAY_TELL, VOICECHAT_DEATHINSULT, qfalse );
-		}
-		ent->enemy = NULL;
-		return;
-	}
-	// insult someone you just killed
-	if ( ent->client->lastkilled_client >= 0 && ent->client->lastkilled_client != ent->s.number ) {
-		who = g_entities + ent->client->lastkilled_client;
-		if ( who->client ) {
-			// who is the person I just killed
-			if ( who->client->lasthurt_mod == MOD_GAUNTLET ) {
-				if ( !( who->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, who, SAY_TELL, VOICECHAT_KILLGAUNTLET, qfalse );	// and I killed them with a gauntlet
-				}
-				if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, ent, SAY_TELL, VOICECHAT_KILLGAUNTLET, qfalse );
-				}
-			} else {
-				if ( !( who->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, who, SAY_TELL, VOICECHAT_KILLINSULT, qfalse );	// and I killed them with something else
-				}
-				if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//					G_Voice( ent, ent, SAY_TELL, VOICECHAT_KILLINSULT, qfalse );
-				}
-			}
-			ent->client->lastkilled_client = -1;
-			return;
-		}
-	}
-
-	if ( g_gametype.integer >= GT_TEAM ) {
-		// praise a team mate who just got a reward
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			who = g_entities + i;
-			if ( who->client && who != ent && who->client->sess.sessionTeam == ent->client->sess.sessionTeam ) {
-				if ( who->client->rewardTime > level.time ) {
-					if ( !( who->r.svFlags & SVF_BOT ) ) {
-//						G_Voice( ent, who, SAY_TELL, VOICECHAT_PRAISE, qfalse );
-					}
-					if ( !( ent->r.svFlags & SVF_BOT ) ) {
-//						G_Voice( ent, ent, SAY_TELL, VOICECHAT_PRAISE, qfalse );
-					}
-					return;
-				}
-			}
-		}
-	}
-
-	// just say something
-//	G_Voice( ent, NULL, SAY_ALL, VOICECHAT_TAUNT, qfalse );
-}
-// -NERVE - SMF
-#endif
 
 
 /*
@@ -1494,20 +1407,26 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %s", arg1, gameNames[i] );
 	} else if ( !Q_stricmp( arg1, "kick" ) || !Q_stricmp( arg1, "clientkick" ) ) {
 		int i,kicknum = MAX_CLIENTS;
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			if ( level.clients[i].pers.connected != CON_CONNECTED ) {
-				continue;
-			}
-// strip the color crap out
-			Q_strncpyz( cleanName, level.clients[i].pers.username, sizeof( cleanName ) );
-			Q_CleanStr( cleanName );
-			if ( !Q_stricmp( cleanName, arg2 ) ) {
-				kicknum = i;
+		kicknum = ClientNumberFromString(ent, arg2);
+		if (kicknum < 0) {
+			kicknum = MAX_CLIENTS;
+			for (i = 0; i < MAX_CLIENTS; i++) {
+				if (level.clients[i].pers.connected != CON_CONNECTED) {
+					continue;
+				}
+				// strip the color crap out
+				Q_strncpyz(cleanName, level.clients[i].pers.username, sizeof(cleanName));
+				Q_CleanStr(cleanName);
+				if (!Q_stricmp(cleanName, arg2)) {
+					kicknum = i;
+				}
 			}
 		}
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "kick %s", level.clients[kicknum].pers.username );
-		if ( kicknum != MAX_CLIENTS ) { // found a client # to kick, so override votestring with better one
+		if ( kicknum != MAX_CLIENTS && !( g_entities[kicknum].r.svFlags & SVF_BOT ) ) { // found a client # to kick, so override votestring with better one
 			Com_sprintf( level.voteString, sizeof( level.voteString ),"clientkick \"%d\"",kicknum );
+		} else if (g_OmniBotEnable.integer && g_entities[kicknum].r.svFlags & SVF_BOT ) {
+			Com_sprintf( level.voteString, sizeof( level.voteString ),"bot kickbot \"%d\"",kicknum );
 		} else { // if it can't do a name match, don't allow kick (to prevent votekick text spam wars)
 			trap_SendServerCommand( ent - g_entities, "print \"Client not on server.\n\"" );
 			return;
@@ -1532,9 +1451,44 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		i = atoi( arg2 );
 		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s %d", arg1, i );
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %d", arg1, i );
+
+	} else if ( !Q_stricmp( arg1, "difficulty" ) ) {
+		if(g_OmniBotEnable.integer == 0){
+			trap_SendServerCommand( ent - g_entities, va( "print \"^3Omnibot is not enabled^7\n\"") );
+		    return;
+		}
+
+		int botDifficulty = atoi(arg2);
+		if (  botDifficulty < -1 || botDifficulty == 0 || botDifficulty > 7 ) {
+		    trap_SendServerCommand( ent - g_entities, va( "print \"^3Difficulty must be -1 for random or between 1 and 7^7\n\"") );
+		    return;
+		}
+
+		Com_sprintf( level.voteString, sizeof( level.voteString ),"bot difficulty %i", botDifficulty );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
+
+	} else if ( !Q_stricmp( arg1, "maxbots" ) ) {
+		if(g_OmniBotEnable.integer == 0){
+			trap_SendServerCommand( ent - g_entities, va( "print \"^3Omnibot is not enabled^7\n\"") );
+		    return;
+		}
+
+		int maxBots = atoi(arg2);
+		maxBots = maxBots == 0 ? -1 : maxBots;
+
+		if ( maxBots < -1 || maxBots > g_maxclients.integer ) {
+			trap_SendServerCommand( ent - g_entities, va( "print \"^3maxbots must be -1 for or between 1 and %i^7\n\"", g_maxclients.integer ) );
+			return;
+		}
+
+		Com_sprintf( level.voteString, sizeof( level.voteString ),"bot minbots -1" );
+		Com_sprintf( level.voteString, sizeof( level.voteString ),"bot maxbots %i", maxBots );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
+
  	} else {
 		trap_SendServerCommand( ent - g_entities, "print \"Invalid vote string.\n\"" );
-		trap_SendServerCommand( ent - g_entities, "print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit, g_rocketmode [1|0]\n\"" );
+		trap_SendServerCommand( ent - g_entities, va("print \"Vote commands are: map_restart, nextmap, config, start_match, swap_teams, reset_match, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, timelimit, g_rocketmode <1|0>%s\n\"",
+													g_OmniBotEnable.integer? ", difficulty <-1 to 7>, maxbots <-1 to maxclients>": "") );
 		return;
 	}
 
@@ -1571,7 +1525,6 @@ Cmd_Vote_f
 */
 void Cmd_Vote_f( gentity_t *ent ) {
 	char msg[64];
-	int num;
 
 
 	if ( !level.voteTime ) {
@@ -1854,9 +1807,7 @@ void Cmd_Activate_f( gentity_t *ent ) {
 					cl->pmext.centerangles[YAW] = AngleNormalize180( cl->pmext.centerangles[YAW] );
 					cl->pmext.centerangles[ROLL] = AngleNormalize180( cl->pmext.centerangles[ROLL] );
 
-					if ( !( ent->r.svFlags & SVF_CASTAI ) ) {
-						G_UseTargets( traceEnt, ent );   //----(SA)	added for Mike so mounting an MG42 can be a trigger event (let me know if there's any issues with this)
-					}
+					G_UseTargets( traceEnt, ent );   //----(SA)	added for Mike so mounting an MG42 can be a trigger event (let me know if there's any issues with this)
 				}
 			}
 		} else if ( ( ( Q_stricmp( traceEnt->classname, "func_door" ) == 0 ) || ( Q_stricmp( traceEnt->classname, "func_door_rotating" ) == 0 ) ) )           {
@@ -1889,186 +1840,6 @@ void Cmd_Activate_f( gentity_t *ent ) {
 		oldactivatetime = activatetime;
 	}
 }
-
-// Rafael WolfKick
-//===================
-//	Cmd_WolfKick
-//===================
-
-#define WOLFKICKDISTANCE    96
-int Cmd_WolfKick_f( gentity_t *ent ) {
-	trace_t tr;
-	vec3_t end;
-	gentity_t   *traceEnt;
-	vec3_t forward, right, up, offset;
-	gentity_t   *tent;
-	static int oldkicktime = 0;
-	int kicktime = level.time;
-	qboolean solidKick = qfalse;    // don't play "hit" sound on a trigger unless it's an func_invisible_user
-
-	int damage = 15;
-
-	// DHM - Nerve :: No kick in wolf multiplayer
-	if ( g_gametype.integer >= GT_WOLF ) {
-		return 0;
-	}
-
-	if ( ent->client->ps.leanf ) {
-		return 0;   // no kick when leaning
-
-	}
-	if ( oldkicktime > kicktime ) {
-		return ( 0 );
-	} else {
-		oldkicktime = kicktime + 1000;
-	}
-
-	// play the anim
-	BG_AnimScriptEvent( &ent->client->ps, ANIM_ET_KICK, qfalse, qtrue );
-
-	ent->client->ps.persistant[PERS_WOLFKICK] = 1;
-
-	AngleVectors( ent->client->ps.viewangles, forward, right, up );
-
-	CalcMuzzlePointForActivate( ent, forward, right, up, offset );
-
-	// note to self: we need to determine the usable distance for wolf
-	VectorMA( offset, WOLFKICKDISTANCE, forward, end );
-
-	trap_Trace( &tr, offset, NULL, NULL, end, ent->s.number, ( CONTENTS_SOLID | CONTENTS_BODY | CONTENTS_CORPSE | CONTENTS_TRIGGER ) );
-
-	if ( tr.surfaceFlags & SURF_NOIMPACT || tr.fraction == 1.0 ) {
-		tent = G_TempEntity( tr.endpos, EV_WOLFKICK_MISS );
-		tent->s.eventParm = ent->s.number;
-		return ( 1 );
-	}
-
-	traceEnt = &g_entities[ tr.entityNum ];
-
-	if ( !ent->melee ) { // because we dont want you to open a door with a prop
-		if ( ( Q_stricmp( traceEnt->classname, "func_door_rotating" ) == 0 )
-			 && ( traceEnt->s.apos.trType == TR_STATIONARY && traceEnt->s.pos.trType == TR_STATIONARY )
-			 && traceEnt->active == qfalse ) {
-			if ( traceEnt->key < 0 ) { // door force locked
-				//----(SA)	play kick "hit" sound
-				tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_WALL );
-				tent->s.otherEntityNum = ent->s.number;	\
-				//----(SA)	end
-
-				AICast_AudibleEvent( ent->s.clientNum, tr.endpos, HEAR_RANGE_DOOR_KICKLOCKED ); // "someone kicked a locked door near me!"
-
-				if ( traceEnt->soundPos3 ) {
-					G_AddEvent( traceEnt, EV_GENERAL_SOUND, traceEnt->soundPos3 );
-				} else {
-					G_AddEvent( traceEnt, EV_GENERAL_SOUND, G_SoundIndex( "sound/movers/doors/default_door_locked.wav" ) );
-				}
-				return 1;   //----(SA)	changed.  shows boot for locked doors
-			}
-
-			if ( traceEnt->key > 0 ) { // door requires key
-				gitem_t *item = BG_FindItemForKey( traceEnt->key, 0 );
-				if ( !( ent->client->ps.stats[STAT_KEYS] & ( 1 << item->giTag ) ) ) {
-					//----(SA)	play kick "hit" sound
-					tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_WALL );
-					tent->s.otherEntityNum = ent->s.number;	\
-					//----(SA)	end
-
-					AICast_AudibleEvent( ent->s.clientNum, tr.endpos, HEAR_RANGE_DOOR_KICKLOCKED ); // "someone kicked a locked door near me!"
-
-					// player does not have key
-					if ( traceEnt->soundPos3 ) {
-						G_AddEvent( traceEnt, EV_GENERAL_SOUND, traceEnt->soundPos3 );
-					} else {
-						G_AddEvent( traceEnt, EV_GENERAL_SOUND, G_SoundIndex( "sound/movers/doors/default_door_locked.wav" ) );
-					}
-					return 1;   //----(SA)	changed.  shows boot animation for locked doors
-				}
-			}
-
-			if ( traceEnt->teammaster && traceEnt->team && traceEnt != traceEnt->teammaster ) {
-				traceEnt->teammaster->active = qtrue;
-				traceEnt->teammaster->flags |= FL_KICKACTIVATE;
-				Use_BinaryMover( traceEnt->teammaster, ent, ent );
-				G_UseTargets( traceEnt->teammaster, ent );
-			} else
-			{
-				traceEnt->active = qtrue;
-				traceEnt->flags |= FL_KICKACTIVATE;
-				Use_BinaryMover( traceEnt, ent, ent );
-				G_UseTargets( traceEnt, ent );
-			}
-		} else if ( ( Q_stricmp( traceEnt->classname, "func_button" ) == 0 )
-					&& ( traceEnt->s.apos.trType == TR_STATIONARY && traceEnt->s.pos.trType == TR_STATIONARY )
-					&& traceEnt->active == qfalse ) {
-			Use_BinaryMover( traceEnt, ent, ent );
-			traceEnt->active = qtrue;
-
-		} else if ( !Q_stricmp( traceEnt->classname, "func_invisible_user" ) )     {
-			traceEnt->flags |= FL_KICKACTIVATE;     // so cell doors know they were kicked
-													// It doesn't hurt to pass this along since only ent use() funcs who care about it will check.
-													// However, it may become handy to put a "KICKABLE" or "NOTKICKABLE" flag on the invisible_user
-			traceEnt->use( traceEnt, ent, ent );
-			traceEnt->flags &= ~FL_KICKACTIVATE;    // reset
-
-			solidKick = qtrue;  //----(SA)
-		} else if ( !Q_stricmp( traceEnt->classname, "props_flippy_table" ) && traceEnt->use )       {
-			traceEnt->use( traceEnt, ent, ent );
-		}
-	}
-
-	// snap the endpos to integers, but nudged towards the line
-	SnapVectorTowards( tr.endpos, offset );
-
-	// send bullet impact
-	if ( traceEnt->takedamage && traceEnt->client ) {
-		tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_FLESH );
-		tent->s.eventParm = traceEnt->s.number;
-		if ( LogAccuracyHit( traceEnt, ent ) ) {
-			ent->client->ps.persistant[PERS_ACCURACY_HITS]++;
-		}
-	} else {
-		// Ridah, bullet impact should reflect off surface
-		vec3_t reflect;
-		float dot;
-
-		if ( traceEnt->r.contents >= 0 && ( traceEnt->r.contents & CONTENTS_TRIGGER ) && !solidKick ) {
-			tent = G_TempEntity( tr.endpos, EV_WOLFKICK_MISS ); // (SA) don't play the "hit" sound if you kick most triggers
-		} else {
-			tent = G_TempEntity( tr.endpos, EV_WOLFKICK_HIT_WALL );
-		}
-
-
-		dot = DotProduct( forward, tr.plane.normal );
-		VectorMA( forward, -2 * dot, tr.plane.normal, reflect );
-		VectorNormalize( reflect );
-
-		tent->s.eventParm = DirToByte( reflect );
-		// done.
-
-		if ( ent->melee ) {
-			ent->active = qfalse;
-			ent->melee->health = 0;
-		}
-	}
-
-	tent->s.otherEntityNum = ent->s.number;
-
-	// try to swing chair
-	if ( traceEnt->takedamage ) {
-
-		if ( ent->melee ) {
-			ent->active = qfalse;
-			ent->melee->health = 0;
-			ent->client->ps.eFlags &= ~EF_MELEE_ACTIVE;
-
-		}
-
-		G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, 0, MOD_KICKED );   //----(SA)	modified
-	}
-
-	return ( 1 );
-}
-// done
 
 
 // NERVE - SMF
@@ -2108,17 +1879,6 @@ void ClientDamage( gentity_t *clent, int entnum, int enemynum, int id ) {
 		if ( !( enemy->client->buttons & BUTTON_ATTACK ) ) {
 			break;
 		}
-		//if ( AICast_GetCastState( enemy->s.number )->lastWeaponFiredWeaponNum != WP_TESLA )
-		//	break;
-		//if ( AICast_GetCastState( enemy->s.number )->lastWeaponFired < level.time - 400 )
-		//	break;
-
-		if (    ( ent->aiCharacter == AICHAR_PROTOSOLDIER ) ||
-				( ent->aiCharacter == AICHAR_SUPERSOLDIER ) ||
-				( ent->aiCharacter == AICHAR_LOPER ) ||
-				( ent->aiCharacter >= AICHAR_STIMSOLDIER1 && ent->aiCharacter <= AICHAR_STIMSOLDIER3 ) ) {
-			break;
-		}
 
 		if ( ent->takedamage /*&& !AICast_NoFlameDamage(ent->s.number)*/ ) {
 			VectorSubtract( ent->r.currentOrigin, enemy->r.currentOrigin, vec );
@@ -2155,70 +1915,6 @@ void Cmd_ClientDamage_f( gentity_t *clent ) {
 	id = atoi( s );
 
 	ClientDamage( clent, entnum, enemynum, id );
-}
-
-/*
-==============
-Cmd_EntityCount_f
-==============
-*/
-#define AITEAM_NAZI     0
-#define AITEAM_ALLIES   1
-#define AITEAM_MONSTER  2
-void Cmd_EntityCount_f( gentity_t *ent ) {
-	if ( !g_cheats.integer ) {
-		return;
-	}
-
-	G_Printf( "entity count = %i\n", level.num_entities );
-
-	{
-		int kills[2];
-		int nazis[2];
-		int monsters[2];
-		int i;
-		gentity_t *ent;
-
-		// count kills
-		kills[0] = kills[1] = 0;
-		nazis[0] = nazis[1] = 0;
-		monsters[0] = monsters[1] = 0;
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			ent = &g_entities[i];
-
-			if ( !ent->inuse ) {
-				continue;
-			}
-
-			if ( !( ent->r.svFlags & SVF_CASTAI ) ) {
-				continue;
-			}
-
-			if ( ent->aiTeam == AITEAM_ALLIES ) {
-				continue;
-			}
-
-			kills[1]++;
-
-			if ( ent->health <= 0 ) {
-				kills[0]++;
-			}
-
-			if ( ent->aiTeam == AITEAM_NAZI ) {
-				nazis[1]++;
-				if ( ent->health <= 0 ) {
-					nazis[0]++;
-				}
-			} else {
-				monsters[1]++;
-				if ( ent->health <= 0 ) {
-					monsters[0]++;
-				}
-			}
-		}
-		G_Printf( "kills %i/%i nazis %i/%i monsters %i/%i \n",kills[0], kills[1], nazis[0], nazis[1], monsters[0], monsters[1] );
-
-	}
 }
 
 // NERVE - SMF
@@ -2453,8 +2149,6 @@ void ClientCommand( int clientNum ) {
 		Cmd_Vote_f( ent );
 	}else if ( Q_stricmp( cmd, "setviewpos" ) == 0 ) {
 		Cmd_SetViewpos_f( ent );
-	} else if ( Q_stricmp( cmd, "entitycount" ) == 0 )  {
-		Cmd_EntityCount_f( ent );
 	} else if ( Q_stricmp( cmd, "setspawnpt" ) == 0 )  {
 		Cmd_SetSpawnPoint_f( ent );
 	} else if (!Q_stricmp(cmd, "forcetapout")) {
@@ -2570,4 +2264,22 @@ int ClientNumberFromString( gentity_t *to, char *s ) {
 	return( -1 );
 }
 
+/*
+==================
+Cmd_BotTapOut_f
 
+Simple jump command for bots to tap out rather than calling limbo on the bot entity.
+The main reason for this is so tapout reports work for them ...
+
+==================
+*/
+void Cmd_BotTapOut_f( gentity_t *ent ) {
+	static usercmd_t cmd;
+
+	memset( &cmd, 0, sizeof( cmd ) );
+	cmd.identClient = ent - g_entities;
+	cmd.serverTime = level.time;
+	cmd.upmove += 127;
+
+	trap_BotUserCommand( ent - g_entities, &cmd );
+}

@@ -34,6 +34,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
+#include "rtcwbot_interface.h"
 
 //==========================================================
 
@@ -540,28 +541,23 @@ void target_kill_use( gentity_t *self, gentity_t *other, gentity_t *activator ) 
 	}
 
 	while ( ( targ = G_Find( targ, FOFS( targetname ), self->target ) ) != NULL ) {
-		if ( targ->aiCharacter ) {       // (SA) if it's an ai character, free it nicely
-			targ->aiInactive = qtrue;
-		} else
-		{
-			// make sure it isn't going to respawn or show any events
-			targ->nextthink = 0;
-			if ( targ == activator ) {
-				continue;
-			}
-
-			// RF, script_movers should die!
-			if ( !Q_stricmp( targ->classname, "script_mover" ) && targ->die ) {
-				targ->die( targ, self, self, targ->health, 0 );
-				continue;
-			}
-
-			trap_UnlinkEntity( targ );
-			targ->use = 0;
-			targ->touch = 0;
-			targ->nextthink = level.time + FRAMETIME;
-			targ->think = G_FreeEntity;
+		// make sure it isn't going to respawn or show any events
+		targ->nextthink = 0;
+		if ( targ == activator ) {
+			continue;
 		}
+
+		// RF, script_movers should die!
+		if ( !Q_stricmp( targ->classname, "script_mover" ) && targ->die ) {
+			targ->die( targ, self, self, targ->health, 0 );
+			continue;
+		}
+
+		trap_UnlinkEntity( targ );
+		targ->use = 0;
+		targ->touch = 0;
+		targ->nextthink = level.time + FRAMETIME;
+		targ->think = G_FreeEntity;
 	}
 }
 
@@ -675,9 +671,7 @@ void Use_Target_Lock( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
 
 	while ( ( t = G_Find( t, FOFS( targetname ), ent->target ) ) != NULL )
 	{
-//		G_Printf("target_lock locking entity with key: %d\n", ent->count);
 		t->key = ent->key;
-		G_SetAASBlockingEntity( t, t->key != 0 );
 	}
 
 }
@@ -953,17 +947,11 @@ must have a target
 when used it will fire its targets
 */
 void target_script_trigger_use( gentity_t *ent, gentity_t *other, gentity_t *activator ) {
-	gentity_t   *player;
-
-	if ( ent->aiName ) {
-		player = AICast_FindEntityForName( "player" );
-		if ( player ) {
-			AICast_ScriptEvent( AICast_GetCastState( player->s.number ), "trigger", ent->target );
-		}
-	}
-
 	// DHM - Nerve :: In multiplayer, we use the brush scripting only
 	if ( g_gametype.integer >= GT_WOLF && ent->scriptName ) {
+		if(g_OmniBotEnable.integer){
+			Bot_Util_SendTrigger( ent, NULL, ent->scriptName, ent->target );
+		}
 		G_Script_ScriptEvent( ent, "trigger", ent->target );
 	}
 

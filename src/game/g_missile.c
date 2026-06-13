@@ -46,56 +46,12 @@ void M_think( gentity_t *ent );
 void Shaker_think( gentity_t *ent ) {
 	vec3_t vec;      // muzzlebounce, JPW NERVE no longer used
 	gentity_t   *player;
-	float len, radius = ent->splashDamage, bounceamt;
+	float len, radius = ent->splashDamage, bounceamt = 0.25;
 	int i;
-	char cmd[64];       //DAJ
-/* JPW NERVE used for trigger_concussive_dust, currently not working
-	vec3_t		mins, maxs; // JPW NERVE
-	static vec3_t	range; // JPW NERVE
-	int			num,touch[MAX_GENTITIES],scored=0; // JPW NERVE
-	gentity_t	*hit, *dirtshake; // JPW NERVE
-*/
 
 	// NERVE - SMF - we only want to call this once now
-//	if (level.time > ent->delay)
 	ent->think = G_FreeEntity;
 	ent->nextthink = level.time + FRAMETIME;
-
-/*
-// JPW NERVE check if we're close to trigger_concussive_dust fields
-	range[0] = radius/1.41f; // not exactly right, since we're doing a box trap for a radius, but wtf,
-	range[1] = radius/1.41f; // this is all eye candy anyway
-	range[2] = radius/1.41f;
-
-	VectorAdd(ent->s.origin,range,maxs);
-	VectorSubtract(ent->s.origin,range,mins);
-	num = trap_EntitiesInBox( mins, maxs, touch, MAX_GENTITIES ); // get a list of possibles
-	for ( i=0 ; i<num ; i++ ) {
-		hit = &g_entities[touch[i]];
-		if (hit->s.eType & ET_CONCUSSIVE_TRIGGER) { // add a tempent to shake some shit loose
-			dirtshake = G_Spawn();
-			dirtshake->nextthink = level.time + radius; // 1000 for aircraft flyby, other term for tumble stagger
-			VectorAdd(hit->r.maxs,hit->r.mins,vec);
-			VectorScale(vec,0.5f,vec);
-			VectorCopy(vec,dirtshake->s.pos.trBase);
-			VectorCopy(vec,dirtshake->s.origin);
-			VectorSubtract(vec,ent->s.origin,vec);
-			dirtshake->nextthink = level.time + 5000;//(radius - VectorLength(vec)); // closer the explosion, the longer the dirtshake
-			G_Printf("radius=%f dist=%f\n",radius,VectorLength(vec));
-			dirtshake->think = G_FreeEntity;
-			dirtshake->s.eType = ET_CONCUSSIVE_TRIGGER + ET_EVENTS;
-			dirtshake->s.eFlags |= EF_SMOKINGBLACK;
-			VectorCopy(hit->r.maxs, dirtshake->r.maxs);
-			VectorCopy(hit->r.mins, dirtshake->r.mins);
-			dirtshake->s.pos.trType = TR_STATIONARY;
-			dirtshake->clipmask = 0;
-			dirtshake->r.svFlags &= ~SVF_NOCLIENT;
-			SnapVector(dirtshake->r.maxs);
-			SnapVector(dirtshake->r.mins);
-			SnapVector(dirtshake->s.pos.trDelta);
-		}
-	}
-*/
 
 	for ( i = 0; i < level.maxclients; i++ ) {
 		// skip if not connected
@@ -110,22 +66,21 @@ void Shaker_think( gentity_t *ent ) {
 		if ( level.clients[i].sess.sessionTeam == TEAM_SPECTATOR ) {
 			continue;
 		}
+		// skip bots
+		if ( (&g_entities[i])->r.svFlags & SVF_BOT ) {
+			continue;
+		}
 
 		// found a live one
 		player = &g_entities[i];
 		VectorSubtract( player->r.currentOrigin, ent->s.origin, vec );
-		len = VectorLength( vec );
+		len = VectorLengthSquared( vec );
 
-		if ( len > radius ) { // largest bomb blast = 600
+		if ( len > SQR(radius) ) { // largest bomb blast = 600
 			continue;
 		}
 
-		// NERVE - SMF - client side camera shake
-		//DAJ BUGFIX va() not doing %f's correctly
-		bounceamt = min( 1.0f, 1.0f - ( len / radius ) );
-		sprintf( cmd, "shake %.4f", bounceamt );   //DAJ
-		trap_SendServerCommand( player->s.clientNum, cmd );
-//DAJ BUGFIX		trap_SendServerCommand( player->s.clientNum, va( "shake %f", &bounceamt));
+		trap_SendServerCommand( player->s.clientNum, va( "shake %f", bounceamt ) );
 	}
 }
 // jpw
@@ -1297,7 +1252,7 @@ fire_rocket
 gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 	gentity_t   *bolt;
 
-	weapon_t currentWeapon = self->client->ps.weapon;
+	weapon_t currentWeapon = self->s.weapon;
 
 	VectorNormalize( dir );
 
@@ -1314,7 +1269,7 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 
 	bolt->r.ownerNum = self->s.number;
 	bolt->parent = self;
-	if(currentWeapon = WP_ROCKET_LAUNCHER){
+	if(currentWeapon == WP_ROCKET_LAUNCHER){
 		bolt->damage = 100;
 		bolt->splashDamage = 100; 
 		bolt->splashRadius = 120;
@@ -1334,7 +1289,7 @@ gentity_t *fire_rocket( gentity_t *self, vec3_t start, vec3_t dir ) {
 	bolt->s.pos.trType = TR_LINEAR;
 	bolt->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;     // move a bit on the very first frame
 	VectorCopy( start, bolt->s.pos.trBase );
-	if(currentWeapon = WP_ROCKET_LAUNCHER){
+	if(currentWeapon == WP_ROCKET_LAUNCHER){
 		VectorScale( dir,900,bolt->s.pos.trDelta );
 	}else{
 		VectorScale( dir,2500,bolt->s.pos.trDelta );

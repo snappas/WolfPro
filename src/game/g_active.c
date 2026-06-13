@@ -28,9 +28,7 @@ If you have questions concerning this license or the applicable additional terms
 
 
 #include "g_local.h"
-
-#include "ai_cast_fight.h"   // need these for avoidance
-
+#include "rtcwbot_interface.h"
 
 extern void G_CheckForCursorHints( gentity_t *ent );
 
@@ -82,7 +80,7 @@ void P_DamageFeedback( gentity_t *player ) {
 	}
 
 	// play an apropriate pain sound
-	if ( ( level.time > player->pain_debounce_time ) && !( player->flags & FL_GODMODE ) && !( player->r.svFlags & SVF_CASTAI ) && !( player->s.powerups & PW_INVULNERABLE ) ) { //----(SA)
+	if ( ( level.time > player->pain_debounce_time ) && !( player->flags & FL_GODMODE ) && !( player->r.svFlags & SVF_BOT ) && !( player->s.powerups & PW_INVULNERABLE ) ) { //----(SA)
 		player->pain_debounce_time = level.time + 700;
 		G_AddEvent( player, EV_PAIN, player->health );
 	}
@@ -162,6 +160,10 @@ void P_WorldEffects( gentity_t *ent ) {
 						ent->damage = 15;
 					}
 
+					if(g_OmniBotEnable.integer){
+						Bot_Event_Drowning( ent-g_entities );
+					}
+
 					// play a gurp sound instead of a normal pain sound
 					if ( ent->health <= ent->damage ) {
 						G_Sound( ent, G_SoundIndex( "*drown.wav" ) );
@@ -233,7 +235,7 @@ G_SetClientSound
 ===============
 */
 void G_SetClientSound( gentity_t *ent ) {
-	if ( ent->aiCharacter ) {
+	if ( ent->r.svFlags & SVF_BOT ) {
 		return;
 	}
 
@@ -270,9 +272,17 @@ void ClientImpacts( gentity_t *ent, pmove_t *pm ) {
 		}
 		other = &g_entities[ pm->touchents[i] ];
 
-		if ( ( ent->r.svFlags & SVF_BOT ) && ( ent->touch ) ) {
-			ent->touch( ent, other, &trace );
-		}
+		// cs: modified so they push inv humans too (for annoying revives)
+		// if ( ( ent->client ) &&
+		// 	 ( ( other->r.svFlags & SVF_BOT ) || ( other->client && other->client->ps.powerups[PW_INVULNERABLE] ) ) ) {
+		// 	PushBot( ent, other );
+		// }
+
+		// // if we are standing on their head, then we should be pushed also
+		// if ( ( ent->r.svFlags & SVF_BOT || ( other->client && other->client->ps.powerups[PW_INVULNERABLE] ) ) &&
+		// 	 ( ent->s.groundEntityNum == other->s.number && other->client ) ) {
+		// 	PushBot( other, ent );
+		// }
 
 		if ( !other->touch ) {
 			continue;
@@ -354,9 +364,6 @@ void    G_TouchTriggers( gentity_t *ent ) {
 			hit->touch( hit, ent, &trace );
 		}
 
-		if ( ( ent->r.svFlags & SVF_BOT ) && ( ent->touch ) ) {
-			ent->touch( ent, hit, &trace );
-		}
 	}
 }
 
@@ -1005,6 +1012,9 @@ void ClientThink_real( gentity_t *ent ) {
 						ent2->count = client->ps.ammoclip[BG_FindClipForWeapon( weapon )];
 						ent2->item->quantity = client->ps.ammoclip[BG_FindClipForWeapon( weapon )];
 						client->ps.ammoclip[BG_FindClipForWeapon( weapon )] = 0;
+						if(g_OmniBotEnable.integer){
+							Bot_Event_RemoveWeapon( client->ps.clientNum, Bot_WeaponGameToBot( weapon ) );
+						}
 					}
 				}
 			}
@@ -1098,10 +1108,6 @@ void ClientThink_real( gentity_t *ent ) {
 	pm.pmove_msec = pmove_msec.integer;
 
 	pm.noWeapClips = ( g_dmflags.integer & DF_NO_WEAPRELOAD ) > 0;
-	if ( ent->aiCharacter && AICast_NoReload( ent->s.number ) ) {
-		pm.noWeapClips = qtrue; // ensure AI characters don't use clips if they're not supposed to.
-
-	}
 	// Ridah
 //	if (ent->r.svFlags & SVF_NOFOOTSTEPS)
 //		pm.noFootsteps = qtrue;
@@ -1119,7 +1125,7 @@ void ClientThink_real( gentity_t *ent ) {
 	Pmove( &pm );
 
 	// server cursor hints
-	if ( ent->lastHintCheckTime < level.time ) {
+	if (!(ent->r.svFlags & SVF_BOT) && ent->lastHintCheckTime < level.time ) {
 		G_CheckForCursorHints( ent );
 
 		ent->lastHintCheckTime = level.time + FRAMETIME;
@@ -1209,6 +1215,10 @@ void ClientThink_real( gentity_t *ent ) {
 
 	if ( ent->flags & FL_NOFATIGUE ) {
 		ent->client->ps.sprintTime = 20000;
+	}
+
+	if(g_OmniBotEnable.integer){
+		Bot_Util_CheckForSuicide( ent );
 	}
 
 
@@ -1656,30 +1666,30 @@ void ClientEndFrame( gentity_t *ent ) {
 		return;
 	}
 
-	if ( !ent->aiCharacter ) {
-		// turn off any expired powerups
-		for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
 
-			if ( //i == PW_FIRE ||             // these aren't dependant on level.time
-				 i == PW_ELECTRIC ||
-				 i == PW_BREATHER ||
-				 i == PW_NOFATIGUE ||
-				 i == PW_CAPPEDOBJ ) {
+	// turn off any expired powerups
+	for ( i = 0 ; i < MAX_POWERUPS ; i++ ) {
 
-				continue;
-			}
+		if ( //i == PW_FIRE ||             // these aren't dependant on level.time
+				i == PW_ELECTRIC ||
+				i == PW_BREATHER ||
+				i == PW_NOFATIGUE ||
+				i == PW_CAPPEDOBJ ) {
 
-			if ( ent->client->ps.powerups[ i ] < level.time ) {
-				ent->client->ps.powerups[ i ] = 0;
-			}
+			continue;
 		}
 
-		// Make sure we dont let stuff like CTF flags expire.
-		if ( level.paused != PAUSE_NONE &&
-				ent->client->ps.powerups[i] != INT_MAX ) {
-			ent->client->ps.powerups[i] += level.time - level.previousTime;
+		if ( ent->client->ps.powerups[ i ] < level.time ) {
+			ent->client->ps.powerups[ i ] = 0;
 		}
-}
+	}
+
+	// Make sure we dont let stuff like CTF flags expire.
+	if ( level.paused != PAUSE_NONE &&
+			ent->client->ps.powerups[i] != INT_MAX ) {
+		ent->client->ps.powerups[i] += level.time - level.previousTime;
+	}
+
 
 	// save network bandwidth
 #if 0

@@ -26,7 +26,8 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 
-
+#ifndef __G_LOCAL_H__
+#define __G_LOCAL_H__
 
 // g_local.h -- local definitions for game module
 
@@ -47,6 +48,8 @@ If you have questions concerning this license or the applicable additional terms
 #define INFINITE            1000000
 
 #define FRAMETIME           100                 // msec
+#define GAME_INIT_FRAMES    6
+
 #define EVENT_VALID_MSEC    300
 #define CARNAGE_REWARD_TIME 3000
 #define REWARD_SPRITE_TIME  2000
@@ -251,6 +254,7 @@ struct gentity_s {
 	int timestamp;              // body queue sinking, etc
 
 	float angle;                // set in editor, -1 = up, -2 = down
+	int targetnamehash;         // Gordon: adding a hash for this for faster lookups
 	char        *target;
 	char        *targetname;
 	char        *team;
@@ -394,7 +398,6 @@ struct gentity_s {
 	// the accumulation buffer
 	int scriptAccumBuffer[G_MAX_SCRIPT_ACCUM_BUFFERS];
 
-	qboolean AASblocking;
 	float accuracy;
 
 	char        *tagName;       // name of the tag we are attached to
@@ -423,11 +426,10 @@ struct gentity_s {
 	qboolean isHeadshot;
 
 	gentity_t *bodyCapsules[MAX_PLAYER_CAPSULES];
-};
 
-// Ridah
-#include "ai_cast_global.h"
-// done.
+	//for omni-bot dynamite goals
+	int numPlanted;
+};
 
 typedef enum {
 	CON_DISCONNECTED,
@@ -580,6 +582,10 @@ typedef struct {
 	int end_time;                   // player ends/leaves game
 	char ip[22]; 
 	vec3_t prevOrigin;
+
+	qboolean botSuicide;            // CS: if true, bots will /kill 2 seconds before their next spawn
+    qboolean botSuicidePersist;
+    qboolean botPush;               // CS: in some cases we don't want bots pushing
 
 } clientSession_t;
 
@@ -800,6 +806,8 @@ struct gclient_s {
 	int lastRevivePushTime;
 
 	animationInfo_t animationInfo;
+
+	int flagParent;
 };
 
 
@@ -873,6 +881,7 @@ typedef struct {
 	int warmupTime;                 // restart match at this time
 	qboolean warmupSwap;			// Swap teams in SW with g_tournament enabled
 
+	char rawmapname[MAX_QPATH];
 
 	fileHandle_t logFile;
 
@@ -1050,6 +1059,10 @@ typedef struct {
 
 	int winningTeam;
 	int defendingTeam;
+
+	//Omni-Bot time triggers
+	qboolean twoMinute;
+	qboolean thirtySecond;
 } level_locals_t;
 
 extern qboolean reloading;                  // loading up a savegame
@@ -1087,6 +1100,8 @@ void SanitizeString(char* in, char* out);
 void SanitizeStringToLower(char* in, char* out, qboolean fToLower);
 void G_OverrideSpawnTarget_f(void);
 void G_RemoveSpawnPoint_f(void);
+void Cmd_BotTapOut_f( gentity_t *ent );
+
 //
 // g_items.c
 //
@@ -1138,6 +1153,8 @@ void    G_Sound( gentity_t *ent, int soundIndex );
 void    G_AnimScriptSound( int soundIndex, vec3_t org, int client );
 void    G_FreeEntity( gentity_t *e );
 //qboolean	G_EntitiesFree( void );
+gentity_t* G_FindByTargetname( gentity_t *from, const char* match );
+gentity_t *AICast_FindEntityForName( char *name );
 
 void    G_TouchTriggers( gentity_t *ent );
 void    G_TouchSolids( gentity_t *ent );
@@ -1158,6 +1175,9 @@ void G_ProcessTagConnect( gentity_t *ent );
 
 qboolean G_AllowTeamsAllowed(gentity_t* ent, gentity_t* activator); // RTCWPro - allowteams ET - port
 int G_FindMatchingMaps(gentity_t* ent, char* mapName);
+
+// g_team.c
+void reset_numobjectives(void);
 
 //
 // g_combat.c
@@ -1224,6 +1244,8 @@ void InitMoverRotate( gentity_t *ent );
 
 void InitMover( gentity_t *ent );
 void SetMoverState( gentity_t *ent, moverState_t moverState, int time );
+
+void func_explosive_explode( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int mod );
 
 //
 // g_tramcar.c
@@ -1302,6 +1324,7 @@ void DeathmatchScoreboardMessage( gentity_t *client );
 // g_cmds.c
 //
 void G_SayTo( gentity_t *ent, gentity_t *other, int mode, int color, const char *name, const char *username, const char *message, qboolean localize ); // JPW NERVE removed static declaration so it would link
+void Cmd_Kill_f( gentity_t *ent );
 
 //
 // g_pweapon.c
@@ -1355,39 +1378,12 @@ void G_InitSessionData( gclient_t *client, char *userinfo );
 void G_InitWorldSession( void );
 void G_WriteSessionData( void );
 
-//
-// g_bot.c
-//
-char *G_GetBotInfoByNumber( int num );
-char *G_GetBotInfoByName( const char *name );
-void G_CheckBotSpawn( void );
-void G_QueueBotBegin( int clientNum );
-qboolean G_BotConnect( int clientNum, qboolean restart );
-void Svcmd_AddBot_f( void );
-
 // ai_main.c
 #define MAX_FILEPATH            144
-
-//bot settings
-typedef struct bot_settings_s
-{
-	char characterfile[MAX_FILEPATH];
-	float skill;
-	char team[MAX_FILEPATH];
-} bot_settings_t;
-
-int BotAISetup( int restart );
-int BotAIShutdown( int restart );
-int BotAILoadMap( int restart );
-int BotAISetupClient( int client, struct bot_settings_s *settings );
-int BotAIShutdownClient( int client );
-int BotAIStartFrame( int time );
-void BotTestAAS( vec3_t origin );
 
 
 // g_cmd.c
 void Cmd_Activate_f( gentity_t *ent );
-int Cmd_WolfKick_f( gentity_t *ent );
 // Ridah
 
 // g_save.c
@@ -1623,6 +1619,14 @@ extern vmCvar_t g_debugHitboxes;
 extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
 extern vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
 
+//omnibot stuff
+extern vmCvar_t g_OmniBotPath;
+extern vmCvar_t g_OmniBotEnable;
+extern vmCvar_t g_OmniBotFlags;
+extern vmCvar_t g_OmniBotPlaying;
+extern vmCvar_t g_OmniBotGib;
+extern vmCvar_t g_botTeam;
+
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );
@@ -1668,7 +1672,7 @@ int     trap_BotAllocateClient( void );
 void    trap_BotFreeClient( int clientNum );
 void    trap_GetUsercmd( int clientNum, usercmd_t *cmd );
 qboolean    trap_GetEntityToken( char *buffer, int bufferSize );
-int trap_GetTag( char *tagName, orientation_t *or, lerpInfo_t *li);
+int trap_GetTag( char *tagName, orientation_t *ori, lerpInfo_t *li);
 qboolean trap_GetBone( int boneIndex, vec3_t outOrigin, lerpInfo_t *li );
 
 int     trap_DebugPolygonCreate( int color, int numPoints, vec3_t *points );
@@ -1720,7 +1724,6 @@ int         trap_AAS_PredictClientMovement( void /* aas_clientmove_s */ *move, i
 void        trap_AAS_RT_ShowRoute( vec3_t srcpos, int srcnum, int destnum );
 qboolean    trap_AAS_RT_GetHidePos( vec3_t srcpos, int srcnum, int srcarea, vec3_t destpos, int destnum, int destarea, vec3_t returnPos );
 int         trap_AAS_FindAttackSpotWithinRange( int srcnum, int rangenum, int enemynum, float rangedist, int travelflags, float *outpos );
-void        trap_AAS_SetAASBlockingEntity( vec3_t absmin, vec3_t absmax, qboolean blocking );
 // done.
 
 void    trap_EA_Say( int client, char *str );
@@ -1851,6 +1854,8 @@ typedef enum
 	shard_rubble
 } shards_t;
 
+#define BODY_TEAM( ENT ) ENT->s.modelindex
+
 // g_antilag.c
 void G_StoreClientPosition( gentity_t* ent );
 void G_HistoricalTrace( gentity_t* ent, trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passEntityNum, int contentmask );
@@ -1958,3 +1963,5 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 #define AAPS(x)		AAPSound(x)									// Global sound but hooked under cg_announcer..
 #define APRS(x, y)	APRSound(x, y)								// Global sound with limited (radius) range
 #define CPS(x, y)	CPSound(x, y)								// Client sound only
+
+#endif // __G_LOCAL_H__

@@ -34,7 +34,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "g_local.h"
-
+#include "rtcwbot_interface.h"
 
 /*
 ============
@@ -340,6 +340,13 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		}
 	}
 
+	if(g_OmniBotEnable.integer){
+		//send the events to the bot
+		Bot_Event_Death( self - g_entities, &g_entities[attacker - g_entities], obit );
+		Bot_Event_KilledSomeone( attacker - g_entities, &g_entities[self - g_entities], obit );
+	}
+	
+
 	// broadcast the death event to everyone
 	ent = G_TempEntity( self->r.currentOrigin, EV_OBITUARY );
 	ent->s.eventParm = meansOfDeath;
@@ -476,6 +483,11 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 					G_AddEvent( self, EV_GENERAL_SOUND, G_SoundIndex( "sound/multiplayer/allies/a-medic2.wav" ) );
 				}
 			}
+
+			// ATM: only register the goal if the target isn't in water.
+			if ( g_OmniBotEnable.integer && self->waterlevel <= 1 /*|| g_waterRevive.integer*/ ) {
+				Bot_AddFallenTeammateGoals( self, self->client->sess.sessionTeam );
+			}
 		}
 	}
 	
@@ -519,12 +531,17 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	
 	self->s.angles[2] = 0;
-	LookAtKiller( self, inflictor, attacker );
 
-	VectorCopy( self->s.angles, self->client->ps.viewangles );
+	if ( !( self->r.svFlags & SVF_BOT ) ) {
+		VectorCopy( self->s.angles, self->client->ps.viewangles );
+		LookAtKiller( self, inflictor, attacker );
+	}
+	
 	self->s.loopSound = 0;
+	if ( !( self->r.svFlags & SVF_BOT ) ) {
+		trap_UnlinkEntity( self ); //???
+	}
 
-	trap_UnlinkEntity( self );
 	self->r.maxs[2] = 0;
 	self->client->ps.maxs[2] = 0;
 	trap_LinkEntity( self );
@@ -621,15 +638,6 @@ int CheckArmor( gentity_t *ent, int damage, int dflags ) {
 }
 
 qboolean IsHeadShotWeapon( int mod, qboolean aicharacter ) {
-	if ( aicharacter ) {       // ai's are allowed headshots from these weapons
-		if ( mod == MOD_SNIPERRIFLE ||
-			 mod == MOD_SNOOPERSCOPE ) {
-			return qtrue;
-		}
-
-		return qfalse;
-	}
-
 	// players are allowed headshots from these weapons
 	if (    mod == MOD_LUGER ||
 			mod == MOD_COLT ||
@@ -656,8 +664,6 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 	gentity_t   *head;
 	trace_t tr;
 	gentity_t   *traceEnt;
-	orientation_t or;           // DHM - Nerve
-
 	qboolean head_shot_weapon = qfalse;
 
 	// not a player or critter so bail
@@ -671,7 +677,7 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 
 	if( targ->isHeadshot ){
 		if(g_debugBullets.integer > 0){
-			G_Printf("(IsHeadshot) Hit %s\n", traceEnt->classname);
+			G_Printf("(IsHeadshot) Hit %s\n", targ->classname);
 		}
 		return qtrue;
 	}
@@ -733,10 +739,10 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 }
 
 void G_ComputeHeadPosition( const gentity_t *ent, gentity_t *head ) {
-	orientation_t or;           // DHM - Nerve
+	orientation_t ori;           // DHM - Nerve
 
-	if ( g_preciseHeadHitbox.integer && trap_GetTag( "tag_head", &or, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
-		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &or);
+	if ( g_preciseHeadHitbox.integer && trap_GetTag( "tag_head", &ori, &ent->client->animationInfo.lerpInfo) > -1) { //@TODO
+		BG_PositionRotatedEntityOnTag(head->r.currentOrigin, ent->client->animationInfo.lerpInfo.headAxis, ent->r.currentOrigin, ent->client->animationInfo.lerpInfo.legsAxis, &ori);
 		G_SetOrigin( head, head->r.currentOrigin);
 	} else {
 		float height, dest;
@@ -1179,15 +1185,24 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 	}
 
+	// need to trigger the explodes filtered for health before the damage ...
+	if ( g_OmniBotEnable.integer && take && take > targ->health && targ->s.number >= MAX_CLIENTS && targ->health > 50 ) {
+		if ( targ->spawnflags & 16 ) {
+			if ( Q_stricmp( _GetEntityName( targ ), "" ) ) {
+				Bot_Util_SendTrigger( targ, NULL, va( "Explode_%s Exploded.", _GetEntityName( targ ) ), "exploded" );
+			} else {
+				Bot_Util_SendTrigger( targ, NULL, va( "Explode_%d Exploded", targ->s.number ), "exploded" );
+			}
+		}
+	}
+
 	// do the damage
 	if ( take ) {
 		targ->health = targ->health - take;
 
 		// Ridah, can't gib with bullet weapons (except VENOM)
 		if ( mod != MOD_VENOM && attacker == inflictor && targ->health <= GIB_HEALTH ) {
-			if ( targ->aiCharacter != AICHAR_ZOMBIE ) { // zombie needs to be able to gib so we can kill him (although he doesn't actually GIB, he just dies)
-				targ->health = GIB_HEALTH + 1;
-			}
+			targ->health = GIB_HEALTH + 1;
 		}
 
 // JPW NERVE overcome previous chunk of code for making grenades work again
@@ -1260,6 +1275,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		// Ridah, this needs to be done last, incase the health is altered in one of the event calls
 		if ( targ->client ) {
 			targ->client->ps.stats[STAT_HEALTH] = targ->health;
+		}
+
+		if ( g_OmniBotEnable.integer && targ->s.number < MAX_CLIENTS ) {
+			// notify omni-bot framework
+			Bot_Event_TakeDamage( targ - g_entities, attacker );
 		}
 	}
 

@@ -50,6 +50,7 @@ cmake_dependent_option(BUILD_MOD_PK3			"Pack the mod libraries and game scripts 
 option(FORCE_DEBUG				"Force enable debug macros"								OFF)
 option(ENABLE_ASAN				"Enable AddressSanitizer on clang"						OFF)
 option(ENABLE_MULTI_BUILD		"Enable binary names to include arch"					ON)
+option(ENABLE_OMNIBOT           "Enable omnibot support"                                ON)
 
 cmake_dependent_option(FEATURE_WINDOWS_CONSOLE	"Build win32 executables with Windows console"	OFF "WIN32" OFF)
 

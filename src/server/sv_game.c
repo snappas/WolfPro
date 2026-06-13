@@ -546,7 +546,6 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 		return botlib_export->aas.AAS_FindAttackSpotWithinRange( args[1], args[2], args[3], VMF( 4 ), args[5], VMA( 6 ) );
 
 	case BOTLIB_AAS_SETAASBLOCKINGENTITY:
-		botlib_export->aas.AAS_SetAASBlockingEntity( VMA( 1 ), VMA( 2 ), args[3] );
 		return 0;
 		// done.
 

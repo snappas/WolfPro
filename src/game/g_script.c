@@ -36,7 +36,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "../game/g_local.h"
 #include "../game/q_shared.h"
-
+#include "rtcwbot_interface.h"
 /*
 Scripting that allows the designers to control the behaviour of entities
 according to each different scenario.
@@ -142,11 +142,15 @@ g_script_event_define_t gScriptEvents[] =
 	{"death",            NULL},          // RIP
 	{"activate",     G_Script_EventMatch_StringEqual},   // something has triggered us (always followed by an identifier)
 	{"stopcam",          NULL},
+	//added for omni support
+	{"dynamited",       NULL},
+	{"defused",         NULL},
+	{"destroyed",       NULL},
+	{"exploded",        NULL},
+	{"playerstart",     NULL}, //CS: get rid of the error in debug mode. see clientspawn
 
 	{NULL,              NULL}
 };
-
-extern int numSecrets;
 
 /*
 ===============
@@ -215,9 +219,6 @@ g_script_stack_action_t *G_Script_ActionForString( char *string ) {
 	for ( i = 0; gScriptActions[i].actionString; i++ )
 	{
 		if ( !Q_strcasecmp( string, gScriptActions[i].actionString ) ) {
-			if ( !Q_strcasecmp( string, "foundsecret" ) ) {
-				numSecrets++;
-			}
 			return &gScriptActions[i];
 		}
 	}
@@ -552,6 +553,52 @@ void G_Script_ScriptEvent( gentity_t *ent, char *eventStr, char *params ) {
 			}
 		}
 	}
+
+	if(g_OmniBotEnable.integer){
+		// skip these
+		if ( !Q_stricmp( eventStr, "trigger" ) ||
+			!Q_stricmp( eventStr, "activate" ) ||
+			!Q_stricmp( eventStr, "spawn" ) ||
+			!Q_stricmp( eventStr, "death" ) ||
+			!Q_stricmp( eventStr, "pain" ) ||
+			!Q_stricmp( eventStr, "playerstart" ) ) {
+			return;
+		}
+
+		if ( !Q_stricmp( eventStr, "defused" ) ) {
+			Bot_Util_SendTrigger( ent, NULL,
+								va( "Defused at %s.", ent->parent ? ent->parent->track : ent->track ),
+								eventStr );
+		}
+		if ( !Q_stricmp( eventStr, "dynamited" ) ) {
+			Bot_Util_SendTrigger( ent, NULL,
+								va( "Planted at %s.", ent->parent ? ent->parent->track : ent->track ),
+								eventStr );
+		}
+		if ( !Q_stricmp( eventStr, "destroyed" ) ) {
+			Bot_Util_SendTrigger( ent, NULL,
+								va( "%s Destroyed.", ent->parent ? ent->parent->track : ent->track ),
+								eventStr );
+		}
+		if ( !Q_stricmp( eventStr, "exploded" ) ) {
+			if ( ent->spawnflags & 32 ) {
+				if ( Q_stricmp( _GetEntityName( ent ), "" ) ) {
+					Bot_Util_SendTrigger( ent, NULL, va( "Explode_%s Exploded.", _GetEntityName( ent ) ), eventStr );
+				} else {
+					Bot_Util_SendTrigger( ent, NULL, va( "Explode_%d Exploded", ent->s.number ), eventStr );
+				}
+			}
+
+			// dynamite goals without an OID ... mp_tank bridge for example
+			if ( ent->spawnflags == 77 || ent->spawnflags == 104 || ( ent->spawnflags == 76 && !ent->scriptName ) ) {
+				if ( Q_stricmp( _GetEntityName( ent ), "" ) ) {
+					Bot_Util_SendTrigger( ent, NULL, va( "%s Destroyed.", _GetEntityName( ent ) ), eventStr );
+				} else {
+					Bot_Util_SendTrigger( ent, NULL, va( "DynoTarget_%d Destroyed", ent->s.number ), eventStr );
+				}
+			}
+		}
+	}
 }
 
 /*
@@ -563,10 +610,6 @@ G_Script_ScriptRun
 */
 qboolean G_Script_ScriptRun( gentity_t *ent ) {
 	g_script_stack_t *stack;
-
-	if ( saveGamePending ) {
-		return qfalse;
-	}
 
 	if ( strlen( g_missionStats.string ) > 1 ) {
 		return qfalse;

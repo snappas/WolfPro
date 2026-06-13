@@ -3783,7 +3783,6 @@ static void WM_ChangePlayerType() {
 void WM_GetSpawnPoints() {
 	char cs[MAX_STRING_CHARS];
 	const char *s;
-	int i;
 
 	trap_GetConfigString( CS_MULTI_INFO, cs, sizeof( cs ) );
 	s = Info_ValueForKey( cs, "numspawntargets" );

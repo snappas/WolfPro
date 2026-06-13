@@ -880,9 +880,6 @@ void Just_Got_Thrown( gentity_t *self ) {
 		return;
 	} else
 	{
-		// RF, alert AI of sound event
-		AICast_AudibleEvent( self->s.number, self->r.currentOrigin, 384 );
-
 		G_AddEvent( self, EV_GENERAL_SOUND, snd_chairhitground );
 		VectorSubtract( self->r.currentOrigin, self->s.origin2, vec );
 		len = VectorLength( vec );
@@ -1249,9 +1246,6 @@ void Props_Chair_Touch( gentity_t *self, gentity_t *other, trace_t *trace ) {
 	has_moved = Prop_Touch( self, other, v );
 
 	if ( !has_moved && ( other->r.svFlags & SVF_CASTAI ) ) {
-		// RF, alert AI of sound event
-		AICast_AudibleEvent( self->s.number, self->r.currentOrigin, 384 );
-
 		// other could play kick animation here
 		Props_Chair_Die( self, other, other, 100, 0 );
 		return;
@@ -1260,9 +1254,6 @@ void Props_Chair_Touch( gentity_t *self, gentity_t *other, trace_t *trace ) {
 	Prop_Check_Ground( self );
 
 	if ( level.time > self->random && has_moved ) {
-		// RF, alert AI of sound event
-		AICast_AudibleEvent( self->s.number, self->r.currentOrigin, 384 );
-
 		G_AddEvent( self, EV_GENERAL_SOUND, snd_chaircreak );
 		self->random = level.time + 1000 + ( rand() % 200 );
 	}

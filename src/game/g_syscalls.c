@@ -237,8 +237,8 @@ void trap_SnapVector( float *v ) {
 	return;
 }
 
-int trap_GetTag( char *tagName, orientation_t* or, lerpInfo_t *li) {
-	return syscall( G_GETTAG, tagName, or, li );
+int trap_GetTag( char *tagName, orientation_t* ori, lerpInfo_t *li) {
+	return syscall( G_GETTAG, tagName, ori, li );
 }
 
 qboolean trap_GetBone(int boneIndex, vec3_t outOrigin, lerpInfo_t *li) {
@@ -379,9 +379,6 @@ int trap_AAS_FindAttackSpotWithinRange( int srcnum, int rangenum, int enemynum, 
 	return syscall( BOTLIB_AAS_FINDATTACKSPOTWITHINRANGE, srcnum, rangenum, enemynum, PASSFLOAT( rangedist ), travelflags, outpos );
 }
 
-void trap_AAS_SetAASBlockingEntity( vec3_t absmin, vec3_t absmax, qboolean blocking ) {
-	syscall( BOTLIB_AAS_SETAASBLOCKINGENTITY, absmin, absmax, blocking );
-}
 // done.
 
 void trap_EA_Say( int client, char *str ) {
