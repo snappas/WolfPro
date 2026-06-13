@@ -1913,6 +1913,7 @@ extern vmCvar_t cg_topshotsY;
 extern vmCvar_t g_rocketMode;
 
 extern vmCvar_t cg_noAmmoAutoSwitch;
+extern vmCvar_t cg_gamestate;
 
 //
 // cg_main.c

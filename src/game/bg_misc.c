@@ -40,9 +40,11 @@ If you have questions concerning this license or the applicable additional terms
 // JPW NERVE -- added because I need to check single/multiplayer instances and branch accordingly
 #ifdef CGAMEDLL
 extern vmCvar_t cg_gameType;
+extern vmCvar_t cg_gamestate;
 #endif
 #ifdef GAMEDLL
 extern vmCvar_t g_gametype;
+extern vmCvar_t g_gamestate;
 #endif
 // jpw
 
@@ -3507,6 +3509,20 @@ qboolean BG_CanItemBeGrabbed( const entityState_t *ent, const playerState_t *ps 
 
 	item = &bg_itemlist[ent->modelindex];
 
+#ifdef GAMEDLL
+	if (g_gamestate.integer != GS_PLAYING) {
+#endif
+#ifdef CGAMEDLL
+	if (cg_gamestate.integer != GS_PLAYING) {
+#endif
+		if (item->giType != IT_WEAPON &&
+			item->giType != IT_AMMO &&
+			item->giType != IT_HEALTH) {
+			return qfalse;
+		}
+#if defined(GAMEDLL) || defined(CGAMEDLL)
+	}
+#endif
 	switch ( item->giType ) {
 	case IT_WEAPON:
 // JPW NERVE -- medics & engineers can only pick up same weapon type

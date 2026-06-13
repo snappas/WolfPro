@@ -704,15 +704,6 @@ void Touch_Item( gentity_t *ent, gentity_t *other, trace_t *trace ) {
 		return;     // dead people can't pickup
 
 	}
-
-	// OSPx - Don't let them pickup winning stuff in warmup
-	if (g_gamestate.integer != GS_PLAYING) {
-		if (ent->item->giType != IT_WEAPON &&
-			ent->item->giType != IT_AMMO &&
-			ent->item->giType != IT_HEALTH) {
-			return;
-		}
-	}
 	
 	// the same pickup rules are used for client side and server side
 	if ( !BG_CanItemBeGrabbed( &ent->s, &other->client->ps ) ) {
