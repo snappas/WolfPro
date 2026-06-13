@@ -532,7 +532,7 @@ the wrong gamestate.
 */
 void SV_SendClientGameState( client_t *client ) {
 	int start;
-	entityState_t   *base, nullstate;
+	entityState_t nullstate;
 	msg_t msg;
 	byte msgBuffer[MAX_MSGLEN];
 	const svEntity_t *svEnt;
@@ -983,10 +983,9 @@ This routine would be a bit simpler with a goto but i abstained
 =================
 */
 static void SV_VerifyPaks_f( client_t *cl ) {
-	int nChkSum1, nChkSum2, nClientPaks, nServerPaks, i, j, nCurArg;
+	int nChkSum1, nChkSum2, nClientPaks, i, j, nCurArg;
 	int nClientChkSum[1024];
-	int nServerChkSum[1024];
-	const char *pPaks, *pArg;
+	const char *pArg;
 	qboolean bGood = qtrue;
 
 	int qagameChkSum = 0;

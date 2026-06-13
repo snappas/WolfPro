@@ -3419,7 +3419,7 @@ int numReferencedPaks = 0;
 
 void FS_ServerReferencedPureChecksums(void){
 	const searchpath_t	*search;
-	int nFlags, numPaks, checksum;
+	int nFlags;
 	for ( nFlags = FS_QAGAME_REF; nFlags; nFlags = nFlags >> 1 ) {
 		for ( search = fs_searchpaths ; search ; search = search->next ) {
 			// is the element a pak file and has it been referenced based on flag?
