@@ -40,9 +40,11 @@ If you have questions concerning this license or the applicable additional terms
 // JPW NERVE -- added because I need to check single/multiplayer instances and branch accordingly
 #ifdef CGAMEDLL
 extern vmCvar_t cg_gameType;
+extern vmCvar_t cg_gamestate;
 #endif
 #ifdef GAMEDLL
 extern vmCvar_t g_gametype;
+extern vmCvar_t g_gamestate;
 #endif
 // jpw
 
@@ -115,7 +117,7 @@ ammotable_t ammoTable[] = {
 	{   999,            0,      999,    0,      50,             200,    0,      0,      MOD_KNIFE,				1		},  //	WP_KNIFE				// 1
 
 	{   MAX_AMMO_9MM,   1,      8,      1500,   DELAY_PISTOL,   400,    0,      0,      MOD_LUGER,				5		},  //	WP_LUGER				// 2	// NOTE: also 32 round 'snail' magazine
-	{   MAX_AMMO_9MM,   1,      32,     2600,   DELAY_LOW,      100,    0,      0,      MOD_MP40,				4		},  //	WP_MP40					// 3
+	{   MAX_AMMO_MP40,  1,      32,     2600,   DELAY_LOW,      100,    0,      0,      MOD_MP40,				4		},  //	WP_MP40					// 3
 	{   MAX_AMMO_MAUSER,1,      10,     2500,   DELAY_HIGH,     1200,   0,      0,      MOD_MAUSER,				4		},  //	WP_MAUSER				// 4	// NOTE: authentic clips are 5/10/25 rounds
 	{   MAX_AMMO_FG42,  1,      20,     2000,   DELAY_LOW,      200,    0,      0,      MOD_FG42,				4		},  //	WP_FG42					// 5
 	{   15,             1,      15,     1000,   DELAY_THROW,    1600,   0,      0,      MOD_GRENADE_LAUNCHER,	1		},  //	WP_GRENADE_LAUNCHER		// 6
@@ -128,7 +130,7 @@ ammotable_t ammoTable[] = {
 
 	{   999,            0,      999,    0,      50,             200,    0,      0,      MOD_KNIFE2,				1		},  //	WP_KNIFE2				// 12
 	{   MAX_AMMO_45,    1,      8,      1500,   DELAY_PISTOL,   400,    0,      0,      MOD_COLT,				5		},  //	WP_COLT					// 13
-	{   MAX_AMMO_45,    1,      30,     2400,   DELAY_LOW,      120,    0,      0,      MOD_THOMPSON,			4		},  //	WP_THOMPSON				// 14	// NOTE: also 50 round drum magazine
+	{   MAX_AMMO_THOM,  1,      30,     2400,   DELAY_LOW,      120,    0,      0,      MOD_THOMPSON,			4		},  //	WP_THOMPSON				// 14	// NOTE: also 50 round drum magazine
 	{   MAX_AMMO_GARAND,1,      5,      2500,   DELAY_HIGH,     1200,   0,      0,      MOD_GARAND,				4		},  //	WP_GARAND				// 15	// NOTE: always 5 round clips
 	{   MAX_AMMO_BAR,   1,      20,     2000,   DELAY_LOW,      200,    0,      0,      MOD_BAR,				4		},  //	WP_BAR					// 16
 	{   15,             1,      15,     1000,   DELAY_THROW,    1600,   0,      0,      MOD_GRENADE_PINEAPPLE,	1		},  //	WP_GRENADE_PINEAPPLE	// 17
@@ -3507,6 +3509,20 @@ qboolean BG_CanItemBeGrabbed( const entityState_t *ent, const playerState_t *ps 
 
 	item = &bg_itemlist[ent->modelindex];
 
+#ifdef GAMEDLL
+	if (g_gamestate.integer != GS_PLAYING) {
+#endif
+#ifdef CGAMEDLL
+	if (cg_gamestate.integer != GS_PLAYING) {
+#endif
+		if (item->giType != IT_WEAPON &&
+			item->giType != IT_AMMO &&
+			item->giType != IT_HEALTH) {
+			return qfalse;
+		}
+#if defined(GAMEDLL) || defined(CGAMEDLL)
+	}
+#endif
 	switch ( item->giType ) {
 	case IT_WEAPON:
 // JPW NERVE -- medics & engineers can only pick up same weapon type

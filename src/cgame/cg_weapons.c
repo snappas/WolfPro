@@ -2929,7 +2929,7 @@ static qboolean CG_WeaponHasAmmo( int i ) {
 CG_WeaponSelectable
 ===============
 */
-static qboolean CG_WeaponSelectable( int i ) {
+qboolean CG_WeaponSelectable( int i ) {
 
 	// allow the player to unselect all weapons
 //	if(i == WP_NONE)
@@ -4042,7 +4042,8 @@ void CG_OutOfAmmoChange( void ) {
 // jpw
 
 	// never switch weapon if auto-reload is disabled
-	if ( !cg.pmext.bAutoReload && IS_AUTORELOAD_WEAPON( cg.weaponSelect ) ) {
+	if ( !cg.pmext.bAutoReload && IS_AUTORELOAD_WEAPON( cg.weaponSelect )
+			&& !cg_noAmmoAutoSwitch.integer) {
 		return;
 	}
 

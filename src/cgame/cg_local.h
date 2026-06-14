@@ -1912,6 +1912,9 @@ extern vmCvar_t cg_topshotsY;
 
 extern vmCvar_t g_rocketMode;
 
+extern vmCvar_t cg_noAmmoAutoSwitch;
+extern vmCvar_t cg_gamestate;
+
 //
 // cg_main.c
 //
@@ -2184,6 +2187,7 @@ void CG_DrawHoldableSelect( void );
 
 void CG_OutOfAmmoChange( void );
 void CG_HoldableUsedupChange( void ); //----(SA)	added
+qboolean CG_WeaponSelectable( int i );
 
 //----(SA) added to header to access from outside cg_weapons.c
 void CG_AddDebris( vec3_t origin, vec3_t dir, int speed, int duration, int count );

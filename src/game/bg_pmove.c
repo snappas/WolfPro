@@ -2594,20 +2594,20 @@ static void PM_Weapon( void ) {
 		// JPW NERVE -- added back for multiplayer pistol balancing
 		
 		if ( pm->ps->weapon == WP_LUGER ) {
-			if ( pm->ps->releasedFire ) {
+			if ( pm->pmext->releasedFire ) {
 				if ( ( pm->cmd.buttons & BUTTON_ATTACK ) && pm->ps->weaponTime <= 150 ) {
 					pm->ps->weaponTime = 0;
 				}
 			} else if ( !( pm->cmd.buttons & BUTTON_ATTACK ) ) {
-				pm->ps->releasedFire = qtrue;
+				pm->pmext->releasedFire = qtrue;
 			}
 		} else if ( pm->ps->weapon == WP_COLT ) {
-			if ( pm->ps->releasedFire ) {
+			if ( pm->pmext->releasedFire ) {
 				if ( ( pm->cmd.buttons & BUTTON_ATTACK ) && pm->ps->weaponTime <= 150 ) {
 					pm->ps->weaponTime = 0;
 				}
 			} else if ( !( pm->cmd.buttons & BUTTON_ATTACK ) ) {
-				pm->ps->releasedFire = qtrue;
+				pm->pmext->releasedFire = qtrue;
 			}
 		}
 		
@@ -2987,7 +2987,7 @@ static void PM_Weapon( void ) {
 	}
 
 	// RF
-	pm->ps->releasedFire = qfalse;
+	pm->pmext->releasedFire = qfalse;
 	pm->ps->lastFireTime = pm->cmd.serverTime;
 
 

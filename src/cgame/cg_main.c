@@ -435,6 +435,9 @@ vmCvar_t cg_topshotsY;
 
 vmCvar_t g_rocketMode;
 
+vmCvar_t cg_noAmmoAutoSwitch;
+
+vmCvar_t cg_gamestate;
 
 typedef struct {
 	vmCvar_t    *vmCvar;
@@ -766,6 +769,10 @@ cvarTable_t cvarTable[] = {
 	{ &cg_topshotsY, "cg_topshotsY", "385", CVAR_ARCHIVE },
 
 	{ &g_rocketMode, "g_rocketMode", "0", 0 },
+
+	{ &cg_noAmmoAutoSwitch, "cg_noAmmoAutoSwitch", "0", CVAR_ARCHIVE },
+
+	{ &cg_gamestate, "gamestate", "0", 0}, //communicated via wolfinfo
 
 	
 };
