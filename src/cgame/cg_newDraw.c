@@ -1925,6 +1925,10 @@ CG_EventHandling
 
 */
 void CG_EventHandling( int type ) {
+	if (cg.demoPlayback && type == CGAME_EVENT_NONE)
+	{
+		type = CGAME_EVENT_DEMO;
+	}
 	cgs.eventHandling = type;
 	if ( type == CGAME_EVENT_NONE ) {
 		CG_HideTeamMenu();
@@ -1939,9 +1943,16 @@ void CG_EventHandling( int type ) {
 
 void CG_KeyEvent( int key, qboolean down ) {
 
+	if(cgs.eventHandling == CGAME_EVENT_DEMO){
+		CG_RunBinding(key, down);
+		return;
+	}
+
 	if ( !down ) {
 		return;
 	}
+
+	
 
 	if ( cg.predictedPlayerState.pm_type == PM_NORMAL || ( cg.predictedPlayerState.pm_type == PM_SPECTATOR && cg.showScores == qfalse ) ) {
 		CG_EventHandling( CGAME_EVENT_NONE );

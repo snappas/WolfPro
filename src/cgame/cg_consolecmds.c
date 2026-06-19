@@ -725,6 +725,256 @@ void CG_autoRecord_f(void){
 }
 
 
+/**
+ * @brief CG_FreecamTurnLeftDown_f
+ */
+static void CG_FreecamTurnLeftDown_f(void)
+{
+	cgs.demoCamera.turn |= 0x01;
+}
+
+/**
+ * @brief CG_FreecamTurnLeftUp_f
+ */
+static void CG_FreecamTurnLeftUp_f(void)
+{
+	cgs.demoCamera.turn &= ~0x01;
+}
+
+/**
+ * @brief CG_FreecamTurnRightDown_f
+ */
+static void CG_FreecamTurnRightDown_f(void)
+{
+	cgs.demoCamera.turn |= 0x02;
+}
+
+/**
+ * @brief CG_FreecamTurnRightUp_f
+ */
+static void CG_FreecamTurnRightUp_f(void)
+{
+	cgs.demoCamera.turn &= ~0x02;
+}
+
+/**
+ * @brief CG_FreecamTurnDownDown_f
+ */
+static void CG_FreecamTurnDownDown_f(void)
+{
+	cgs.demoCamera.turn |= 0x04;
+}
+
+/**
+ * @brief CG_FreecamTurnDownUp_f
+ */
+static void CG_FreecamTurnDownUp_f(void)
+{
+	cgs.demoCamera.turn &= ~0x04;
+}
+
+/**
+ * @brief CG_FreecamTurnUpDown_f
+ */
+static void CG_FreecamTurnUpDown_f(void)
+{
+	cgs.demoCamera.turn |= 0x08;
+}
+
+/**
+ * @brief CG_FreecamTurnUpUp_f
+ */
+static void CG_FreecamTurnUpUp_f(void)
+{
+	cgs.demoCamera.turn &= ~0x08;
+}
+
+/**
+ * @brief CG_FreecamRollLeftDown_f
+ */
+static void CG_FreecamRollLeftDown_f(void)
+{
+	cgs.demoCamera.turn |= 0x20;
+}
+
+/**
+ * @brief CG_FreecamRollLeftUp_f
+ */
+static void CG_FreecamRollLeftUp_f(void)
+{
+	cgs.demoCamera.turn &= ~0x20;
+}
+
+/**
+ * @brief CG_FreecamRollRightDown_f
+ */
+static void CG_FreecamRollRightDown_f(void)
+{
+	cgs.demoCamera.turn |= 0x10;
+}
+
+/**
+ * @brief CG_FreecamRollRightUp_f
+ */
+static void CG_FreecamRollRightUp_f(void)
+{
+	cgs.demoCamera.turn &= ~0x10;
+}
+
+/**
+ * @brief CG_Freecam_f
+ */
+static void CG_Freecam_f(void)
+{
+	char state[MAX_TOKEN_CHARS];
+
+	if (!cg.demoPlayback)
+	{
+		CG_Printf("Not playing a demo.\n");
+		return;
+	}
+
+	trap_Argv(1, state, sizeof(state));
+
+	if (!Q_stricmp(state, "on"))
+	{
+		cgs.demoCamera.renderingFreeCam = qtrue;
+	}
+	else if (!Q_stricmp(state, "off"))
+	{
+		cgs.demoCamera.renderingFreeCam = qfalse;
+	}
+	else
+	{
+		cgs.demoCamera.renderingFreeCam ^= qtrue;
+	}
+
+	CG_Printf("freecam %s\n", cgs.demoCamera.renderingFreeCam ? "ON" : "OFF");
+
+	if (cgs.demoCamera.renderingFreeCam)
+	{
+		int viewheight;
+
+		if (cg.snap->ps.eFlags & EF_CROUCHING)
+		{
+			viewheight = CROUCH_VIEWHEIGHT;
+		}
+		else
+		{
+			viewheight = DEFAULT_VIEWHEIGHT;
+		}
+		cgs.demoCamera.camOrigin[2] += viewheight;
+	}
+}
+
+/**
+ * @brief CG_FreecamGetPos_f
+ */
+static void CG_FreecamGetPos_f(void)
+{
+	if (cg.demoPlayback)
+	{
+		CG_Printf("freecam origin: %.0f %.0f %.0f\n", (double) cgs.demoCamera.camOrigin[0], (double) cgs.demoCamera.camOrigin[1], (double) cgs.demoCamera.camOrigin[2]);
+	}
+}
+
+/**
+ * @brief etpro_float_Argv
+ * @param[in] argnum
+ * @return
+ */
+static float etpro_float_Argv(int argnum)
+{
+	char buffer[MAX_TOKEN_CHARS];
+
+	trap_Argv(argnum, buffer, sizeof(buffer));
+	return Q_atof(buffer);
+}
+
+/**
+ * @brief CG_FreecamSetPos_f
+ */
+static void CG_FreecamSetPos_f(void)
+{
+	int n;
+
+	if (!cg.demoPlayback)
+	{
+		CG_Printf("Cheats must be enabled.\n");
+		return;
+	}
+
+	n = trap_Argc();
+	if (n < 4)
+	{
+		CG_Printf("^1Syntax: freecamSetPos x y z\n");
+		return;
+	}
+	if (n > 4 && n < 7)
+	{
+		CG_Printf("^1Syntax: freecamSetPos x y z pitch yaw roll\n");
+		return;
+	}
+
+	cgs.demoCamera.camOrigin[0] = etpro_float_Argv(1);
+	cgs.demoCamera.camOrigin[1] = etpro_float_Argv(2);
+	cgs.demoCamera.camOrigin[2] = etpro_float_Argv(3);
+
+	if (n >= 7)
+	{
+		cgs.demoCamera.camAngle[0]  = etpro_float_Argv(4);
+		cgs.demoCamera.camAngle[1]  = etpro_float_Argv(5);
+		cgs.demoCamera.camAngle[2]  = etpro_float_Argv(6);
+		cgs.demoCamera.setCamAngles = qtrue;
+	}
+	else
+	{
+		cgs.demoCamera.setCamAngles = qfalse;
+	}
+
+}
+
+/**
+ * @brief noclip in demos
+ */
+static void CG_NoClip_f(void)
+{
+	char buffer[MAX_TOKEN_CHARS];
+	char state[MAX_TOKEN_CHARS];
+
+	trap_Argv(0, buffer, sizeof(buffer));
+	trap_Args(state, sizeof(state));
+
+	if (!cg.demoPlayback)
+	{
+		if (trap_Argc() > 1)
+		{
+			trap_SendClientCommand(va("noclip %s", state));
+		}
+		else
+		{
+			trap_SendClientCommand("noclip");
+		}
+	}
+	else
+	{
+		if (!Q_stricmp(state, "on"))
+		{
+			cgs.demoCamera.noclip = qtrue;
+		}
+		else if (!Q_stricmp(state, "off"))
+		{
+			cgs.demoCamera.noclip = qfalse;
+		}
+		else
+		{
+			cgs.demoCamera.noclip ^= qtrue;
+		}
+		CG_Printf("noclip %s\n", cgs.demoCamera.noclip ? "ON" : "OFF");
+	}
+}
+
+
 typedef struct {
 	char    *cmd;
 	void ( *function )( void );
@@ -803,6 +1053,26 @@ static consoleCommand_t commands[] = {
 	{ "-stats", CG_StatsUp_f },
 	{ "+wtopshots", CG_topshotsDown_f },
 	{ "-wtopshots", CG_topshotsUp_f },
+
+		{ "+freecam_turnleft",      CG_FreecamTurnLeftDown_f     },
+	{ "-freecam_turnleft",      CG_FreecamTurnLeftUp_f       },
+	{ "+freecam_turnright",     CG_FreecamTurnRightDown_f    },
+	{ "-freecam_turnright",     CG_FreecamTurnRightUp_f      },
+
+	{ "+freecam_turnup",        CG_FreecamTurnUpDown_f       },
+	{ "-freecam_turnup",        CG_FreecamTurnUpUp_f         },
+	{ "+freecam_turndown",      CG_FreecamTurnDownDown_f     },
+	{ "-freecam_turndown",      CG_FreecamTurnDownUp_f       },
+
+	{ "+freecam_rollleft",      CG_FreecamRollLeftDown_f     },
+	{ "-freecam_rollleft",      CG_FreecamRollLeftUp_f       },
+	{ "+freecam_rollright",     CG_FreecamRollRightDown_f    },
+	{ "-freecam_rollright",     CG_FreecamRollRightUp_f      },
+	{ "freecam",                CG_Freecam_f                 },
+	{ "freecamsetpos",          CG_FreecamSetPos_f           },
+	{ "freecamgetpos",          CG_FreecamGetPos_f           },
+
+	{ "noclip",                 CG_NoClip_f                  },
 };
 
 

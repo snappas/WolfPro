@@ -455,6 +455,8 @@ static inline int  FloatAsInt(float f) {
 }
 #define PASSFLOAT(x) FloatAsInt(x)
 
+#define Q_atof(str) strtof(str, NULL)
+
 
 //#define	SND_NORMAL			0x000	// (default) Allow sound to be cut off only by the same sound on this channel
 #define     SND_OKTOCUT         0x001   // Allow sound to be cut off by any following sounds on this channel

@@ -439,6 +439,9 @@ vmCvar_t cg_noAmmoAutoSwitch;
 
 vmCvar_t cg_gamestate;
 
+vmCvar_t demo_yawPitchRollSpeed;
+vmCvar_t demo_freecamspeed;
+
 typedef struct {
 	vmCvar_t    *vmCvar;
 	char        *cvarName;
@@ -773,6 +776,11 @@ cvarTable_t cvarTable[] = {
 	{ &cg_noAmmoAutoSwitch, "cg_noAmmoAutoSwitch", "0", CVAR_ARCHIVE },
 
 	{ &cg_gamestate, "gamestate", "0", 0}, //communicated via wolfinfo
+
+
+	{ &demo_yawPitchRollSpeed, "demo_yawPitchRollSpeed", "140 140 140", CVAR_ARCHIVE },
+	{ &demo_freecamspeed, "demo_freecamspeed", "800", CVAR_ARCHIVE },
+
 
 	
 };

@@ -253,6 +253,34 @@ static void CG_CalcVrect( void ) {
 
 //==============================================================================
 
+/**
+ * @brief CG_OffsetFreeCamView
+ */
+static void CG_OffsetFreeCamView(void)
+{
+	if (cgs.demoCamera.renderingWeaponCam || cgs.demoCamera.setCamAngles)
+	{
+		VectorCopy(cgs.demoCamera.camAngle, cg.refdefViewAngles);
+	}
+
+	VectorCopy(cgs.demoCamera.camOrigin, cg.refdef.vieworg);
+
+	// if (demo_lookat.integer != -1)
+	// {
+	// 	centity_t *temp;
+	// 	vec3_t    dir;
+
+	// 	temp = &cg_entities[demo_lookat.integer];
+	// 	VectorSubtract(temp->lerpOrigin, cgs.demoCamera.camOrigin, dir);
+
+	// 	vectoangles(dir, cg.refdefViewAngles);
+	// }
+
+	// if (demo_pvshint.integer != 0)
+	// {
+	// 	CG_DrawPVShint();
+	// }
+}
 
 /*
 ===============
@@ -1215,9 +1243,13 @@ static int CG_CalcViewValues( void ) {
 		VectorMA( mg42->currentState.pos.trBase, -36, forward, cg.refdef.vieworg );
 		cg.refdef.vieworg[2] = ps->origin[2];
 	} else {
-		VectorCopy( ps->origin, cg.refdef.vieworg );
+		if (!cgs.demoCamera.renderingFreeCam)
+		{
+			VectorCopy( ps->origin, cg.refdef.vieworg );
+			VectorCopy( ps->viewangles, cg.refdefViewAngles );
+		}
 	}
-	VectorCopy( ps->viewangles, cg.refdefViewAngles );
+	
 
 	// add error decay
 	if ( cg_errorDecay.value > 0 ) {
@@ -1234,7 +1266,7 @@ static int CG_CalcViewValues( void ) {
 	}
 
 	// Ridah, lock the viewangles if the game has told us to
-	if ( ps->viewlocked ) {
+	if ( ps->viewlocked  && !cgs.demoCamera.renderingFreeCam ) {
 
 		/*
 		if (ps->viewlocked == 4)
@@ -1257,15 +1289,28 @@ static int CG_CalcViewValues( void ) {
 	}
 	// done.
 
-	if ( cg.renderingThirdPerson ) {
-		// back away from character
-		CG_OffsetThirdPersonView();
+	if (cgs.demoCamera.renderingFreeCam)
+		{
+			CG_OffsetFreeCamView();
+		}
+		else if (cg.renderingThirdPerson)
+		{
+			VectorCopy(cg.refdef.vieworg, cgs.demoCamera.camOrigin);
+			VectorCopy(cg.refdefViewAngles, cgs.demoCamera.camAngle);
+			CG_OffsetThirdPersonView();
 	} else {
+		VectorCopy(cg.refdef.vieworg, cgs.demoCamera.camOrigin);
+		VectorCopy(cg.refdefViewAngles, cgs.demoCamera.camAngle);
 		// offset for local bobbing and kicks
 		CG_OffsetFirstPersonView();
 
 		// Ridah, lock the viewangles if the game has told us to
-		if ( ps->viewlocked == 7 ) {
+		//freecam must not get viewlocked
+		if (ps->viewlocked && (cgs.demoCamera.renderingFreeCam || cgs.demoCamera.renderingWeaponCam))
+		{
+			//do nothing
+		}
+		else if ( ps->viewlocked == 7 ) {
 			centity_t   *tent;
 			vec3_t vec;
 
@@ -1285,13 +1330,16 @@ static int CG_CalcViewValues( void ) {
 			AngleVectors( cg.refdefViewAngles, fwd, NULL, NULL );
 			VectorMA( cg_entities[ps->viewlocked_entNum].currentState.pos.trBase, -34, fwd, cg.refdef.vieworg );
 			cg.refdef.vieworg[2] = oldZ;
-
-//			CG_Printf( "ps->origin[2]: %f\n", ps->origin[2] );
-//			CG_Printf( "fwd: %f %f %f\n", fwd[0], fwd[1], fwd[2] );
-//			CG_Printf( "base: %f %f %f\n", cg_entities[ps->viewlocked_entNum].currentState.pos.trBase[0], cg_entities[ps->viewlocked_entNum].currentState.pos.trBase[1], cg_entities[ps->viewlocked_entNum].currentState.pos.trBase[2] );
 		}
 		// done.
 	}
+
+	if (cgs.demoCamera.startLean)
+	{
+		cg.refdefViewAngles[2] = 0.0;
+	}
+
+	cgs.demoCamera.startLean = qfalse;
 
 	// position eye reletive to origin
 	AnglesToAxis( cg.refdefViewAngles, cg.refdef.viewaxis );
@@ -1730,6 +1778,11 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	// if we have been told not to render, don't
 	if ( cg_norender.integer ) {
 		return;
+	}
+
+	if (cg.demoPlayback)
+	{
+		CG_EDV_RunInput();
 	}
 
 	// this counter will be bumped for every valid scene we generate

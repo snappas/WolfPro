@@ -32,7 +32,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "../game/q_shared.h"
 #include "../cgame/tr_types.h"
-#include "keycodes.h"
+#include "../qcommon/keycodes.h"
 
 // TTimo case sensitivity
 #include "../../MAIN/ui_mp/menudef.h"

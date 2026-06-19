@@ -42,6 +42,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../game/bg_public.h"
 #include "cg_public.h"
 #include "cg_ndp.h"
+#include "../ui/ui_shared.h"
 
 
 #define POWERUP_BLINKS      5
@@ -1507,6 +1508,28 @@ typedef struct {
 	int maxLineLen;
 } topshotStats_t;
 
+typedef struct cam_s
+{
+	qboolean renderingFreeCam;
+	qboolean renderingWeaponCam;
+	qboolean wasRenderingWeaponCam;
+	qboolean setCamAngles;              ///< Are we overriding angles via freecamSetPos
+
+	vec3_t camAngle;                    ///< Stores the angle of our cam
+	vec3_t camOrigin;                   ///< Stores the origin of our cam
+	vec3_t velocity;
+
+	qboolean startLean;
+
+	int factor;
+	qboolean noclip;
+
+	int commandTime;
+
+	int move;
+	int turn;
+} cam_t;
+
 // The client game static (cgs) structure hold everything
 // loaded or calculated from the gamestate.  It will NOT
 // be cleared when a tournement restart is done, allowing
@@ -1584,7 +1607,7 @@ typedef struct {
 
 	int cursorX;
 	int cursorY;
-	qboolean eventHandling;
+	int eventHandling;
 	qboolean mouseCaptured;
 	qboolean sizingHud;
 	void *capturedItem;
@@ -1635,6 +1658,8 @@ typedef struct {
 	fileHandle_t dumpStatsFile;
 	char* dumpStatsFileName;  // Name of file to dump stats
 	int dumpStatsTime;
+
+	cam_t demoCamera;
 } cgs_t;
 
 //==============================================================================
@@ -1915,6 +1940,9 @@ extern vmCvar_t g_rocketMode;
 extern vmCvar_t cg_noAmmoAutoSwitch;
 extern vmCvar_t cg_gamestate;
 
+extern vmCvar_t demo_yawPitchRollSpeed;
+extern vmCvar_t demo_freecamspeed;
+
 //
 // cg_main.c
 //
@@ -1947,6 +1975,10 @@ qboolean CG_execFile(char* filename); // RTCWPro - autoexec
 
 void CG_PrintRestrictions(void);
 void CG_CheckAndApplyRestrictions(void);
+
+//cg_edv.h
+void CG_RunBinding(int key, qboolean down);
+void CG_EDV_RunInput(void);
 
 //
 // cg_view.c
