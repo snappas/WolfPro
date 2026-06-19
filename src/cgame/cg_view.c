@@ -258,7 +258,7 @@ static void CG_CalcVrect( void ) {
  */
 static void CG_OffsetFreeCamView(void)
 {
-	if (cgs.demoCamera.renderingWeaponCam || cgs.demoCamera.setCamAngles)
+	if (cgs.demoCamera.setCamAngles)
 	{
 		VectorCopy(cgs.demoCamera.camAngle, cg.refdefViewAngles);
 	}
