@@ -27,7 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 
-#define CMD_BACKUP_EXT      256
+#define CMD_BACKUP_EXT      128
 #define CMD_MASK_EXT        ( CMD_BACKUP_EXT - 1 )
 
 #define CMD_BACKUP          64
