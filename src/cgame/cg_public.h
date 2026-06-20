@@ -27,6 +27,8 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 
+#define CMD_BACKUP_EXT      128
+#define CMD_MASK_EXT        ( CMD_BACKUP_EXT - 1 )
 
 #define CMD_BACKUP          64
 #define CMD_MASK            ( CMD_BACKUP - 1 )
@@ -241,7 +243,8 @@ typedef enum {
 	CG_EXT_NDP_STOPVIDEO, 
 	CG_IMGUI_ADDMENU, 
 	CG_IMGUI_IMAGE,
-	CG_IMGUI_IMAGE_EX
+	CG_IMGUI_IMAGE_EX,
+	CG_CL_CMD_BACKUP,
 } cgameImport_t;
 
 

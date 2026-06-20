@@ -582,3 +582,7 @@ void trap_IgImage(qhandle_t shader, float x, float y){
 void trap_IgImageEx(qhandle_t shader, float x, float y, float s1, float t1, float s2, float t2){
 	syscall(CG_IMGUI_IMAGE_EX, shader, PASSFLOAT(x), PASSFLOAT(y), PASSFLOAT(s1), PASSFLOAT(t1), PASSFLOAT(s2), PASSFLOAT(t2));
 }
+
+qbool trap_CL_CMD_BACKUP(void){
+	return syscall(CG_CL_CMD_BACKUP);
+}

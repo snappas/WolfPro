@@ -2593,6 +2593,8 @@ void CG_LoadExtensions(void) {
 
 	if (hasTrap_GetValue == 0) {
 		// Engine extensions are not supported on the client
+		cg.cmdBackup = CMD_BACKUP;
+		cg.cmdMask = CMD_MASK;
 		return;
 	}
 	else {
@@ -2625,6 +2627,19 @@ void CG_LoadExtensions(void) {
 		}
 
 		GET_TRAP(trap_CL_AddGuiMenu);
+
+		GET_TRAP(trap_CL_CMD_BACKUP);
+
+		if(rtcwPro_ext.trap_CL_CMD_BACKUP){
+			cg.cmdBackupExt = qtrue;
+			cg.cmdBackup = CMD_BACKUP_EXT;
+			cg.cmdMask = CMD_MASK_EXT;
+			//inform the client to step up
+			trap_CL_CMD_BACKUP(); 
+		}else{
+			cg.cmdBackup = CMD_BACKUP;
+			cg.cmdMask = CMD_MASK;
+		}
 	}
 }
 

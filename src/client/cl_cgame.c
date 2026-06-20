@@ -88,11 +88,11 @@ qboolean CL_GetUserCmd( int cmdNumber, usercmd_t *ucmd ) {
 
 	// the usercmd has been overwritten in the wrapping
 	// buffer because it is too far out of date
-	if ( cmdNumber <= cl.cmdNumber - CMD_BACKUP ) {
+	if ( cmdNumber <= cl.cmdNumber - cl.cmdBackup ) {
 		return qfalse;
 	}
 
-	*ucmd = cl.cmds[ cmdNumber & CMD_MASK ];
+	*ucmd = cl.cmds[ cmdNumber & cl.cmdMask ];
 
 	return qtrue;
 }
@@ -530,6 +530,7 @@ static qbool CL_CG_GetValue(char* value, int valueSize, const char* key)
 		{ "trap_CL_AddGuiMenu", CG_IMGUI_ADDMENU },
 		{ "trap_IgImage", CG_IMGUI_IMAGE },
 		{ "trap_IgImageEx", CG_IMGUI_IMAGE_EX },
+		{ "trap_CL_CMD_BACKUP", CG_CL_CMD_BACKUP },
 	};
 
 	for (int i = 0; i < ARRAY_LEN(syscalls); ++i) {
@@ -1050,6 +1051,10 @@ intptr_t CL_CgameSystemCalls(intptr_t *args ) {
 		RE_GUI_Image_Ex(args[1], VMF(2), VMF(3), VMF(4), VMF(5), VMF(6), VMF(7));
 		return 0;
 #endif
+	case CG_CL_CMD_BACKUP:
+		cl.cmdBackup = CMD_BACKUP_EXT;
+		cl.cmdMask = CMD_MASK_EXT;
+		return qtrue;
 	default:
 		Com_Error( ERR_DROP, "Bad cgame system trap: %i", args[0] );
 	}

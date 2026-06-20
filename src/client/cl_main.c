@@ -796,6 +796,9 @@ void CL_ClearState( void ) {
 //	S_StopAllSounds();
 
 	memset( &cl, 0, sizeof( cl ) );
+
+	cl.cmdBackup = CMD_BACKUP;
+	cl.cmdMask   = CMD_MASK;
 }
 
 
