@@ -1681,7 +1681,7 @@ static void CG_DrawDisconnect( void ) {
 	int w;          // bk010215 - FIXME char message[1024];
 
 	// draw the phone jack if we are completely past our buffers
-	cmdNum = trap_GetCurrentCmdNumber() - CMD_BACKUP + 1;
+	cmdNum = trap_GetCurrentCmdNumber() - cg.cmdBackup + 1;
 	trap_GetUserCmd( cmdNum, &cmd );
 	if ( cmd.serverTime <= cg.snap->ps.commandTime
 		 || cmd.serverTime > cg.time ) { // special check for map_restart // bk 0102165 - FIXME
