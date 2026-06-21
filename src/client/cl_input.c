@@ -765,9 +765,9 @@ qboolean CL_ReadyToSendPacket( void ) {
 	}
 
 	// send every frame for LAN
-	if ( Sys_IsLANAddress( clc.netchan.remoteAddress ) ) {
-		return qtrue;
-	}
+	// if ( Sys_IsLANAddress( clc.netchan.remoteAddress ) ) {
+	// 	return qtrue;
+	// }
 
 	// check for exceeding cl_maxpackets
 	if ( cl_maxpackets->integer < 15 ) {
