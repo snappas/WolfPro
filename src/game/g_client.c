@@ -2183,7 +2183,9 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 
 	// positively link the client, even if the command times are weird
 	if ( ent->client->sess.sessionTeam != TEAM_SPECTATOR ) {
-		BG_PlayerStateToEntityState( &client->ps, &ent->s, qtrue );
+		BG_PlayerStateToEntityState( &client->ps, &ent->s, level.time, qfalse );
+
+		//use the precise origin for linking
 		VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
 		VectorCopy(ent->client->ps.origin, ent->client->sess.prevOrigin);
 		trap_LinkEntity( ent );
@@ -2193,7 +2195,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	ClientEndFrame( ent );
 
 	// clear entity state values
-	BG_PlayerStateToEntityState( &client->ps, &ent->s, qtrue );
+	BG_PlayerStateToEntityState( &client->ps, &ent->s, level.time, qfalse );
 }
 
 

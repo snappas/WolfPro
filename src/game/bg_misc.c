@@ -4034,7 +4034,7 @@ This is done after each set of usercmd_t on the server,
 and after local prediction on the client
 ========================
 */
-void BG_PlayerStateToEntityState( playerState_t *ps, entityState_t *s, qboolean snap ) {
+void BG_PlayerStateToEntityState( playerState_t *ps, entityState_t *s, int time, qboolean snap ) {
 	int i;
 
 	if ( ps->pm_type == PM_INTERMISSION || ps->pm_type == PM_SPECTATOR || ps->pm_flags & PMF_LIMBO ) { // JPW NERVE limbo
@@ -4046,7 +4046,7 @@ void BG_PlayerStateToEntityState( playerState_t *ps, entityState_t *s, qboolean 
 	}
 
 	s->number = ps->clientNum;
-
+	s->pos.trTime = time; 
 	s->pos.trType = TR_INTERPOLATE;
 	VectorCopy( ps->origin, s->pos.trBase );
 	if ( snap ) {
@@ -4061,12 +4061,17 @@ void BG_PlayerStateToEntityState( playerState_t *ps, entityState_t *s, qboolean 
 
 	// set the trDelta for flag direction and linear prediction
 	VectorCopy(ps->velocity, s->pos.trDelta);
+	if ( snap ) {
+		SnapVector( s->pos.trDelta );
+	}
 
 	if ( ps->movementDir > 128 ) {
 		s->angles2[YAW] = (float)ps->movementDir - 256;
 	} else {
 		s->angles2[YAW] = ps->movementDir;
 	}
+
+	s->angles2[PITCH] = 0;
 
 	s->legsAnim     = ps->legsAnim;
 	s->torsoAnim    = ps->torsoAnim;
@@ -4164,6 +4169,9 @@ void BG_PlayerStateToEntityStateExtraPolate( playerState_t *ps, entityState_t *s
 	}
 	// set the trDelta for flag direction and linear prediction
 	VectorCopy( ps->velocity, s->pos.trDelta );
+	if ( snap ) {
+		SnapVector( s->pos.trDelta );
+	}
 	// set the time for linear prediction
 	s->pos.trTime = time;
 	// set maximum extra polation time

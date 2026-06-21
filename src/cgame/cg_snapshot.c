@@ -137,7 +137,7 @@ void CG_SetInitialSnapshot( snapshot_t *snap ) {
 
 	cg.snap = snap;
 
-	BG_PlayerStateToEntityState( &snap->ps, &cg_entities[ snap->ps.clientNum ].currentState, qfalse );
+	BG_PlayerStateToEntityState( &snap->ps, &cg_entities[ snap->ps.clientNum ].currentState, cg.time, qfalse );
 
 	// sort out solid entities
 	CG_BuildSolidList();
@@ -227,7 +227,7 @@ static void CG_TransitionSnapshot( void ) {
 	oldFrame = cg.snap;
 	cg.snap = cg.nextSnap;
 
-	BG_PlayerStateToEntityState( &cg.snap->ps, &cg_entities[ cg.snap->ps.clientNum ].currentState, qfalse );
+	BG_PlayerStateToEntityState( &cg.snap->ps, &cg_entities[ cg.snap->ps.clientNum ].currentState, cg.time, qfalse );
 	cg_entities[ cg.snap->ps.clientNum ].interpolate = qfalse;
 
 	for ( i = 0 ; i < cg.snap->numEntities ; i++ ) {
@@ -273,7 +273,7 @@ static void CG_SetNextSnap( snapshot_t *snap ) {
 
 	cg.nextSnap = snap;
 
-	BG_PlayerStateToEntityState( &snap->ps, &cg_entities[ snap->ps.clientNum ].nextState, qfalse );
+	BG_PlayerStateToEntityState( &snap->ps, &cg_entities[ snap->ps.clientNum ].nextState, cg.time, qfalse );
 	cg_entities[ cg.snap->ps.clientNum ].interpolate = qtrue;
 
 	// check for extrapolation errors
@@ -553,7 +553,7 @@ void CG_NDP_ProcessSnapshots(void) {
 		if (!(snap->snapFlags & SNAPFLAG_NOT_ACTIVE)) {
 			CG_SetInitialSnapshot(snap);
 		}
-		BG_PlayerStateToEntityState(&snap->ps, &cg_entities[snap->ps.clientNum].currentState, qfalse);
+		BG_PlayerStateToEntityState(&snap->ps, &cg_entities[snap->ps.clientNum].currentState, cg.time, qfalse);
 		CG_BuildSolidList();
 		CG_ExecuteNewServerCommands(snap->serverCommandSequence);
 		CG_Respawn();

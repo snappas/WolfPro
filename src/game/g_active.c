@@ -1113,7 +1113,9 @@ void ClientThink_real( gentity_t *ent ) {
 //		pm.noFootsteps = qtrue;
 
 	VectorCopy( client->ps.origin, client->oldOrigin );
-
+	VectorCopy(ent->r.mins, pm.mins);
+	VectorCopy(ent->r.maxs, pm.maxs);
+	
 	// NERVE - SMF
 	pm.gametype = g_gametype.integer;
 	pm.ltChargeTime = g_LTChargeTime.integer;
@@ -1145,7 +1147,7 @@ void ClientThink_real( gentity_t *ent ) {
 	}
 
 	if(CheckAntilagConditions(ent)){
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, qtrue );
+		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qtrue );
 	}else{
 		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qtrue );
 	}
@@ -1158,10 +1160,10 @@ void ClientThink_real( gentity_t *ent ) {
 
 //
 //	// use the precise origin for linking
-//	VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
+	VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
 //
 //	// use the snapped origin for linking so it matches client predicted versions
-	VectorCopy( ent->s.pos.trBase, ent->r.currentOrigin );
+	//VectorCopy( ent->s.pos.trBase, ent->r.currentOrigin );
 
 	VectorCopy( pm.mins, ent->r.mins );
 	VectorCopy( pm.maxs, ent->r.maxs );
@@ -1747,9 +1749,9 @@ void ClientEndFrame( gentity_t *ent ) {
 	// set the latest infor
 
 	if(CheckAntilagConditions(ent)){
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, ( ( ent->r.svFlags & SVF_CASTAI ) == 0 ) );
+		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qfalse );
 	}else{
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, ( ( ent->r.svFlags & SVF_CASTAI ) == 0 ) );
+		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
 	}
 	
 

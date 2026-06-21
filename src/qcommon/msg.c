@@ -664,7 +664,7 @@ typedef struct {
 } netField_t;
 
 // using the stringizing operator to save typing...
-#define NETF( x ) # x,(intptr_t)&( (entityState_t*)0 )->x
+#define NETF( x ) # x,(size_t)&( (entityState_t*)0 )->x
 
 netField_t entityStateFields[] =
 {
