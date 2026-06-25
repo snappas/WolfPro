@@ -415,3 +415,75 @@ int64_t Sys_Microseconds(void)
 
 	return (int64_t)ts.tv_sec * 1000000 + (int64_t)ts.tv_nsec / 1000;
 }
+
+/*
+==================
+Sys_RandomBytes
+==================
+*/
+qboolean Sys_RandomBytes( byte *string, int len )
+{
+	FILE *fp;
+
+	fp = fopen( "/dev/urandom", "r" );
+	if( !fp )
+		return qfalse;
+
+	setvbuf( fp, NULL, _IONBF, 0 ); // don't buffer reads from /dev/urandom
+
+	if ( fread( string, sizeof( byte ), len, fp ) != len ) {
+		fclose( fp );
+		return qfalse;
+	}
+
+	fclose( fp );
+	return qtrue;
+}
+
+/*
+=================
+Sys_GetAffinityMask
+=================
+*/
+uint64_t Sys_GetAffinityMask( void )
+{
+	cpu_set_t cpu_set;
+
+	if ( sched_getaffinity( getpid(), sizeof( cpu_set ), &cpu_set ) == 0 ) {
+		uint64_t mask = 0;
+		int cpu;
+		for ( cpu = 0; cpu < sizeof( mask ) * 8; cpu++ ) {
+			if ( CPU_ISSET( cpu, &cpu_set ) ) {
+				mask |= (1ULL << cpu);
+			}
+		}
+		return mask;
+	} else {
+		return 0;
+	}
+}
+
+
+/*
+=================
+Sys_SetAffinityMask
+=================
+*/
+qboolean Sys_SetAffinityMask( const uint64_t mask )
+{
+	cpu_set_t cpu_set;
+	int cpu;
+
+	CPU_ZERO( &cpu_set );
+	for ( cpu = 0; cpu < sizeof( mask ) * 8; cpu++ ) {
+		if ( mask & (1ULL << cpu) ) {
+			CPU_SET( cpu, &cpu_set );
+		}
+	}
+
+	if ( sched_setaffinity( getpid(), sizeof( cpu_set ), &cpu_set ) == 0 ) {
+		return qtrue;
+	} else {
+		return qfalse;
+	}
+}

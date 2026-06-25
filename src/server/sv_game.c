@@ -55,6 +55,10 @@ int SV_NumForGentity( sharedEntity_t *ent ) {
 sharedEntity_t *SV_GentityNum( int num ) {
 	sharedEntity_t *ent;
 
+	if ( num < 0 || num >= MAX_GENTITIES ) {
+		Com_Error( ERR_DROP, "%s: bad num %d", __func__, num );
+	}
+
 	ent = ( sharedEntity_t * )( (byte *)sv.gentities + sv.gentitySize * ( num ) );
 
 	return ent;
@@ -93,7 +97,7 @@ void SV_GameSendServerCommand( int clientNum, const char *text ) {
 	if ( clientNum == -1 ) {
 		SV_SendServerCommand( NULL, "%s", text );
 	} else {
-		if ( clientNum < 0 || clientNum >= sv_maxclients->integer ) {
+		if ( clientNum < 0 || clientNum >= sv.maxclients ) {
 			return;
 		}
 		SV_SendServerCommand( svs.clients + clientNum, "%s", text );
@@ -109,7 +113,7 @@ Disconnects the client with a message
 ===============
 */
 void SV_GameDropClient( int clientNum, const char *reason ) {
-	if ( clientNum < 0 || clientNum >= sv_maxclients->integer ) {
+	if ( clientNum < 0 || clientNum >= sv.maxclients ) {
 		return;
 	}
 	SV_DropClient( svs.clients + clientNum, reason );
@@ -259,7 +263,11 @@ void SV_GetServerinfo( char *buffer, int bufferSize ) {
 	if ( bufferSize < 1 ) {
 		Com_Error( ERR_DROP, "SV_GetServerinfo: bufferSize == %i", bufferSize );
 	}
-	Q_strncpyz( buffer, Cvar_InfoString( CVAR_SERVERINFO ), bufferSize );
+	if ( sv.state != SS_GAME || !sv.configstrings[ CS_SERVERINFO ] ) {
+		Q_strncpyz( buffer, Cvar_InfoString( CVAR_SERVERINFO, NULL ), bufferSize );
+	} else {
+		Q_strncpyz( buffer, sv.configstrings[ CS_SERVERINFO ], bufferSize );
+	}
 }
 
 /*
@@ -285,11 +293,12 @@ SV_GetUsercmd
 
 ===============
 */
-void SV_GetUsercmd( int clientNum, usercmd_t *cmd ) {
-	if ( clientNum < 0 || clientNum >= sv_maxclients->integer ) {
-		Com_Error( ERR_DROP, "SV_GetUsercmd: bad clientNum:%i", clientNum );
+static void SV_GetUsercmd( int clientNum, usercmd_t *cmd ) {
+	if ( (unsigned) clientNum < sv.maxclients ) {
+		*cmd = svs.clients[ clientNum ].lastUsercmd;
+	} else {
+		Com_Error( ERR_DROP, "%s(): bad clientNum: %i", __func__, clientNum );
 	}
-	*cmd = svs.clients[clientNum].lastUsercmd;
 }
 
 /*
@@ -483,7 +492,13 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 	case BOTLIB_GET_CONSOLE_MESSAGE:
 		return SV_BotGetConsoleMessage( args[1], VMA( 2 ), args[3] );
 	case BOTLIB_USER_COMMAND:
-		SV_ClientThink( &svs.clients[args[1]], VMA( 2 ) );
+		{
+			unsigned clientNum = args[1];
+			if ( clientNum < sv.maxclients )
+			{
+				SV_ClientThink( &svs.clients[ clientNum ], VMA(2) );
+			}
+		}
 		return 0;
 
 	case BOTLIB_AAS_ENTITY_INFO:
@@ -922,13 +937,15 @@ static void SV_InitGameVM( qboolean restart ) {
 
 	// clear all gentity pointers that might still be set from
 	// a previous level
-	for ( i = 0 ; i < sv_maxclients->integer ; i++ ) {
+	// https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=522
+	// now done before GAME_INIT call
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		svs.clients[i].gentity = NULL;
 	}
 
 	// use the current msec count for a random seed
 	// init for this gamestate
-	VM_Call( gvm, GAME_INIT, svs.time, Com_Milliseconds(), restart );
+	VM_Call( gvm, GAME_INIT, sv.time, Com_Milliseconds(), restart );
 }
 
 

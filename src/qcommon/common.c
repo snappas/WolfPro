@@ -45,6 +45,7 @@ char    *com_argv[MAX_NUM_ARGVS + 1];
 
 jmp_buf abortframe;     // an ERR_DROP occured, exit the entire frame
 
+int		CPU_Flags = 0;
 
 FILE *debuglogfile;
 static fileHandle_t logfile;
@@ -82,17 +83,27 @@ cvar_t  *cl_notebook;
 
 cvar_t  *com_hunkused;      // Ridah
 
+cvar_t	*com_yieldCPU;
+cvar_t	*com_affinityMask;
+
 // com_speeds times
 int time_game;
 int time_frontend;          // renderer frontend time
 int time_backend;           // renderer backend time
 
+static int	lastTime;
 int com_frameTime;
 int com_frameNumber;
 int64_t	com_nextTargetTimeUS = INT64_MIN;
 
-qboolean com_errorEntered;
-qboolean com_fullyInitialized;
+qboolean com_errorEntered = qfalse;
+qboolean com_fullyInitialized = qfalse;
+
+// renderer window states
+qboolean	gw_minimized = qfalse; // this will be always true for dedicated servers
+#ifndef DEDICATED
+qboolean	gw_active = qtrue;
+#endif
 
 char com_errorMessage[MAXPRINTMSG];
 
@@ -2450,6 +2461,381 @@ void Com_SetRecommended() {
 //	Cvar_Set("ui_glCustom", "999");	// 'recommended'
 }
 
+
+/*
+** --------------------------------------------------------------------------------
+**
+** PROCESSOR STUFF
+**
+** --------------------------------------------------------------------------------
+*/
+
+#ifdef USE_AFFINITY_MASK
+static uint64_t eCoreMask;
+static uint64_t pCoreMask;
+static uint64_t affinityMask; // saved at startup
+#endif
+
+#if (idx64 || id386)
+
+#if defined _MSC_VER
+#include <intrin.h>
+static void CPUID( int func, unsigned int *regs )
+{
+	__cpuid( (int*)regs, func );
+}
+
+#ifdef USE_AFFINITY_MASK
+#if idx64
+void CPUID_EX( int func, int param, unsigned int *regs )
+{
+#if defined(_MSC_VER)
+    int cpu_info[4] = {-1};
+    __cpuidex(cpu_info, (int)func, (int)param);
+    regs[0] = cpu_info[0];
+    regs[0] = cpu_info[1];
+    regs[0] = cpu_info[2];
+    regs[0] = cpu_info[3];
+#endif
+}
+#else
+void CPUID_EX( int func, int param, unsigned int *regs )
+{
+
+	__asm {
+		push edi
+		mov eax, func
+		mov ecx, param
+		cpuid
+		mov edi, regs
+		mov [edi +0], eax
+		mov [edi +4], ebx
+		mov [edi +8], ecx
+		mov [edi+12], edx
+		pop edi
+	}
+}
+#endif // !idx64
+#endif // USE_AFFINITY_MASK
+
+#else // clang/gcc/mingw
+
+static void CPUID( int func, unsigned int *regs )
+{
+	__asm__ __volatile__( "cpuid" :
+		"=a"(regs[0]),
+		"=b"(regs[1]),
+		"=c"(regs[2]),
+		"=d"(regs[3]) :
+		"a"(func) );
+}
+
+#ifdef USE_AFFINITY_MASK
+static void CPUID_EX( int func, int param, unsigned int *regs )
+{
+	__asm__ __volatile__( "cpuid" :
+		"=a"(regs[0]),
+		"=b"(regs[1]),
+		"=c"(regs[2]),
+		"=d"(regs[3]) :
+		"a"(func),
+		"c"(param) );
+}
+#endif // USE_AFFINITY_MASK
+
+#endif  // clang/gcc/mingw
+
+static void Sys_GetProcessorId( char *vendor )
+{
+	uint32_t regs[4]; // EAX, EBX, ECX, EDX
+	uint32_t cpuid_level_ex;
+	char vendor_str[12 + 1]; // short CPU vendor string
+
+	// setup initial features
+#if idx64
+	CPU_Flags |= CPU_SSE | CPU_SSE2 | CPU_FCOM;
+#else
+	CPU_Flags = 0;
+#endif
+	vendor[0] = '\0';
+
+	CPUID( 0x80000000, regs );
+	cpuid_level_ex = regs[0];
+
+	// get CPUID level & short CPU vendor string
+	CPUID( 0x0, regs );
+	memcpy(vendor_str + 0, (char*)&regs[1], 4);
+	memcpy(vendor_str + 4, (char*)&regs[3], 4);
+	memcpy(vendor_str + 8, (char*)&regs[2], 4);
+	vendor_str[12] = '\0';
+
+	// get CPU feature bits
+	CPUID( 0x1, regs );
+
+	// bit 15 of EDX denotes CMOV/FCMOV/FCOMI existence
+	if ( regs[3] & ( 1 << 15 ) )
+		CPU_Flags |= CPU_FCOM;
+
+	// bit 23 of EDX denotes MMX existence
+	if ( regs[3] & ( 1 << 23 ) )
+		CPU_Flags |= CPU_MMX;
+
+	// bit 25 of EDX denotes SSE existence
+	if ( regs[3] & ( 1 << 25 ) )
+		CPU_Flags |= CPU_SSE;
+
+	// bit 26 of EDX denotes SSE2 existence
+	if ( regs[3] & ( 1 << 26 ) )
+		CPU_Flags |= CPU_SSE2;
+
+	// bit 0 of ECX denotes SSE3 existence
+	//if ( regs[2] & ( 1 << 0 ) )
+	//	CPU_Flags |= CPU_SSE3;
+
+	// bit 19 of ECX denotes SSE41 existence
+	if ( regs[ 2 ] & ( 1 << 19 ) )
+		CPU_Flags |= CPU_SSE41;
+
+	if ( vendor ) {
+		if ( cpuid_level_ex >= 0x80000004 ) {
+			// read CPU Brand string
+			uint32_t i;
+			for ( i = 0x80000002; i <= 0x80000004; i++) {
+				CPUID( i, regs );
+				memcpy( vendor+0, (char*)&regs[0], 4 );
+				memcpy( vendor+4, (char*)&regs[1], 4 );
+				memcpy( vendor+8, (char*)&regs[2], 4 );
+				memcpy( vendor+12, (char*)&regs[3], 4 );
+				vendor[16] = '\0';
+				vendor += strlen( vendor );
+			}
+		} else {
+			const int print_flags = CPU_Flags;
+			vendor = Q_stradd( vendor, vendor_str );
+			if (print_flags) {
+				// print features
+				strcat(vendor, " w/");
+				if (print_flags & CPU_FCOM)
+					strcat(vendor, " CMOV");
+				if (print_flags & CPU_MMX)
+					strcat(vendor, " MMX");
+				if (print_flags & CPU_SSE)
+					strcat(vendor, " SSE");
+				if (print_flags & CPU_SSE2)
+					strcat(vendor, " SSE2");
+				//if ( CPU_Flags & CPU_SSE3 )
+				//	strcat( vendor, " SSE3" );
+				if (print_flags & CPU_SSE41)
+					strcat(vendor, " SSE4.1");
+			}
+		}
+	}
+}
+
+
+#ifdef USE_AFFINITY_MASK
+static void DetectCPUCoresConfig( void )
+{
+	uint32_t regs[4];
+	uint32_t i;
+
+	// get highest function parameter and vendor id
+	CPUID( 0x0, regs );
+	if ( regs[1] != 0x756E6547 || regs[2] != 0x6C65746E || regs[3] != 0x49656E69 || regs[0] < 0x1A ) {
+		// non-intel signature or too low cpuid level - unsupported
+		eCoreMask = pCoreMask = affinityMask;
+		return;
+	}
+
+	eCoreMask = 0;
+	pCoreMask = 0;
+
+	for ( i = 0; i < sizeof( affinityMask ) * 8; i++ ) {
+		const uint64_t mask = 1ULL << i;
+		if ( (mask & affinityMask) && Sys_SetAffinityMask( mask ) ) {
+			CPUID_EX( 0x1A, 0x0, regs );
+			switch ( (regs[0] >> 24) & 0xFF ) {
+				case 0x20: eCoreMask |= mask; break;
+				case 0x40: pCoreMask |= mask; break;
+				default: // non-existing leaf
+					eCoreMask = pCoreMask = 0;
+					break;
+			}
+		}
+	}
+
+	// restore original affinity
+	Sys_SetAffinityMask( affinityMask );
+
+	if ( pCoreMask == 0 || eCoreMask == 0 ) {
+		// if either mask is empty - assume non-hybrid configuration
+		eCoreMask = pCoreMask = affinityMask;
+	}
+}
+#endif // USE_AFFINITY_MASK
+
+#else // non-x86
+
+#ifndef __linux__
+
+static void Sys_GetProcessorId( char *vendor )
+{
+	Com_sprintf( vendor, 100, "%s", ARCH_STRING );
+#ifdef _WIN32
+	CPU_Flags |= CPU_ARMv7 | CPU_IDIVA | CPU_VFPv3;
+#endif
+}
+
+#else // __linux__
+
+#include <sys/auxv.h>
+
+#if arm32
+#include <asm/hwcap.h>
+#endif
+
+static void Sys_GetProcessorId( char *vendor )
+{
+#if arm32
+	const char *platform;
+	long hwcaps;
+	CPU_Flags = 0;
+
+	platform = (const char*)getauxval( AT_PLATFORM );
+
+	if ( !platform || *platform == '\0' ) {
+		platform = "(unknown)";
+	}
+
+	if ( platform[0] == 'v' || platform[0] == 'V' ) {
+		if ( atoi( platform + 1 ) >= 7 ) {
+			CPU_Flags |= CPU_ARMv7;
+		}
+	}
+
+	Com_sprintf( vendor, 100, "ARM %s", platform );
+	hwcaps = getauxval( AT_HWCAP );
+	if ( hwcaps & ( HWCAP_IDIVA | HWCAP_VFPv3 ) ) {
+		strcat( vendor, " /w" );
+
+		if ( hwcaps & HWCAP_IDIVA ) {
+			CPU_Flags |= CPU_IDIVA;
+			strcat( vendor, " IDIVA" );
+		}
+
+		if ( hwcaps & HWCAP_VFPv3 ) {
+			CPU_Flags |= CPU_VFPv3;
+			strcat( vendor, " VFPv3" );
+		}
+
+		if ( ( CPU_Flags & ( CPU_ARMv7 | CPU_VFPv3 ) ) == ( CPU_ARMv7 | CPU_VFPv3 ) ) {
+			strcat( vendor, " QVM-bytecode" );
+		}
+	}
+#else // !arm32
+	CPU_Flags = 0;
+#if arm64
+	Com_sprintf( vendor, 100, "%s", ARCH_STRING );
+#else
+	Com_sprintf( vendor, 128, "%s %s", ARCH_STRING, (const char*)getauxval( AT_PLATFORM ) );
+#endif
+#endif // !arm32
+}
+
+#endif // __linux__
+
+#endif // non-x86
+
+static int hex_code( const int code ) {
+	if ( code >= '0' && code <= '9' ) {
+		return code - '0';
+	}
+	if ( code >= 'A' && code <= 'F' ) {
+		return code - 'A' + 10;
+	}
+	if ( code >= 'a' && code <= 'f' ) {
+		return code - 'a' + 10;
+	}
+	return -1;
+}
+
+
+static const char *parseAffinityMask( const char *str, uint64_t *outv, int level ) {
+	uint64_t v, mask = 0;
+
+	while ( *str != '\0' ) {
+		if ( *str == 'A' || *str == 'a' ) {
+			mask = affinityMask;
+			++str;
+			continue;
+		}
+		else if ( *str == 'P' || *str == 'p' ) {
+			mask = pCoreMask;
+			++str;
+			continue;
+		}
+		else if ( *str == 'E' || *str == 'e' ) {
+			mask = eCoreMask;
+			++str;
+			continue;
+		}
+		else if ( *str == '0' && (str[1] == 'x' || str[1] == 'X') && (v = hex_code( str[2] )) >= 0 ) {
+			int hex;
+			str += 3; // 0xH
+			while ( (hex = hex_code( *str )) >= 0 ) {
+				v = v * 16 + hex;
+				str++;
+			}
+			mask = v;
+			continue;
+		}
+		else if ( *str >= '0' && *str <= '9' ) {
+			mask = *str++ - '0';
+			while ( *str >= '0' && *str <= '9' ) {
+				mask = mask * 10 + *str - '0';
+				++str;
+			}
+			continue;
+		}
+
+		if ( level == 0 ) {
+			while ( *str == '+' || *str == '-' ) {
+				str = parseAffinityMask( str + 1, &v, level + 1 );
+				switch ( *str ) {
+					case '+': mask |= v; break;
+					case '-': mask &= ~v; break;
+					default: str = ""; break;
+				}
+			}
+			if ( *str != '\0' ) {
+				++str; // skip unknown characters
+			}
+		} else {
+			break;
+		}
+	}
+
+	*outv = mask;
+	return str;
+}
+
+
+// parse and set affinity mask
+static void Com_SetAffinityMask( const char *str )
+{
+	uint64_t mask = 0;
+
+	parseAffinityMask( str, &mask, 0 );
+
+	if ( ( mask & affinityMask ) == 0 ) {
+		mask = affinityMask; // reset to default
+	}
+
+	if ( mask != 0 ) {
+		Sys_SetAffinityMask( mask );
+	}
+}
+
 /*
 =================
 Com_Init
@@ -2457,6 +2843,11 @@ Com_Init
 */
 void Com_Init( char *commandLine ) {
 	char    *s;
+	int	qport;
+
+	// get the initial time base
+	Sys_Milliseconds();
+
 	// TTimo gcc warning: variable `safeMode' might be clobbered by `longjmp' or `vfork'
 	volatile qboolean safeMode = qtrue;
 
@@ -2538,6 +2929,10 @@ void Com_Init( char *commandLine ) {
 	com_developer = Cvar_Get( "developer", "0", CVAR_TEMP );
 	com_logfile = Cvar_Get( "logfile", "0", CVAR_TEMP );
 
+	com_yieldCPU = Cvar_Get( "com_yieldCPU", "1", CVAR_ARCHIVE );
+	com_affinityMask = Cvar_Get( "com_affinityMask", "", CVAR_ARCHIVE );
+	com_affinityMask->modified = qfalse;
+
 	com_timescale = Cvar_Get( "timescale", "1", CVAR_CHEAT | CVAR_SYSTEMINFO );
 	com_fixedtime = Cvar_Get( "fixedtime", "0", CVAR_CHEAT );
 	com_showtrace = Cvar_Get( "com_showtrace", "0", CVAR_CHEAT );
@@ -2580,7 +2975,31 @@ void Com_Init( char *commandLine ) {
 	com_version = Cvar_Get( "version", s, CVAR_ROM | CVAR_SERVERINFO );
 
 	Sys_Init();
-	Netchan_Init( Com_Milliseconds() & 0xffff );    // pick a port value that should be nice and random
+
+	// CPU detection
+	Cvar_Get( "sys_cpustring", "detect", CVAR_ROM | CVAR_NORESTART );
+	if ( !Q_stricmp( Cvar_VariableString( "sys_cpustring" ), "detect" ) ) {
+		char vendor[128];
+		Com_Printf( "...detecting CPU, found " );
+		Sys_GetProcessorId( vendor );
+		Cvar_Set( "sys_cpustring", vendor );
+	}
+	Com_Printf( "%s\n", Cvar_VariableString( "sys_cpustring" ) );
+
+#ifdef USE_AFFINITY_MASK
+	// get initial process affinity - we will respect it when setting custom affinity masks
+	eCoreMask = pCoreMask = affinityMask = Sys_GetAffinityMask();
+#if (idx64 || id386)
+	DetectCPUCoresConfig();
+#endif
+	if ( com_affinityMask->string[0] != '\0' ) {
+		Com_SetAffinityMask( com_affinityMask->string );
+		com_affinityMask->modified = qfalse;
+	}
+#endif
+	// Pick a random port value
+	Com_RandomBytes( (byte*)&qport, sizeof( qport ) );
+	Netchan_Init( qport & 0xffff );
 	VM_Init();
 	SV_Init();
 
@@ -2590,10 +3009,6 @@ void Com_Init( char *commandLine ) {
 		Sys_ShowConsole( com_viewlog->integer, qfalse );
 	}
 
-	// set com_frameTime so that if a map is started on the
-	// command line it will still be able to count on com_frameTime
-	// being random enough for a serverid
-	com_frameTime = Com_Milliseconds();
 
 	// add + commands from command line
 	if ( !Com_AddStartupCommands() ) {
@@ -2603,7 +3018,15 @@ void Com_Init( char *commandLine ) {
 	// start in full screen ui mode
 	Cvar_Set( "r_uiFullScreen", "1" );
 
+#ifndef DEDICATED
 	CL_StartHunkUsers();
+#endif
+	
+	// set com_frameTime so that if a map is started on the
+	// command line it will still be able to count on com_frameTime
+	// being random enough for a serverid
+	// lastTime = com_frameTime = Com_Milliseconds();
+	Com_FrameInit();
 
 	// delay this so potential wicked3d dll can find a wolf window
 	if ( !com_dedicated->integer ) {
@@ -2826,14 +3249,48 @@ static void Com_FrameSleep( qbool demoPlayback )
 
 /*
 =================
+Com_TimeVal
+=================
+*/
+static int Com_TimeVal( int minMsec )
+{
+	int timeVal;
+
+	timeVal = Com_Milliseconds() - com_frameTime;
+
+	if ( timeVal >= minMsec )
+		timeVal = 0;
+	else
+		timeVal = minMsec - timeVal;
+
+	return timeVal;
+}
+
+/*
+=================
+Com_FrameInit
+=================
+*/
+void Com_FrameInit( void )
+{
+	lastTime = com_frameTime = Com_Milliseconds();
+}
+
+/*
+=================
 Com_Frame
 =================
 */
 
 void Com_Frame( void ) {
 
-	int msec;
-	
+#ifndef DEDICATED
+	static int bias = 0;
+#endif
+	int	msec, realMsec, minMsec;
+	int	sleepMsec;
+	int	timeVal;
+	int	timeValSV;
 
 	int timeBeforeFirstEvents;
 	int timeBeforeServer;
@@ -2847,6 +3304,8 @@ void Com_Frame( void ) {
 #endif
 		return;         // an ERR_DROP was thrown
 	}
+
+	minMsec = 0; // silent compiler warning
 
 	// bk001204 - init to zero.
 	//  also:  might be clobbered by `longjmp' or `vfork'
@@ -2870,6 +3329,11 @@ void Com_Frame( void ) {
 		com_viewlog->modified = qfalse;
 	}
 
+	if ( com_affinityMask->modified ) {
+		Com_SetAffinityMask( com_affinityMask->string );
+		com_affinityMask->modified = qfalse;
+	}
+
 	//
 	// main event loop
 	//
@@ -2877,17 +3341,69 @@ void Com_Frame( void ) {
 		timeBeforeFirstEvents = Sys_Milliseconds();
 	}
 
-	Com_FrameSleep( qfalse );
 	
-	static int lastTime = 0;
+	// we may want to spin here if things are going too fast
+	if ( com_dedicated->integer ) {
+		minMsec = SV_FrameMsec();
+#ifndef DEDICATED
+		bias = 0;
+#endif
+	} else {
+#ifndef DEDICATED
+		if ( 0 ) { // noDelay ) {
+			minMsec = 0;
+			bias = 0;
+		} else {
+			// if ( !gw_active && com_maxfpsUnfocused->integer > 0 )
+			// 	minMsec = 1000 / com_maxfpsUnfocused->integer;
+			// else
+			if ( com_maxfps->integer > 0 )
+				minMsec = 1000 / com_maxfps->integer;
+			else
+				minMsec = 1;
+
+			timeVal = com_frameTime - lastTime;
+			bias += timeVal - minMsec;
+
+			if ( bias > minMsec )
+				bias = minMsec;
+
+			// Adjust minMsec if previous frame took too long to render so
+			// that framerate is stable at the requested value.
+			minMsec -= bias;
+		}
+#endif
+	}
+
+	// waiting for incoming packets
+	//if ( noDelay == qfalse )
+	do {
+		if ( com_sv_running->integer ) {
+			timeValSV = SV_SendQueuedPackets();
+			timeVal = Com_TimeVal( minMsec );
+			if ( timeValSV < timeVal )
+				timeVal = timeValSV;
+		} else {
+			timeVal = Com_TimeVal( minMsec );
+		}
+		sleepMsec = timeVal;
+#ifndef DEDICATED
+		if ( !gw_minimized && timeVal > com_yieldCPU->integer )
+			sleepMsec = com_yieldCPU->integer;
+		if ( timeVal > sleepMsec )
+			Com_EventLoop();
+#endif
+		NET_Sleep( sleepMsec * 1000 - 500 );
+	} while( Com_TimeVal( minMsec ) );
+
 	lastTime = com_frameTime;
 	com_frameTime = Com_EventLoop();
-	msec = com_frameTime - lastTime;
+	realMsec = com_frameTime - lastTime;
 
 	Cbuf_Execute();
-	
+
 	// mess with msec if needed
-	msec = Com_ModifyMsec( msec );
+	msec = Com_ModifyMsec( realMsec );
 
 	//
 	// server side
@@ -2942,6 +3458,10 @@ void Com_Frame( void ) {
 			timeAfter = Sys_Milliseconds();
 		}
 	}
+
+	NET_FlushPacketQueue( 0 );
+
+	Cbuf_Wait();
 
 	//
 	// report timing information
@@ -3308,4 +3828,24 @@ void Com_WriteNewKey(const char* filename) {
 	FS_Write(buffer, 16, f);
 	FS_FCloseFile(f);
 
+}
+
+/*
+==================
+Com_RandomBytes
+
+fills string array with len random bytes, preferably from the OS randomizer
+==================
+*/
+void Com_RandomBytes( byte *string, int len )
+{
+	int i;
+
+	if ( Sys_RandomBytes( string, len ) )
+		return;
+
+	Com_Printf( S_COLOR_YELLOW "Com_RandomBytes: using weak randomization\n" );
+	srand( time( NULL ) );
+	for( i = 0; i < len; i++ )
+		string[i] = (unsigned char)( rand() % 256 );
 }

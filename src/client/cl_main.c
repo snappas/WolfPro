@@ -850,9 +850,7 @@ void CL_Disconnect( qboolean showMainMenu ) {
 	// send it a few times in case one is dropped
 	if ( cls.state >= CA_CONNECTED ) {
 		CL_AddReliableCommand( "disconnect" );
-		CL_WritePacket();
-		CL_WritePacket();
-		CL_WritePacket();
+		CL_WritePacket(2);
 	}
 
 	CL_ClearState();
@@ -1406,7 +1404,7 @@ void CL_Clientinfo_f( void ) {
 	Com_Printf( "state: %i\n", cls.state );
 	Com_Printf( "Server: %s\n", cls.servername );
 	Com_Printf( "User info settings:\n" );
-	Info_Print( Cvar_InfoString( CVAR_USERINFO ) );
+	Info_Print( Cvar_InfoString( CVAR_USERINFO, NULL ) );
 	Com_Printf( "--------------------------------------\n" );
 }
 
@@ -1505,9 +1503,7 @@ void CL_DownloadsComplete( void ) {
 	// set pure checksums
 	CL_SendPureChecksums();
 
-	CL_WritePacket();
-	CL_WritePacket();
-	CL_WritePacket();
+	CL_WritePacket(2);
 }
 
 /*
@@ -1731,7 +1727,7 @@ void CL_CheckForResend( void ) {
 		// sending back the challenge
 		port = Cvar_VariableValue( "net_qport" );
 
-		Q_strncpyz( info, Cvar_InfoString( CVAR_USERINFO ), sizeof( info ) );
+		Q_strncpyz( info, Cvar_InfoString( CVAR_USERINFO, NULL ), sizeof( info ) );
 		Info_SetValueForKey( info, "protocol", va( "%i", PROTOCOL_VERSION ) );
 		Info_SetValueForKey( info, "qport", va( "%i", port ) );
 		Info_SetValueForKey( info, "challenge", va( "%i", clc.challenge ) );
@@ -2075,7 +2071,8 @@ void CL_ConnectionlessPacket( netadr_t from, msg_t *msg ) {
 			}
 		}
 
-		Netchan_Setup( NS_CLIENT, &clc.netchan, from, Cvar_VariableValue( "net_qport" ) );
+		Netchan_Setup( NS_CLIENT, &clc.netchan, &from, Cvar_VariableIntegerValue( "net_qport" ), clc.challenge, qtrue ); //clc.compat );
+
 		cls.state = CA_CONNECTED;
 		clc.lastPacketSentTime = -9999;     // send first packet immediately
 		return;
@@ -2258,10 +2255,20 @@ void CL_CheckUserinfo( void ) {
 	if ( cl_paused->integer ) {
 		return;
 	}
-	// send a reliable userinfo update if needed
-	if ( cvar_modifiedFlags & CVAR_USERINFO ) {
+		// send a reliable userinfo update if needed
+	if ( cvar_modifiedFlags & CVAR_USERINFO )
+	{
+		qboolean infoTruncated = qfalse;
+		const char *info;
+
 		cvar_modifiedFlags &= ~CVAR_USERINFO;
-		CL_AddReliableCommand( va( "userinfo \"%s\"", Cvar_InfoString( CVAR_USERINFO ) ) );
+
+		info = Cvar_InfoString( CVAR_USERINFO, &infoTruncated );
+		if ( strlen( info ) > MAX_USERINFO_LENGTH || infoTruncated ) {
+			Com_Printf( S_COLOR_YELLOW "WARNING: oversize userinfo, you might be not able to play on remote server!\n" );
+		}
+
+		CL_AddReliableCommand( va( "userinfo \"%s\"", info ));
 	}
 }
 
@@ -2299,7 +2306,7 @@ void CL_Frame( int msec ) {
 		cls.cddialog = qfalse;
 		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NEED_CD );
 	} else if ( cls.state == CA_DISCONNECTED && !( cls.keyCatchers & KEYCATCH_UI )
-				&& !com_sv_running->integer ) {
+				&& !com_sv_running->integer && uivm ) {
 		// if disconnected, bring up the menu
 		S_StopAllSounds();
 		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_MAIN );
@@ -2950,8 +2957,6 @@ void CL_Init( void ) {
 
 	Cbuf_Execute();
 
-	Cvar_Set( "cl_running", "1" );
-
 	// Allow cgame to interrogate the client if it supports extensions
 	Cvar_Set("//trap_GetValue", "700");
 
@@ -2964,6 +2969,8 @@ void CL_Init( void ) {
 #endif
 
 	CL_ImGUI_Init();
+
+	Cvar_Set( "cl_running", "1" );
 
 	Com_Printf( "----- Client Initialization Complete -----\n" );
 }

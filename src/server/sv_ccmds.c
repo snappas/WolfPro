@@ -64,8 +64,25 @@ static client_t *SV_GetPlayerByName( void ) {
 
 	s = Cmd_Argv( 1 );
 
+	// Check whether this is a numeric player handle
+	for(i = 0; s[i] >= '0' && s[i] <= '9'; i++);
+	
+	if(!s[i])
+	{
+		int plid = atoi(s);
+
+		// Check for numeric playerid match
+		if(plid >= 0 && plid < sv.maxclients)
+		{
+			cl = &svs.clients[plid];
+			
+			if (cl->state >= CS_CONNECTED)
+				return cl;
+		}
+	}
+
 	// check for a name match
-	for ( i = 0, cl = svs.clients ; i < sv_maxclients->integer ; i++,cl++ ) {
+	for ( i = 0, cl = svs.clients ; i < sv.maxclients ; i++,cl++ ) {
 		if ( !cl->state ) {
 			continue;
 		}
@@ -117,7 +134,7 @@ static client_t *SV_GetPlayerByNum( void ) {
 		}
 	}
 	idnum = atoi( s );
-	if ( idnum < 0 || idnum >= sv_maxclients->integer ) {
+	if ( idnum < 0 || idnum >= sv.maxclients ) {
 		Com_Printf( "Bad client slot: %i\n", idnum );
 		return NULL;
 	}
@@ -300,7 +317,7 @@ static void SV_MapRestart_f( void ) {
 		return;
 	}
 
-	if ( sv.restartTime ) {
+	if ( sv.restartTime != 0 ) {
 		return;
 	}
 
@@ -327,11 +344,16 @@ static void SV_MapRestart_f( void ) {
 	// dhm
 
 	if ( Cmd_Argc() > 1 ) {
-		delay = atoi( Cmd_Argv( 1 ) );
+		delay = atoi( Cmd_Argv(1) );
+	} else {
+		delay = 5;
 	}
 
-	if ( delay ) {
-		sv.restartTime = svs.time + delay * 1000;
+	if ( delay != 0 && Cvar_VariableIntegerValue( "g_doWarmup" ) == 0 ) {
+		sv.restartTime = sv.time + delay * 1000;
+		if ( sv.restartTime == 0 ) {
+			sv.restartTime = 1;
+		}
 		SV_SetConfigstring( CS_WARMUP, va( "%i", sv.restartTime ) );
 		return;
 	}
@@ -351,10 +373,10 @@ static void SV_MapRestart_f( void ) {
 
 	// check for changes in variables that can't just be restarted
 	// check for maxclients change
-	if ( sv_maxclients->modified ) {
+	if ( sv_maxclients->modified || sv_gametype->modified || sv_pure->modified  ) {
 		char mapname[MAX_QPATH];
 
-		Com_Printf( "sv_maxclients variable change -- restarting.\n" );
+		Com_Printf( "variable change -- restarting.\n" );
 		// restart the map the slow way
 		Q_strncpyz( mapname, Cvar_VariableString( "mapname" ), sizeof( mapname ) );
 
@@ -371,6 +393,15 @@ static void SV_MapRestart_f( void ) {
 	sv.serverId = com_frameTime;
 	Cvar_Set( "sv_serverid", va( "%i", sv.serverId ) );
 
+	// if a map_restart occurs while a client is changing maps, we need
+	// to give them the correct time so that when they finish loading
+	// they don't violate the backwards time check in cl_cgame.c
+	for ( i = 0; i < sv.maxclients; i++ ) {
+		if ( svs.clients[i].state == CS_PRIMED ) {
+			svs.clients[i].oldServerTime = sv.restartTime;
+		}
+	}
+
 	// reset all the vm data in place without changing memory allocation
 	// note that we do NOT set sv.state = SS_LOADING, so configstrings that
 	// had been changed from their default values will generate broadcast updates
@@ -383,21 +414,25 @@ static void SV_MapRestart_f( void ) {
 
 	// run a few frames to allow everything to settle
 	for ( i = 0 ; i < 3 ; i++ ) {
-		VM_Call( gvm, GAME_RUN_FRAME, svs.time );
-		svs.time += 100;
+		Cbuf_Wait();
+		sv.time += 100;
+		VM_Call( gvm, GAME_RUN_FRAME, sv.time );
 	}
 
 	sv.state = SS_GAME;
 	sv.restarting = qfalse;
 
 	// connect and begin all the clients
-	for ( i = 0 ; i < sv_maxclients->integer ; i++ ) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		client = &svs.clients[i];
 
 		// send the new gamestate to all connected clients
 		if ( client->state < CS_CONNECTED ) {
 			continue;
 		}
+
+		// don't delta from pre-map_restart messages
+		client->deltaStart = client->netchan.outgoingSequence;
 
 		if ( client->netchan.remoteAddress.type == NA_BOT ) {
 			isBot = qtrue;
@@ -418,14 +453,26 @@ static void SV_MapRestart_f( void ) {
 			continue;
 		}
 
-		client->state = CS_ACTIVE;
-
-		SV_ClientEnterWorld( client, &client->lastUsercmd );
+		if ( client->state == CS_ACTIVE ) {
+			SV_ClientEnterWorld( client );
+		}
 	}
 
 	// run another frame to allow things to look at all the players
-	VM_Call( gvm, GAME_RUN_FRAME, svs.time );
+	Cbuf_Wait();
+	sv.time += 100;
+	VM_Call( gvm, GAME_RUN_FRAME, sv.time );
 	svs.time += 100;
+
+	for ( i = 0; i < sv.maxclients; i++ ) {
+		client = &svs.clients[i];
+		if ( client->state >= CS_PRIMED ) {
+			// accept usercmds starting from current server time only
+			// to emulate original behavior which dropped pre-restart commands via serverid check
+			Com_Memset( &client->lastUsercmd, 0x0, sizeof( client->lastUsercmd ) );
+			client->lastUsercmd.serverTime = sv.time - 1;
+		}
+	}
 
 	Cvar_Set( "sv_serverRestarting", "0" );
 }
@@ -520,7 +567,7 @@ static void SV_Kick_f( void ) {
 	cl = SV_GetPlayerByName();
 	if ( !cl ) {
 		if ( !Q_stricmp( Cmd_Argv( 1 ), "all" ) ) {
-			for ( i = 0, cl = svs.clients ; i < sv_maxclients->integer ; i++,cl++ ) {
+			for ( i = 0, cl = svs.clients ; i < sv.maxclients ; i++,cl++ ) {
 				if ( !cl->state ) {
 					continue;
 				}
@@ -531,7 +578,7 @@ static void SV_Kick_f( void ) {
 				cl->lastPacketTime = svs.time;  // in case there is a funny zombie
 			}
 		} else if ( !Q_stricmp( Cmd_Argv( 1 ), "allbots" ) )        {
-			for ( i = 0, cl = svs.clients ; i < sv_maxclients->integer ; i++,cl++ ) {
+			for ( i = 0, cl = svs.clients ; i < sv.maxclients ; i++,cl++ ) {
 				if ( !cl->state ) {
 					continue;
 				}
@@ -719,7 +766,7 @@ static void SV_Status_f( void ) {
 
 	Com_Printf( "num score ping name            lastmsg address               qport rate\n" );
 	Com_Printf( "--- ----- ---- --------------- ------- --------------------- ----- -----\n" );
-	for ( i = 0,cl = svs.clients ; i < sv_maxclients->integer ; i++,cl++ )
+	for ( i = 0,cl = svs.clients ; i < sv.maxclients ; i++,cl++ )
 	{
 		if ( !cl->state ) {
 			continue;
@@ -814,7 +861,7 @@ Examine the serverinfo string
 */
 static void SV_Serverinfo_f( void ) {
 	Com_Printf( "Server info settings:\n" );
-	Info_Print( Cvar_InfoString( CVAR_SERVERINFO ) );
+	Info_Print( Cvar_InfoString( CVAR_SERVERINFO, NULL ) );
 }
 
 
@@ -827,7 +874,7 @@ Examine or change the serverinfo string
 */
 static void SV_Systeminfo_f( void ) {
 	Com_Printf( "System info settings:\n" );
-	Info_Print( Cvar_InfoString( CVAR_SYSTEMINFO ) );
+	Info_Print( Cvar_InfoString( CVAR_SYSTEMINFO, NULL ) );
 }
 
 

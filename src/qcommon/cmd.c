@@ -244,6 +244,19 @@ void Cbuf_Execute( void ) {
 	}
 }
 
+/*
+============
+Cbuf_Wait
+============
+*/
+void Cbuf_Wait( void )
+{
+	if ( cmd_wait > 0 ) {
+		--cmd_wait;
+	}
+}
+
+
 
 /*
 ==============================================================================
@@ -495,12 +508,18 @@ are inserted in the apropriate place, The argv array
 will point into this temporary buffer.
 ============
 */
-void Cmd_TokenizeString( const char *text_in ) {
-	const char  *text;
-	char    *textOut;
+static void Cmd_TokenizeString2( const char *text_in, qboolean ignoreQuotes ) {
+	const char *text;
+	char *textOut;
+
+#ifdef TKN_DBG
+	// FIXME TTimo blunt hook to try to find the tokenization of userinfo
+	Com_DPrintf("Cmd_TokenizeString: %s\n", text_in);
+#endif
 
 	// clear previous args
 	cmd_argc = 0;
+	cmd_cmd[0] = '\0';
 
 	if ( !text_in ) {
 		return;
@@ -508,11 +527,11 @@ void Cmd_TokenizeString( const char *text_in ) {
 
 	Q_strncpyz( cmd_cmd, text_in, sizeof( cmd_cmd ) );
 
-	text = text_in;
+	text = cmd_cmd; // read from safe-length buffer
 	textOut = cmd_tokenized;
 
 	while ( 1 ) {
-		if ( cmd_argc == MAX_STRING_TOKENS ) {
+		if ( cmd_argc >= ARRAY_LEN( cmd_argv ) ) {
 			return;         // this is usually something malicious
 		}
 
@@ -527,11 +546,14 @@ void Cmd_TokenizeString( const char *text_in ) {
 
 			// skip // comments
 			if ( text[0] == '/' && text[1] == '/' ) {
-				return;         // all tokens parsed
+				// accept protocol headers (e.g. http://) in command lines that matching "*?[a-z]://" pattern
+				if ( text < cmd_cmd + 3 || text[-1] != ':' || text[-2] < 'a' || text[-2] > 'z' ) {
+					return; // all tokens parsed
+				}
 			}
 
 			// skip /* */ comments
-			if ( text[0] == '/' && text[1] == '*' ) {
+			if ( text[0] == '/' && text[1] =='*' ) {
 				while ( *text && ( text[0] != '*' || text[1] != '/' ) ) {
 					text++;
 				}
@@ -545,14 +567,15 @@ void Cmd_TokenizeString( const char *text_in ) {
 		}
 
 		// handle quoted strings
-		if ( *text == '"' ) {
+		// NOTE TTimo this doesn't handle \" escaping
+		if ( !ignoreQuotes && *text == '"' ) {
 			cmd_argv[cmd_argc] = textOut;
 			cmd_argc++;
 			text++;
 			while ( *text && *text != '"' ) {
 				*textOut++ = *text++;
 			}
-			*textOut++ = 0;
+			*textOut++ = '\0';
 			if ( !*text ) {
 				return;     // all tokens parsed
 			}
@@ -566,12 +589,15 @@ void Cmd_TokenizeString( const char *text_in ) {
 
 		// skip until whitespace, quote, or command
 		while ( *text > ' ' ) {
-			if ( text[0] == '"' ) {
+			if ( !ignoreQuotes && text[0] == '"' ) {
 				break;
 			}
 
 			if ( text[0] == '/' && text[1] == '/' ) {
-				break;
+				// accept protocol headers (e.g. http://) in command lines that matching "*?[a-z]://" pattern
+				if ( text < cmd_cmd + 3 || text[-1] != ':' || text[-2] < 'a' || text[-2] > 'z' ) {
+					break;
+				}
 			}
 
 			// skip /* */ comments
@@ -582,13 +608,30 @@ void Cmd_TokenizeString( const char *text_in ) {
 			*textOut++ = *text++;
 		}
 
-		*textOut++ = 0;
+		*textOut++ = '\0';
 
 		if ( !*text ) {
 			return;     // all tokens parsed
 		}
 	}
+}
 
+/*
+============
+Cmd_TokenizeString
+============
+*/
+void Cmd_TokenizeString( const char *text_in ) {
+	Cmd_TokenizeString2( text_in, qfalse );
+}
+
+/*
+============
+Cmd_TokenizeStringIgnoreQuotes
+============
+*/
+void Cmd_TokenizeStringIgnoreQuotes( const char *text_in ) {
+	Cmd_TokenizeString2( text_in, qtrue );
 }
 
 
@@ -769,6 +812,27 @@ void Cmd_TokenizeLine(const char* text_in, const char* delim, char *pos) {
 		cmd_argv[cmd_argc] = token;
 		cmd_argc++;
 		token = strtok_r(NULL, delim, &pos);
+	}
+}
+
+/*
+   Replace command separators with space to prevent interpretation
+   This is a hack to protect buggy qvms
+   https://bugzilla.icculus.org/show_bug.cgi?id=3593
+   https://bugzilla.icculus.org/show_bug.cgi?id=4769
+*/
+void Cmd_Args_Sanitize( const char *separators )
+{
+	int i;
+
+	for( i = 1; i < cmd_argc; i++ )
+	{
+		char *c = cmd_argv[i];
+
+		while ( ( c = strpbrk( c, separators ) ) != NULL ) {
+			*c = ' ';
+			++c;
+		}
 	}
 }
 

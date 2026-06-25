@@ -499,6 +499,8 @@ static inline int  FloatAsInt(float f) {
 #define MAX_INFO_KEY        1024
 #define MAX_INFO_VALUE      1024
 
+#define MAX_USERINFO_LENGTH (MAX_INFO_STRING-13) // incl. length of 'connect ""' or 'userinfo ""' and reserving one byte to avoid q3msgboom
+
 #define BIG_INFO_STRING     8192    // used for system info key only
 #define BIG_INFO_KEY        8192
 #define BIG_INFO_VALUE      8192
@@ -950,6 +952,8 @@ void Parse3DMatrix( char **buf_p, int z, int y, int x, float *m );
 
 int QDECL Com_sprintf( char *dest, int size, const char *fmt, ... );
 
+void Com_RandomBytes( byte *string, int len );
+
 
 // mode parm for FS_FOpenFile
 typedef enum {
@@ -1089,6 +1093,8 @@ default values.
 #define CVAR_WOLFINFO       2048    // DHM - NERVE :: Like userinfo, but for wolf multiplayer info
 
 // nothing outside the Cvar_*() functions should modify these fields!
+typedef struct cvar_s cvar_t;
+
 typedef struct cvar_s {
 	char        *name;
 	char        *string;
@@ -1099,8 +1105,10 @@ typedef struct cvar_s {
 	int modificationCount;          // incremented each time the cvar is changed
 	float value;                    // atof( string )
 	int integer;                    // atoi( string )
-	struct cvar_s *next;
-	struct cvar_s *hashNext;
+	cvar_t *next;
+	cvar_t *prev;
+	cvar_t *hashNext;
+	cvar_t *hashPrev;
 } cvar_t;
 
 #define MAX_CVAR_VALUE_STRING   256

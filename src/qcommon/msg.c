@@ -475,6 +475,33 @@ void MSG_ReadData( msg_t *msg, void *data, int len ) {
 	}
 }
 
+int MSG_ReadEntitynum( msg_t *msg ) {
+	const int num = MSG_ReadBits( msg, GENTITYNUM_BITS );
+	if ( msg->readcount > msg->cursize ) {
+		return -1;
+	} else {
+		return num;
+	}
+	
+}
+
+
+// a string hasher which gives the same hash value even if the
+// string is later modified via the legacy MSG read/write code
+int MSG_HashKey(const char *string, int maxlen) {
+	int hash, i;
+
+	hash = 0;
+	for (i = 0; i < maxlen && string[i] != '\0'; i++) {
+		if (string[i] & 0x80 || string[i] == '%')
+			hash += '.' * (119 + i);
+		else
+			hash += string[i] * (119 + i);
+	}
+	hash = (hash ^ (hash >> 10) ^ (hash >> 20));
+	return hash;
+}
+
 
 
 /*
@@ -562,8 +589,8 @@ usercmd_t communication
 MSG_WriteDeltaUsercmd
 =====================
 */
-void MSG_WriteDeltaUsercmdKey( msg_t *msg, int key, usercmd_t *from, usercmd_t *to ) {
-	if ( to->serverTime - from->serverTime < 256 ) {
+void MSG_WriteDeltaUsercmdKey( msg_t *msg, int key, const usercmd_t *from, usercmd_t *to ) {
+	if ( (unsigned)(to->serverTime - from->serverTime) < 256 ) {
 		MSG_WriteBits( msg, 1, 1 );
 		MSG_WriteBits( msg, to->serverTime - from->serverTime, 8 );
 	} else {
@@ -609,7 +636,7 @@ void MSG_WriteDeltaUsercmdKey( msg_t *msg, int key, usercmd_t *from, usercmd_t *
 MSG_ReadDeltaUsercmd
 =====================
 */
-void MSG_ReadDeltaUsercmdKey( msg_t *msg, int key, usercmd_t *from, usercmd_t *to ) {
+void MSG_ReadDeltaUsercmdKey( msg_t *msg, int key, const usercmd_t *from, usercmd_t *to ) {
 	if ( MSG_ReadBits( msg, 1 ) ) {
 		to->serverTime = from->serverTime + MSG_ReadBits( msg, 8 );
 	} else {
@@ -621,8 +648,14 @@ void MSG_ReadDeltaUsercmdKey( msg_t *msg, int key, usercmd_t *from, usercmd_t *t
 		to->angles[1] = MSG_ReadDeltaKey( msg, key, from->angles[1], 16 );
 		to->angles[2] = MSG_ReadDeltaKey( msg, key, from->angles[2], 16 );
 		to->forwardmove = MSG_ReadDeltaKey( msg, key, from->forwardmove, 8 );
+		if( to->forwardmove == -128 )
+			to->forwardmove = -127;
 		to->rightmove = MSG_ReadDeltaKey( msg, key, from->rightmove, 8 );
+		if( to->rightmove == -128 )
+			to->rightmove = -127;
 		to->upmove = MSG_ReadDeltaKey( msg, key, from->upmove, 8 );
+		if( to->upmove == -128 )
+			to->upmove = -127;
 		to->buttons = MSG_ReadDeltaKey( msg, key, from->buttons, 8 );
 		to->wbuttons = MSG_ReadDeltaKey( msg, key, from->wbuttons, 8 );
 		to->weapon = MSG_ReadDeltaKey( msg, key, from->weapon, 8 );
@@ -1155,7 +1188,7 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 
 	c = msg->cursize;
 
-	numFields = sizeof( playerStateFields ) / sizeof( playerStateFields[0] );
+	numFields = ARRAY_LEN( playerStateFields );
 
 	lc = 0;
 	for ( i = 0, field = playerStateFields ; i < numFields ; i++, field++ ) {

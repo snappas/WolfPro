@@ -31,7 +31,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../game/q_shared.h"
 #include "qcommon.h"
 
-cvar_t      *cvar_vars;
+cvar_t      *cvar_vars = NULL;
 cvar_t      *cvar_cheats;
 int cvar_modifiedFlags;
 
@@ -41,6 +41,7 @@ int cvar_numIndexes;
 
 #define FILE_HASH_SIZE      256
 static cvar_t*     hashTable[FILE_HASH_SIZE];
+static	qboolean cvar_sort = qfalse;
 
 cvar_t *Cvar_Set2( const char *var_name, const char *value, qboolean force );
 
@@ -471,6 +472,17 @@ void Cvar_SetValue( const char *var_name, float value ) {
 	Cvar_Set( var_name, val );
 }
 
+/*
+============
+Cvar_SetIntegerValue
+============
+*/
+void Cvar_SetIntegerValue( const char *var_name, int value ) {
+	char	val[32];
+
+	sprintf( val, "%i", value );
+	Cvar_Set( var_name, val );
+}
 
 /*
 ============
@@ -813,24 +825,134 @@ void Cvar_Restart_f( void ) {
 	}
 }
 
+static void Cvar_QSortByName( cvar_t **a, int n ) 
+{
+	cvar_t *temp;
+	cvar_t *m;
+	int i, j;
 
+	i = 0;
+	j = n;
+	m = a[ n>>1 ];
+
+	do {
+		// sort in descending order
+		while ( strcmp( a[i]->name, m->name ) > 0 ) i++;
+		while ( strcmp( a[j]->name, m->name ) < 0 ) j--;
+
+		if ( i <= j ) {
+			temp = a[i]; 
+			a[i] = a[j]; 
+			a[j] = temp;
+			i++; 
+			j--;
+		}
+	} while ( i <= j );
+
+	if ( j > 0 ) Cvar_QSortByName( a, j );
+	if ( n > i ) Cvar_QSortByName( a+i, n-i );
+}
+
+static void Cvar_Sort( void ) 
+{
+	cvar_t *list[ MAX_CVARS ], *var;
+	int count;
+	int i;
+
+	for ( count = 0, var = cvar_vars; var; var = var->next ) {
+		if ( var->name ) {
+			list[ count++ ] = var;
+		} else {
+			Com_Error( ERR_FATAL, "%s: NULL cvar name", __func__ );
+		}
+	}
+
+	if ( count < 2 ) {
+		return; // nothing to sort
+	}
+
+	Cvar_QSortByName( &list[0], count-1 );
+	
+	cvar_vars = NULL;
+
+	// relink cvars
+	for ( i = 0; i < count; i++ ) {
+		var = list[ i ];
+		// link the variable in
+		var->next = cvar_vars;
+		if ( cvar_vars )
+			cvar_vars->prev = var;
+		var->prev = NULL;
+		cvar_vars = var;
+	}
+}
 
 /*
 =====================
 Cvar_InfoString
 =====================
 */
-char    *Cvar_InfoString( int bit ) {
-	static char info[MAX_INFO_STRING];
-	cvar_t  *var;
+const char *Cvar_InfoString( int bit, qboolean *truncated )
+{
+	static char	info[ MAX_INFO_STRING ];
+	const cvar_t *user_vars[ MAX_CVARS ];
+	const cvar_t *vm_vars[ MAX_CVARS ];
+	const cvar_t *var;
+	int user_count;
+	int vm_count;
+	int i;
+	qboolean allSet;
 
-	info[0] = 0;
+	// sort to get more predictable output
+	if ( cvar_sort )
+	{
+		cvar_sort = qfalse;
+		Cvar_Sort();
+	}
 
-	for ( var = cvar_vars ; var ; var = var->next ) {
-		if ( var->flags & bit ) {
-			Info_SetValueForKey( info, var->name, var->string );
+	info[0] = '\0';
+	user_count = 0;
+	vm_count = 0;
+	allSet = qtrue; // this will be qfalse on overflow
+
+	for ( var = cvar_vars; var; var = var->next )
+	{
+		if ( var->name && ( var->flags & bit ) )
+		{
+			// put vm/user-created cvars to the end
+			if ( var->flags & ( CVAR_USER_CREATED ) )
+			{
+				if ( var->flags & CVAR_USER_CREATED )
+					user_vars[ user_count++ ] = var;
+				else
+					vm_vars[ vm_count++ ] = var;
+			}
+			else
+			{
+				allSet &= Info_SetValueForKey( info, var->name, var->string );
+			}
 		}
 	}
+
+	// add vm-created cvars
+	for ( i = 0; i < vm_count; i++ )
+	{
+		var = vm_vars[ i ];
+		allSet &= Info_SetValueForKey( info, var->name, var->string );
+	}
+
+	// add user-created cvars
+	for ( i = 0; i < user_count; i++ )
+	{
+		var = user_vars[ i ];
+		allSet &= Info_SetValueForKey( info, var->name, var->string );
+	}
+
+	if ( truncated )
+	{
+		*truncated = !allSet;
+	}
+
 	return info;
 }
 
@@ -841,18 +963,19 @@ Cvar_InfoString_Big
   handles large info strings ( CS_SYSTEMINFO )
 =====================
 */
-char *Cvar_InfoString_Big( int bit, qboolean *truncated ) {
-	static char info[BIG_INFO_STRING];
-	cvar_t  *var;
+const char *Cvar_InfoString_Big( int bit, qboolean *truncated )
+{
+	static char	info[BIG_INFO_STRING];
+	const cvar_t *var;
 	qboolean allSet;
 
 	info[0] = '\0';
 	allSet = qtrue;
 
-	for ( var = cvar_vars ; var ; var = var->next ) {
-		if ( var->flags & bit ) {
-			Info_SetValueForKey_Big( info, var->name, var->string );
-		}
+	for ( var = cvar_vars; var; var = var->next )
+	{
+		if ( var->name && (var->flags & bit) )
+			allSet &= Info_SetValueForKey_s( info, sizeof( info ), var->name, var->string );
 	}
 
 	if ( truncated )
@@ -871,7 +994,7 @@ Cvar_InfoStringBuffer
 =====================
 */
 void Cvar_InfoStringBuffer( int bit, char* buff, int buffsize ) {
-	Q_strncpyz( buff,Cvar_InfoString( bit ),buffsize );
+	Q_strncpyz( buff,Cvar_InfoString( bit, NULL ),buffsize );
 }
 
 /*

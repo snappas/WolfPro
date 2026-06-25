@@ -712,8 +712,7 @@ void CL_ParseDownload( msg_t *msg ) {
 		// loading right away.  If we take a while to load, the server is happily trying
 		// to send us that last block over and over.
 		// Write it twice to help make sure we acknowledge the download
-		CL_WritePacket();
-		CL_WritePacket();
+		CL_WritePacket(1);
 
 		// get another file if needed
 		CL_NextDownload();
@@ -761,21 +760,29 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		Com_Printf( "------------------\n" );
 	}
 
+	//clc.eventMask = 0;
 	MSG_Bitstream( msg );
 
 	// get the reliable sequence acknowledge number
 	clc.reliableAcknowledge = MSG_ReadLong( msg );
-	//
-	if ( clc.reliableAcknowledge < clc.reliableSequence - MAX_RELIABLE_COMMANDS ) {
+
+	if ( clc.reliableSequence - clc.reliableAcknowledge > MAX_RELIABLE_COMMANDS ) {
+		if ( !clc.demoplaying ) {
+			Com_Printf( S_COLOR_YELLOW "WARNING: dropping %i commands from server\n", clc.reliableSequence - clc.reliableAcknowledge );
+		}
 		clc.reliableAcknowledge = clc.reliableSequence;
+	} else if ( clc.reliableSequence - clc.reliableAcknowledge < 0 ) {
+		if ( clc.demoplaying ) {
+			clc.reliableSequence = clc.reliableAcknowledge;
+		} else {
+			Com_Error( ERR_DROP, "%s: incorrect reliable sequence acknowledge number", __func__ );
+		}
 	}
 
-	//
 	// parse the message
-	//
 	while ( 1 ) {
 		if ( msg->readcount > msg->cursize ) {
-			Com_Error( ERR_DROP,"CL_ParseServerMessage: read past end of server message" );
+			Com_Error( ERR_DROP,"%s: read past end of server message", __func__ );
 			break;
 		}
 
@@ -787,8 +794,8 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		}
 
 		if ( cl_shownet->integer >= 2 ) {
-			if ( !svc_strings[cmd] ) {
-				Com_Printf( "%3i:BAD CMD %i\n", msg->readcount - 1, cmd );
+			if ( (unsigned) cmd >= ARRAY_LEN( svc_strings ) ) {
+				Com_Printf( "%3i:BAD CMD %i\n", msg->readcount-1, cmd );
 			} else {
 				SHOWNET( msg, svc_strings[cmd] );
 			}
@@ -797,7 +804,7 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		// other commands
 		switch ( cmd ) {
 		default:
-			Com_Error( ERR_DROP,"CL_ParseServerMessage: Illegible server message %d\n", cmd );
+			Com_Error( ERR_DROP,"%s: Illegible server message", __func__ );
 			break;
 		case svc_nop:
 			break;
@@ -811,6 +818,8 @@ void CL_ParseServerMessage( msg_t *msg ) {
 			CL_ParseSnapshot( msg );
 			break;
 		case svc_download:
+			if ( clc.demofile != 0 )
+				return;
 			CL_ParseDownload( msg );
 			break;
 		}
