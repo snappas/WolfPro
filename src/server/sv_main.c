@@ -1495,12 +1495,6 @@ static void SV_ConnectionlessPacket( netadr_t from, msg_t *msg ) {
 		// removed for stateless challenges
 	} else if ( !Q_stricmp( c, "rcon" ) ) {
 		SVC_RemoteCommand( from, msg );
-// DHM - Nerve
-#ifdef UPDATE_SERVER
-	} else if ( !Q_stricmp( c, "getUpdateInfo" ) ) {
-		SVC_GetUpdateInfo( from );
-#endif
-// DHM - Nerve
 	} else if ( !Q_stricmp( c,"disconnect" ) ) {
 		// if a client starts up a local server, we may see some spurious
 		// server disconnect messages when their new server sees our final

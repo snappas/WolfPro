@@ -123,7 +123,7 @@ void NetadrToSockadr( netadr_t *a, struct sockaddr *s ) {
 		( (struct sockaddr_in *)s )->sin_addr.s_addr = INADDR_BROADCAST;
 	} else if ( a->type == NA_IP )    {
 		( (struct sockaddr_in *)s )->sin_family = AF_INET;
-		( (struct sockaddr_in *)s )->sin_addr.s_addr = *(intptr_t *)&a->ip;
+		( (struct sockaddr_in *)s )->sin_addr.s_addr = *(int32_t *)&a->ip;
 		( (struct sockaddr_in *)s )->sin_port = a->port;
 	}
 }
@@ -132,7 +132,7 @@ void NetadrToSockadr( netadr_t *a, struct sockaddr *s ) {
 void SockadrToNetadr( struct sockaddr *s, netadr_t *a ) {
 	if ( s->sa_family == AF_INET ) {
 		a->type = NA_IP;
-		*(intptr_t*)&a->ip = ( (struct sockaddr_in *)s )->sin_addr.s_addr;
+		*(int32_t*)&a->ip = ( (struct sockaddr_in *)s )->sin_addr.s_addr;
 		a->port = ( (struct sockaddr_in *)s )->sin_port;
 	}
 }
