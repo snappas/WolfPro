@@ -1075,27 +1075,7 @@ void SV_Init( void ) {
 	// init the botlib here because we need the pre-compiler in the UI
 	SV_BotInitBotLib();
 
-	// DHM - Nerve
-#ifdef UPDATE_SERVER
-	SV_Startup();
-	SV_ParseVersionMapping();
-
-	// serverid should be different each time
-	sv.serverId = com_frameTime + 100;
-	sv.restartedServerId = sv.serverId; // I suppose the init here is just to be safe
-	sv.checksumFeedServerId = sv.serverId;
-	Cvar_Set( "sv_serverid", va( "%i", sv.serverId ) );
-	Cvar_Set( "mapname", "Update" );
-
-	// allocate empty config strings
-	{
-		int i;
-
-		for ( i = 0 ; i < MAX_CONFIGSTRINGS ; i++ ) {
-			sv.configstrings[i] = CopyString( "" );
-		}
-	}
-#endif
+	SV_InitChallenger();
 }
 
 
