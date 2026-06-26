@@ -252,24 +252,6 @@ typedef struct client_s {
 //=============================================================================
 
 
-// MAX_CHALLENGES is made large to prevent a denial
-// of service attack that could cycle all of them
-// out before legitimate users connected
-#define MAX_CHALLENGES  1024
-
-#define AUTHORIZE_TIMEOUT   5000
-
-typedef struct {
-	netadr_t adr;
-	int challenge;
-	int time;                       // time the last packet was sent to the autherize server
-	int pingTime;                   // time the challenge response was sent to client
-	int firstTime;                  // time the adr was first used, for authorize timeout checks
-	int firstPing;                  // Used for min and max ping checks
-	qboolean connected;
-} challenge_t;
-
-
 #define MAX_MASTERS 8               // max recipients for heartbeat packets
 
 
@@ -286,7 +268,6 @@ typedef struct {
 	int nextSnapshotEntities;               // next snapshotEntities to use
 	entityState_t   *snapshotEntities;      // [numSnapshotEntities]
 	int nextHeartbeatTime;
-	challenge_t challenges[MAX_CHALLENGES]; // to prevent invalid IPs from connecting
 	netadr_t redirectAddress;               // for rcon return messages
 
 	netadr_t authorizeAddress;              // for rcon return messages
@@ -435,8 +416,6 @@ void SV_InitChallenger( void );
 
 void SV_DirectConnect( netadr_t from );
 void SV_PrintClientStateChange( const client_t *cl, clientState_t newState );
-
-void SV_AuthorizeIpPacket( netadr_t from );
 
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg );
 void SV_UserinfoChanged( client_t *cl );

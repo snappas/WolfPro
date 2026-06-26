@@ -683,14 +683,15 @@ SV_CheckPaused
 ==================
 */
 qboolean SV_CheckPaused( void ) {
-	int count;
-	client_t    *cl;
-	int i;
+	
 
 #ifdef DEDICATED
 	// can't pause on dedicated servers
 	return qfalse;
 #else
+	int count;
+	client_t* cl;
+	int i;
 
 	if ( !cl_paused->integer ) {
 		return qfalse;
@@ -1494,7 +1495,7 @@ static void SV_ConnectionlessPacket( netadr_t from, msg_t *msg ) {
 	} else if ( !Q_stricmp( c,"connect" ) ) {
 		SV_DirectConnect( from );
 	} else if ( !Q_stricmp( c,"ipAuthorize" ) ) {
-		SV_AuthorizeIpPacket( from );
+		// removed for stateless challenges
 	} else if ( !Q_stricmp( c, "rcon" ) ) {
 		SVC_RemoteCommand( from, msg );
 // DHM - Nerve
