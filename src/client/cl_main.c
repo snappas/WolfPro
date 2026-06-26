@@ -1420,33 +1420,6 @@ Called when all downloading has been completed
 */
 void CL_DownloadsComplete( void ) {
 
-#ifndef _WIN32
-	char    *fs_write_path;
-#endif
-	char    *fn;
-
-	// DHM - Nerve :: Auto-update (not finished yet)
-	if ( autoupdateStarted ) {
-
-		if ( strlen( autoupdateFilename ) > 4 ) {
-#ifdef _WIN32
-			// win32's Sys_StartProcess prepends the current dir
-			fn = va( "%s/%s", FS_ShiftStr( AUTOUPDATE_DIR, AUTOUPDATE_DIR_SHIFT ), autoupdateFilename );
-#else
-			fs_write_path = Cvar_VariableString( "fs_homepath" );
-			fn = FS_BuildOSPath( fs_write_path, FS_ShiftStr( AUTOUPDATE_DIR, AUTOUPDATE_DIR_SHIFT ), autoupdateFilename );
-#ifdef __linux__
-			Sys_Chmod( fn, S_IXUSR );
-#endif
-#endif
-			Sys_StartProcess( fn, qtrue );
-		}
-
-		autoupdateStarted = qfalse;
-		CL_Disconnect( qtrue );
-		return;
-	}
-
 	// if we downloaded with cURL
 	if(clc.cURLUsed) { 
 		clc.cURLUsed = qfalse;
@@ -1549,15 +1522,14 @@ void CL_NextDownload( void ) {
 	qboolean useCURL = qfalse;
 
 	// A download has finished, check whether this matches a referenced checksum
-	if( *clc.downloadName && !autoupdateStarted ) {
-		char *zippath = FS_BuildOSPath(Cvar_VariableString("fs_homepath"), clc.downloadName, "");
-		zippath[strlen(zippath)-1] = '\0';
+	if( *clc.downloadName ) {
+		char *zippath = FS_BuildOSPath(Cvar_VariableString("fs_homepath"), clc.downloadName, NULL);
 
 		if(!FS_CompareZipChecksum(zippath))
 			Com_Error(ERR_DROP, "Incorrect checksum for file: %s", clc.downloadName);
 	}
 
-	*clc.downloadTempName = *clc.downloadName = 0;
+	*clc.downloadTempName = *clc.downloadName = '\0';
 	Cvar_Set("cl_downloadName", "");
 
 	// We are looking to start a download here

@@ -959,11 +959,12 @@ static void SV_CloseDownload( client_t *cl ) {
 	int i;
 
 	// EOF
-	if ( cl->download ) {
+	if ( cl->download != 0 ) {
 		FS_FCloseFile( cl->download );
+		cl->download = 0;
 	}
-	cl->download = 0;
-	*cl->downloadName = 0;
+
+	*cl->downloadName = '\0';
 
 	// Free the temporary buffer space
 	for ( i = 0; i < MAX_DOWNLOAD_WINDOW; i++ ) {
@@ -998,9 +999,16 @@ Downloads are finished
 ==================
 */
 void SV_DoneDownload_f( client_t *cl ) {
+	if ( cl->state == CS_ACTIVE )
+		return;
+
 	Com_DPrintf( "clientDownload: %s Done\n", cl->name );
+
 	// resend the game state to update any clients that entered during the download
 	SV_SendClientGameState( cl );
+
+	// apply rate to avoid retranmission after late gamestate acknowledge check
+	SVC_RateLimit( &cl->gamestate_rate, 1, 1000 );
 }
 
 /*

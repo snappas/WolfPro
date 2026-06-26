@@ -474,20 +474,24 @@ Qpath may have either forward or backwards slashes
 ===================
 */
 char *FS_BuildOSPath( const char *base, const char *game, const char *qpath ) {
-	char temp[MAX_OSPATH];
-	static char ospath[2][MAX_OSPATH];
+	char	temp[MAX_OSPATH*2+1];
+	static char ospath[2][sizeof(temp)+MAX_OSPATH];
 	static int toggle;
+	
+	toggle ^= 1;		// flip-flop to allow two returns without clash
 
-	toggle ^= 1;        // flip-flop to allow two returns without clash
-
-	if ( !game || !game[0] ) {
+	if( !game || !game[0] ) {
 		game = fs_gamedir;
 	}
 
-	Com_sprintf( temp, sizeof( temp ), "/%s/%s", game, qpath );
+	if ( qpath )
+		Com_sprintf( temp, sizeof( temp ), "%c%s%c%s", PATH_SEP, game, PATH_SEP, qpath );
+	else
+		Com_sprintf( temp, sizeof( temp ), "%c%s", PATH_SEP, game );
+
 	FS_ReplaceSeparators( temp );
 	Com_sprintf( ospath[toggle], sizeof( ospath[0] ), "%s%s", base, temp );
-
+	
 	return ospath[toggle];
 }
 
@@ -927,7 +931,7 @@ fileHandle_t FS_FOpenFileAppend( const char *filename ) {
 ===========
 FS_FilenameCompare
 
-Ignore case and seprator char distinctions
+Ignore case and separator char distinctions
 ===========
 */
 qboolean FS_FilenameCompare( const char *s1, const char *s2 ) {
@@ -937,26 +941,22 @@ qboolean FS_FilenameCompare( const char *s1, const char *s2 ) {
 		c1 = *s1++;
 		c2 = *s2++;
 
-		if ( c1 >= 'a' && c1 <= 'z' ) {
-			c1 -= ( 'a' - 'A' );
-		}
-		if ( c2 >= 'a' && c2 <= 'z' ) {
-			c2 -= ( 'a' - 'A' );
-		}
-
-		if ( c1 == '\\' || c1 == ':' ) {
+		if ( c1 <= 'Z' && c1 >= 'A' )
+			c1 += ('a' - 'A');
+		else if ( c1 == '\\' || c1 == ':' )
 			c1 = '/';
-		}
-		if ( c2 == '\\' || c2 == ':' ) {
+
+		if ( c2 <= 'Z' && c2 >= 'A' )
+			c2 += ('a' - 'A');
+		else if ( c2 == '\\' || c2 == ':' )
 			c2 = '/';
-		}
 
 		if ( c1 != c2 ) {
-			return -1;      // strings not equal
+			return qtrue;		// strings not equal
 		}
 	} while ( c1 );
-
-	return 0;       // strings are equal
+	
+	return qfalse;		// strings are equal
 }
 
 /*
@@ -2860,6 +2860,27 @@ qboolean FS_idPak( char *pak, char *base ) {
 	return qfalse;
 }
 
+
+/*
+================
+FS_CheckDirTraversal
+
+Check whether the string contains stuff like "../" to prevent directory traversal bugs
+and return qtrue if it does.
+================
+*/
+static qboolean FS_CheckDirTraversal( const char *checkdir )
+{
+	if ( strstr( checkdir, "../" ) || strstr( checkdir, "..\\" ) )
+		return qtrue;
+
+	if ( strstr( checkdir, "::" ) )
+		return qtrue;
+	
+	return qfalse;
+}
+
+
 /*
 ================
 FS_ComparePaks
@@ -2887,22 +2908,29 @@ we are not interested in a download string format, we want something human-reada
 ================
 */
 qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
-	searchpath_t    *sp;
+	const searchpath_t	*sp;
 	qboolean havepak;
+	char *origpos = neededpaks;
 	int i;
 
-	if ( !fs_numServerReferencedPaks ) {
+	if (!fs_numServerReferencedPaks)
 		return qfalse; // Server didn't send any pack information along
-	}
 
-	*neededpaks = 0;
+	*neededpaks = '\0';
 
-	for ( i = 0 ; i < fs_numServerReferencedPaks ; i++ ) {
+	for ( i = 0 ; i < fs_numServerReferencedPaks ; i++ )
+	{
 		// Ok, see if we have this pak file
 		havepak = qfalse;
 
 		// never autodownload any of the id paks
 		if ( FS_idPak( fs_serverReferencedPakNames[i], "main" ) ) {
+			continue;
+		}
+
+		// Make sure the server cannot make us write to non-quake3 directories.
+		if ( FS_CheckDirTraversal( fs_serverReferencedPakNames[i] ) ) {
+			Com_Printf( "WARNING: Invalid download name %s\n", fs_serverReferencedPakNames[i] );
 			continue;
 		}
 
@@ -2913,44 +2941,61 @@ qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
 			}
 		}
 
-		if ( !havepak && fs_serverReferencedPakNames[i] && *fs_serverReferencedPakNames[i] ) {
+		if ( !havepak && fs_serverReferencedPakNames[i] && *fs_serverReferencedPakNames[i] ) { 
 			// Don't got it
 
-			if ( dlstring ) {
-				// Remote name
-				Q_strcat( neededpaks, len, "@" );
-				Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
-				Q_strcat( neededpaks, len, ".pk3" );
+      if (dlstring)
+      {
+		// We need this to make sure we won't hit the end of the buffer or the server could
+		// overwrite non-pk3 files on clients by writing so much crap into neededpaks that
+		// Q_strcat cuts off the .pk3 extension.
+	
+		origpos += strlen(origpos);
+	
+        // Remote name
+        Q_strcat( neededpaks, len, "@");
+        Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
+        Q_strcat( neededpaks, len, ".pk3" );
 
-				// Local name
-				Q_strcat( neededpaks, len, "@" );
-				// Do we have one with the same name?
-				if ( FS_SV_FileExists( va( "%s.pk3", fs_serverReferencedPakNames[i] ) ) ) {
-					char st[MAX_ZPATH];
-					// We already have one called this, we need to download it to another name
-					// Make something up with the checksum in it
-					Com_sprintf( st, sizeof( st ), "%s.%08x.pk3", fs_serverReferencedPakNames[i], fs_serverReferencedPaks[i] );
-					Q_strcat( neededpaks, len, st );
-				} else
-				{
-					Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
-					Q_strcat( neededpaks, len, ".pk3" );
-				}
-			} else
-			{
-				Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
-				Q_strcat( neededpaks, len, ".pk3" );
-				// Do we have one with the same name?
-				if ( FS_SV_FileExists( va( "%s.pk3", fs_serverReferencedPakNames[i] ) ) ) {
-					Q_strcat( neededpaks, len, " (local file exists with wrong checksum)" );
-				}
-				Q_strcat( neededpaks, len, "\n" );
-			}
+        // Local name
+        Q_strcat( neededpaks, len, "@");
+        // Do we have one with the same name?
+        if ( FS_SV_FileExists( va( "%s.pk3", fs_serverReferencedPakNames[i] ) ) )
+        {
+          char st[MAX_ZPATH];
+          // We already have one called this, we need to download it to another name
+          // Make something up with the checksum in it
+          Com_sprintf( st, sizeof( st ), "%s.%08x.pk3", fs_serverReferencedPakNames[i], fs_serverReferencedPaks[i] );
+          Q_strcat( neededpaks, len, st );
+        } else
+        {
+          Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
+          Q_strcat( neededpaks, len, ".pk3" );
+        }
+        
+        // Find out whether it might have overflowed the buffer and don't add this file to the
+        // list if that is the case.
+        if(strlen(origpos) + (origpos - neededpaks) >= len - 1)
+	{
+		*origpos = '\0';
+		break;
+	}
+      }
+      else
+      {
+        Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
+			  Q_strcat( neededpaks, len, ".pk3" );
+        // Do we have one with the same name?
+        if ( FS_SV_FileExists( va( "%s.pk3", fs_serverReferencedPakNames[i] ) ) )
+        {
+          Q_strcat( neededpaks, len, " (local file exists with wrong checksum)");
+        }
+        Q_strcat( neededpaks, len, "\n");
+      }
 		}
 	}
 
 	if ( *neededpaks ) {
-		Com_Printf( "Need paks: %s\n", neededpaks );
 		return qtrue;
 	}
 

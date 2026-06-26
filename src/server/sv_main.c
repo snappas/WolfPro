@@ -950,10 +950,7 @@ static int SVC_HashForAddress( const netadr_t *address ) {
 	int			i;
 
 	switch ( address->type ) {
-		case NA_IP:  ip = address->ipv._4; size = 4;  break;
-#ifdef USE_IPV6
-		case NA_IP6: ip = address->ipv._6; size = 16; break;
-#endif
+		case NA_IP:  ip = address->ip; size = 4;  break;
 		default: break;
 	}
 

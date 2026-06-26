@@ -986,11 +986,7 @@ void SV_Init( void ) {
 	// server vars
 	sv_rconPassword = Cvar_Get( "rconPassword", "", CVAR_TEMP );
 	sv_privatePassword = Cvar_Get( "sv_privatePassword", "", CVAR_TEMP );
-#ifndef UPDATE_SERVER
 	sv_fps = Cvar_Get( "sv_fps", "20", CVAR_TEMP );
-#else
-	sv_fps = Cvar_Get( "sv_fps", "60", CVAR_TEMP ); // this allows faster downloads
-#endif
 	sv_timeout = Cvar_Get( "sv_timeout", "240", CVAR_TEMP );
 	sv_zombietime = Cvar_Get( "sv_zombietime", "2", CVAR_TEMP );
 	Cvar_Get( "nextmap", "", CVAR_TEMP );
@@ -1040,15 +1036,6 @@ void SV_Init( void ) {
 
 	// ATVI Tracker Wolfenstein Misc #263
 	Cvar_Get( "g_antilag", "2", CVAR_ARCHIVE | CVAR_SERVERINFO );
-
-	// TTimo - autodownload speed tweaks
-#ifndef UPDATE_SERVER
-	// the download netcode tops at 18/20 kb/s, no need to make you think you can go above
-	sv_dl_maxRate = Cvar_Get( "sv_dl_maxRate", "42000", CVAR_ARCHIVE );
-#else
-	// the update server is on steroids, sv_fps 60 and no snapshotMsec limitation, it can go up to 30 kb/s
-	sv_dl_maxRate = Cvar_Get( "sv_dl_maxRate", "60000", CVAR_ARCHIVE );
-#endif
 
 	//ServerIP and Server Country
 #ifdef DEDICATED
