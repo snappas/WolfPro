@@ -566,49 +566,27 @@ void SV_CalcPings( void ) {
 			cl->ping = 999;
 			continue;
 		}
-		if ( cl->gentity->r.svFlags & SVF_BOT ) {
+		if ( cl->netchan.remoteAddress.type == NA_BOT ) {
 			cl->ping = 0;
 			continue;
 		}
 
+		total = 0;
 		count = 0;
-		int max = 0;
 		for ( j = 0 ; j < PACKET_BACKUP ; j++ ) {
-			if ( cl->frames[j].messageAcked <= 0 ) {
+			if ( cl->frames[j].messageAcked == 0 ) {
 				continue;
 			}
 			delta = cl->frames[j].messageAcked - cl->frames[j].messageSent;
 			count++;
-			if(delta > max){
-				max = delta;
-			}
+			total += delta;
 		}
-		
-		cl->pingSamples[cl->pingSampleIndex] = max;
-
-		cl->pingSampleIndex = (cl->pingSampleIndex + 1) & (PACKET_MASK);
-
-		total = 0;
-		int sortedPings[PACKET_BACKUP];
-		for(int p = 0; p < PACKET_BACKUP; p++){
-			total += cl->pingSamples[p];
-			sortedPings[p] = cl->pingSamples[p];
-		}
-		int avg = total / PACKET_BACKUP;
-
-		qsort(sortedPings, PACKET_BACKUP, sizeof(int), cmp_int);
-
-
-		if ( !count ) {
+		if (!count) {
 			cl->ping = 999;
 		} else {
-			cl->ping = sortedPings[15];
-			cl->ping -= 1000/sv_fps->integer;
+			cl->ping = total/count;
 			if ( cl->ping > 999 ) {
 				cl->ping = 999;
-			}
-			if(cl->ping < 0){
-				cl->ping = 0;
 			}
 		}
 
