@@ -6659,8 +6659,6 @@ void _UI_Init( qboolean inGameLoad ) {
 	uiInfo.uiDC.drawCinematic = &UI_DrawCinematic;
 	uiInfo.uiDC.runCinematicFrame = &UI_RunCinematicFrame;
 	uiInfo.uiDC.translateString = &trap_TranslateString;            // NERVE - SMF
-	uiInfo.uiDC.checkAutoUpdate = &trap_CheckAutoUpdate;            // DHM - Nerve
-	uiInfo.uiDC.getAutoUpdate = &trap_GetAutoUpdate;                // DHM - Nerve
 
 	Init_Display( &uiInfo.uiDC );
 
@@ -6901,8 +6899,6 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			return;
 
 		case UIMENU_WM_AUTOUPDATE:
-			// TTimo - changing the auto-update strategy to a modal prompt
-			Menus_OpenByName( "wm_autoupdate_modal" );
 			return;
 			// -NERVE - SMF
 		default:

@@ -532,6 +532,11 @@ static void CL_ParseServerInfo(void)
 	Q_strncpyz(clc.sv_dlURL,
 		Info_ValueForKey(serverInfo, "sv_dlURL"),
 		sizeof(clc.sv_dlURL));
+
+	/* remove ending slash in URLs */
+	size_t len = strlen( clc.sv_dlURL );
+	if ( len > 0 &&  clc.sv_dlURL[len-1] == '/' )
+		clc.sv_dlURL[len-1] = '\0';
 }
 
 /*

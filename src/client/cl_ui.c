@@ -1143,11 +1143,9 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 
 		// DHM - Nerve
 	case UI_CHECKAUTOUPDATE:
-		CL_CheckAutoUpdate();
 		return 0;
 
 	case UI_GET_AUTOUPDATE:
-		CL_GetAutoUpdate();
 		return 0;
 		// DHM - Nerve
 

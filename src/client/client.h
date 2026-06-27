@@ -304,8 +304,6 @@ typedef struct {
 	unsigned short port;
 } serverAddress_t;
 
-#define MAX_AUTOUPDATE_SERVERS  5
-
 // CGame VM calls that are extensions
 enum {
 	CGVM_NDP_END_ANALYSIS,
@@ -369,12 +367,6 @@ typedef struct {
 	netadr_t updateServer;
 	char updateChallenge[MAX_TOKEN_CHARS];
 	char updateInfoString[MAX_INFO_STRING];
-
-	netadr_t authorizeServer;
-
-	// DHM - Nerve :: Auto-update Info
-	char autoupdateServerNames[MAX_AUTOUPDATE_SERVERS][MAX_QPATH];
-	netadr_t autoupdateServer;
 
 	// rendering info
 	glconfig_t glconfig;
@@ -481,11 +473,6 @@ void CL_ShutdownAll( void );
 void CL_AddReliableCommand( const char *cmd );
 
 void CL_StartHunkUsers( void );
-
-#ifndef UPDATE_SERVER
-void CL_CheckAutoUpdate( void );
-void CL_GetAutoUpdate( void );
-#endif
 
 void CL_Disconnect_f( void );
 void CL_GetChallengePacket( void );
@@ -598,8 +585,6 @@ void CL_SystemInfoChanged( void );
 void CL_ParseServerMessage( msg_t *msg );
 
 //====================================================================
-
-void    CL_UpdateInfoPacket( netadr_t from );       // DHM - Nerve
 
 void    CL_ServerInfoPacket( netadr_t from, msg_t *msg );
 void    CL_LocalServers_f( void );

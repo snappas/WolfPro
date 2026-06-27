@@ -455,11 +455,9 @@ char* trap_TranslateString( const char *string ) {
 
 // DHM - Nerve
 void trap_CheckAutoUpdate( void ) {
-	syscall( UI_CHECKAUTOUPDATE );
 }
 
 void trap_GetAutoUpdate( void ) {
-	syscall( UI_GET_AUTOUPDATE );
 }
 // DHM - Nerve
 
