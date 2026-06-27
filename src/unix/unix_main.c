@@ -33,7 +33,6 @@ If you have questions concerning this license or the applicable additional terms
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -953,6 +952,64 @@ void Sys_StreamSeek( fileHandle_t f, int offset, int origin ) {
 }
 
 #endif
+
+
+
+static void LIN_MicroSleep( int us )
+{
+	struct timespec req, rem;
+	req.tv_sec = us / 1000000;
+	req.tv_nsec = (us % 1000000) * 1000;
+	while (clock_nanosleep(CLOCK_REALTIME, 0, &req, &rem) == EINTR) {
+		req = rem;
+	}
+}
+
+
+void Sys_Sleep( int msec )
+{
+	struct timeval timeout;
+	fd_set fdset;
+	int res;
+	if ( msec < 0 ) {
+		// special case: wait for console input or network packet
+		if ( stdin_active ) {
+			msec = 300;
+			do {
+				FD_ZERO( &fdset );
+				FD_SET( STDIN_FILENO, &fdset );
+				timeout.tv_sec = msec / 1000;
+				timeout.tv_usec = (msec % 1000) * 1000;
+				res = select( STDIN_FILENO + 1, &fdset, NULL, NULL, &timeout );
+			} while ( res == 0 && NET_Sleep( 10 * 1000 ) );
+		} else {
+			// can happen only if no map loaded
+			// which means we totally stuck as stdin is also disabled :P
+			//usleep( 300 * 1000 );
+			while ( NET_Sleep( 3000 * 1000 ) )
+				;
+		}
+		return;
+	}
+	LIN_MicroSleep(msec * 1000);
+}
+
+
+void Sys_MicroSleep( int us )
+{
+	LIN_MicroSleep(us);
+}
+
+
+int64_t Sys_Microseconds(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	return (int64_t)ts.tv_sec * 1000000 + (int64_t)ts.tv_nsec / 1000;
+}
+
+
 
 /*
 ========================================================================
