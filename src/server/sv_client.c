@@ -122,7 +122,7 @@ as well as IPv6 connections, since there is no way to use the
 v4-only auth server for these new types of connections.
 =================
 */
-void SV_GetChallenge( const netadr_t from ) {
+void SV_GetChallenge( const netadr_t *from ) {
 	int		challenge;
 
 	// ignore if we are in single player
@@ -133,7 +133,7 @@ void SV_GetChallenge( const netadr_t from ) {
 #endif
 
 	// Prevent using getchallenge as an amplifier
-	if ( SVC_RateLimitAddress( &from, 10, 1000 ) ) {
+	if ( SVC_RateLimitAddress( from, 10, 1000 ) ) {
 		if ( com_developer->integer ) {
 			Com_Printf( "SV_GetChallenge: rate limit from %s exceeded, dropping request\n",
 				NET_AdrToString( from ) );
@@ -142,7 +142,7 @@ void SV_GetChallenge( const netadr_t from ) {
 	}
 
 	// Create a unique challenge for this client without storing state on the server
-	challenge = SV_CreateChallenge( svs.time >> TS_SHIFT, &from );
+	challenge = SV_CreateChallenge( svs.time >> TS_SHIFT, from );
 
 	// if ( Cmd_Argc() < 2 ) {
 		// legacy client query, don't send unneeded information
@@ -204,7 +204,7 @@ A "connect" OOB command has been received
 ==================
 */
 
-void SV_DirectConnect( netadr_t from ) {
+void SV_DirectConnect( const netadr_t *from ) {
 	static		rateLimit_t bucket;
 	char		userinfo[MAX_INFO_STRING];// , tld[3];
 	int			i, n;
@@ -234,7 +234,7 @@ void SV_DirectConnect( netadr_t from ) {
 #endif
 
 	// Prevent using connect as an amplifier
-	if ( SVC_RateLimitAddress( &from, 10, 1000 ) ) {
+	if ( SVC_RateLimitAddress( from, 10, 1000 ) ) {
 		if ( com_developer->integer ) {
 			Com_Printf( "SV_DirectConnect: rate limit from %s exceeded, dropping request\n",
 				NET_AdrToString( from ) );
@@ -245,7 +245,7 @@ void SV_DirectConnect( netadr_t from ) {
 	// check for concurrent connections
 	for ( i = 0, n = 0; i < sv.maxclients; i++ ) {
 		const netadr_t *addr = &svs.clients[ i ].netchan.remoteAddress;
-		if ( addr->type != NA_BOT && NET_CompareBaseAdr( *addr, from ) ) {
+		if ( addr->type != NA_BOT && NET_CompareBaseAdr( addr, from ) ) {
 			if ( svs.clients[ i ].state >= CS_CONNECTED && !svs.clients[ i ].justConnected ) {
 				if ( ++n >= sv_maxclientsPerIP->integer ) {
 					// avoid excessive outgoing traffic
@@ -275,7 +275,7 @@ void SV_DirectConnect( netadr_t from ) {
 	if ( !NET_IsLocalAddress( from ) )
 	{
 		// Verify the received challenge against the expected challenge
-		if ( !SV_VerifyChallenge( challenge, &from ) )
+		if ( !SV_VerifyChallenge( challenge, from ) )
 		{
 			// avoid excessive outgoing traffic
 			if ( !SVC_RateLimit( &bucket, 10, 200 ) )
@@ -385,7 +385,7 @@ void SV_DirectConnect( netadr_t from ) {
 	// }
 
 	// restore burst capacity
-	SVC_RateRestoreBurstAddress( &from, 10, 1000 );
+	SVC_RateRestoreBurstAddress( from, 10, 1000 );
 
 	// quick reject
 	newcl = NULL;
@@ -414,7 +414,7 @@ void SV_DirectConnect( netadr_t from ) {
 		if ( cl->state == CS_FREE ) {
 			continue;
 		}
-		if ( NET_CompareAdr( from, cl->netchan.remoteAddress ) && cl->netchan.qport == qport ) {
+		if ( NET_CompareAdr( from, &cl->netchan.remoteAddress ) && cl->netchan.qport == qport ) {
 			// both qport and netport should match for a reconnecting client
 			Com_Printf( "%s:reconnect\n", NET_AdrToString( from ) );
 			newcl = cl;
@@ -468,7 +468,7 @@ void SV_DirectConnect( netadr_t from ) {
 	}
 
 	if ( !newcl ) {
-		if ( NET_IsLocalAddress( from ) ) {
+		if ( NET_IsLocalAddress(from ) ) {
 			count = 0;
 			for ( i = startIndex; i < sv.maxclients; i++ ) {
 				cl = &svs.clients[i];
@@ -510,7 +510,7 @@ gotnewcl:
 
 	// save the address
 	newcl->compat = compat;
-	Netchan_Setup( NS_SERVER, &newcl->netchan, &from, qport, challenge, compat );
+	Netchan_Setup( NS_SERVER, &newcl->netchan, from, qport, challenge, compat );
 
 	// init the netchan queue
 	newcl->netchan_end_queue = &newcl->netchan_start_queue;
@@ -887,7 +887,7 @@ void SV_SendClientGameState( client_t *client ) {
 		if ( client->netchan.remoteAddress.type == NA_LOOPBACK ) {
 			Com_Error( ERR_DROP, "gamestate overflow" );
 		} else {
-			NET_OutOfBandPrint( NS_SERVER, client->netchan.remoteAddress, "print\n" S_COLOR_YELLOW "SERVER ERROR: gamestate overflow\n" );
+			NET_OutOfBandPrint( NS_SERVER, &client->netchan.remoteAddress, "print\n" S_COLOR_YELLOW "SERVER ERROR: gamestate overflow\n" );
 			SV_DropClient( client, "gamestate overflow" );
 		}
 		return;
@@ -1588,7 +1588,7 @@ void SV_UserinfoChanged( client_t *cl ) {
 
 	// snaps command
 	val = Info_ValueForKey( cl->userinfo, "snaps" );
-	if ( val[0] && !NET_IsLocalAddress( cl->netchan.remoteAddress ) )
+	if ( val[0] && !NET_IsLocalAddress(&cl->netchan.remoteAddress ) )
 		i = atoi( val );
 	else
 		i = sv_fps->integer; // sync with server
@@ -1611,10 +1611,10 @@ void SV_UserinfoChanged( client_t *cl ) {
 	// TTimo
 	// maintain the IP information
 	// the banning code relies on this being consistently present
-	if ( NET_IsLocalAddress( cl->netchan.remoteAddress ) )
+	if ( NET_IsLocalAddress(&cl->netchan.remoteAddress ) )
 		ip = "localhost";
 	else
-		ip = NET_AdrToString( cl->netchan.remoteAddress );
+		ip = NET_AdrToString( &cl->netchan.remoteAddress );
 
 	if ( !Info_SetValueForKey( cl->userinfo, "ip", ip ) )
 	{

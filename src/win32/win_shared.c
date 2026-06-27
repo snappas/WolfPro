@@ -50,10 +50,21 @@ void Sys_DebugBreak(void){
 }
 #endif
 
-void Sys_Sleep( int ms )
+void Sys_Sleep( int msec )
 {
-	if (ms >= 1)
-		Sleep(ms);
+	if ( msec < 0 ) {
+		// special case: wait for event or network packet
+		DWORD dwResult;
+		msec = 300;
+		do {
+			dwResult = MsgWaitForMultipleObjects( 0, NULL, FALSE, msec, QS_ALLEVENTS );
+		}
+		while ( dwResult == WAIT_TIMEOUT && NET_Sleep( 10 * 1000 ) );
+		//WaitMessage();
+		return;
+	}
+
+	Sleep(msec);
 }
 
 /*

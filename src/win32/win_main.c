@@ -1016,8 +1016,6 @@ sysEvent_t Sys_GetEvent( void ) {
 	MSG msg;
 	sysEvent_t ev;
 	char        *s;
-	msg_t netmsg;
-	netadr_t adr;
 
 	// return if we have data
 	if ( eventHead > eventTail ) {
@@ -1050,21 +1048,6 @@ sysEvent_t Sys_GetEvent( void ) {
 		Sys_QueEvent( 0, SE_CONSOLE, 0, 0, len, b );
 	}
 
-	// check for network packets
-	MSG_Init( &netmsg, sys_packetReceived, sizeof( sys_packetReceived ) );
-	if ( Sys_GetPacket( &adr, &netmsg ) ) {
-		netadr_t        *buf;
-		int len;
-
-		// copy out to a seperate buffer for qeueing
-		// the readcount stepahead is for SOCKS support
-		len = sizeof( netadr_t ) + netmsg.cursize - netmsg.readcount;
-		buf = Z_Malloc( len );
-		*buf = adr;
-		memcpy( buf + 1, &netmsg.data[netmsg.readcount], netmsg.cursize - netmsg.readcount );
-		Sys_QueEvent( 0, SE_PACKET, 0, 0, len, buf );
-	}
-
 	// return if we have data
 	if ( eventHead > eventTail ) {
 		eventTail++;
@@ -1095,18 +1078,6 @@ void Sys_In_Restart_f( void ) {
 
 
 /*
-=================
-Sys_Net_Restart_f
-
-Restart the network subsystem
-=================
-*/
-void Sys_Net_Restart_f( void ) {
-	NET_Restart();
-}
-
-
-/*
 ================
 Sys_Init
 
@@ -1124,7 +1095,6 @@ void Sys_Init( void ) {
 	WIN_BeginTimePeriod();
 
 	Cmd_AddCommand( "in_restart", Sys_In_Restart_f );
-	Cmd_AddCommand( "net_restart", Sys_Net_Restart_f );
 
 	if ( !IsWindowsVistaOrGreater() )
 		Sys_Error( "%s requires Windows Vista or later", Q3_VERSION );
@@ -1225,8 +1195,6 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	Com_Init( sys_cmdline );
 
 	WIN_RegisterExceptionCommands();
-
-	NET_Init();
 
 	_getcwd( cwd, sizeof( cwd ) );
 	Com_Printf( "Working directory: %s\n", cwd );

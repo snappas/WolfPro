@@ -1044,20 +1044,6 @@ sysEvent_t Sys_GetEvent( void ) {
 		Sys_QueEvent( 0, SE_CONSOLE, 0, 0, len, b );
 	}
 
-	// check for network packets
-	MSG_Init( &netmsg, sys_packetReceived, sizeof( sys_packetReceived ) );
-	if ( Sys_GetPacket( &adr, &netmsg ) ) {
-		netadr_t    *buf;
-		int len;
-
-		// copy out to a seperate buffer for qeueing
-		len = sizeof( netadr_t ) + netmsg.cursize;
-		buf = Z_Malloc( len );
-		*buf = adr;
-		memcpy( buf + 1, netmsg.data, netmsg.cursize );
-		Sys_QueEvent( 0, SE_PACKET, 0, 0, len, buf );
-	}
-
 	// return if we have data
 	if ( eventHead > eventTail ) {
 		eventTail++;
@@ -1319,7 +1305,6 @@ int main( int argc, char* argv[] ) {
 	memset( &sys_packetReceived[0], 0, MAX_MSGLEN * sizeof( byte ) );
 
 	Com_Init( cmdline );
-	NET_Init();
 
 	Sys_ConsoleInputInit();
 

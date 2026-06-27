@@ -72,6 +72,8 @@ cvar_t  *com_buildScript;   // for automated data building scripts
 cvar_t  *com_introPlayed;
 cvar_t  *cl_paused;
 cvar_t  *sv_paused;
+cvar_t  *sv_packetdelay;
+cvar_t	*cl_packetdelay;
 cvar_t  *com_cameraMode;
 #if defined( _WIN32 ) && defined( _DEBUG )
 cvar_t  *com_noErrorInterrupt;
@@ -2103,7 +2105,7 @@ sysEvent_t  Com_GetEvent( void ) {
 Com_RunAndTimeServerPacket
 =================
 */
-void Com_RunAndTimeServerPacket( netadr_t *evFrom, msg_t *buf ) {
+void Com_RunAndTimeServerPacket( const netadr_t *evFrom, msg_t *buf ) {
 	int t1, t2, msec;
 
 	t1 = 0;
@@ -2112,7 +2114,7 @@ void Com_RunAndTimeServerPacket( netadr_t *evFrom, msg_t *buf ) {
 		t1 = Sys_Milliseconds();
 	}
 
-	SV_PacketEvent( *evFrom, buf );
+	SV_PacketEvent( evFrom, buf );
 
 	if ( com_speeds->integer ) {
 		t2 = Sys_Milliseconds();
@@ -2132,11 +2134,13 @@ Returns last event time
 */
 int Com_EventLoop( void ) {
 	sysEvent_t ev;
-	netadr_t evFrom;
-	byte bufData[MAX_MSGLEN];
-	msg_t buf;
 
-	MSG_Init( &buf, bufData, sizeof( bufData ) );
+#ifndef DEDICATED
+	byte		bufData[ MAX_MSGLEN_BUF ];
+	msg_t		buf;
+
+	MSG_Init( &buf, bufData, MAX_MSGLEN );
+#endif // !DEDICATED
 
 	while ( 1 ) {
 		ev = Com_GetEvent();
@@ -2144,28 +2148,24 @@ int Com_EventLoop( void ) {
 		// if no more events are available
 		if ( ev.evType == SE_NONE ) {
 			// manually send packet events for the loopback channel
+#ifndef DEDICATED
+			netadr_t evFrom;
 			while ( NET_GetLoopPacket( NS_CLIENT, &evFrom, &buf ) ) {
-				CL_PacketEvent( evFrom, &buf );
+				CL_PacketEvent( &evFrom, &buf );
 			}
-
 			while ( NET_GetLoopPacket( NS_SERVER, &evFrom, &buf ) ) {
 				// if the server just shut down, flush the events
 				if ( com_sv_running->integer ) {
 					Com_RunAndTimeServerPacket( &evFrom, &buf );
 				}
 			}
-
+#endif // !DEDICATED
 			return ev.evTime;
 		}
 
 
 		switch ( ev.evType ) {
-		default:
-			// bk001129 - was ev.evTime
-			Com_Error( ERR_FATAL, "Com_EventLoop: bad event type %i", ev.evType );
-			break;
-		case SE_NONE:
-			break;
+#ifndef DEDICATED
 		case SE_KEY:
 			CL_KeyEvent( ev.evValue, ev.evValue2, ev.evTime );
 			break;
@@ -2178,45 +2178,51 @@ int Com_EventLoop( void ) {
 		case SE_JOYSTICK_AXIS:
 			CL_JoystickEvent( ev.evValue, ev.evValue2, ev.evTime );
 			break;
+#endif // !DEDICATED
 		case SE_CONSOLE:
 			Cbuf_AddText( (char *)ev.evPtr );
 			Cbuf_AddText( "\n" );
 			break;
-		case SE_PACKET:
-			// this cvar allows simulation of connections that
-			// drop a lot of packets.  Note that loopback connections
-			// don't go through here at all.
-			if ( com_dropsim->value > 0 ) {
-				static int seed;
-
-				if ( Q_random( &seed ) < com_dropsim->value ) {
-					break;      // drop this packet
-				}
-			}
-
-			evFrom = *(netadr_t *)ev.evPtr;
-			buf.cursize = ev.evPtrLength - sizeof( evFrom );
-
-			// we must copy the contents of the message out, because
-			// the event buffers are only large enough to hold the
-			// exact payload, but channel messages need to be large
-			// enough to hold fragment reassembly
-			if ( (unsigned)buf.cursize > buf.maxsize ) {
-				Com_Printf( "Com_EventLoop: oversize packet\n" );
-				continue;
-			}
-			memcpy( buf.data, ( byte * )( (netadr_t *)ev.evPtr + 1 ), buf.cursize );
-			if ( com_sv_running->integer ) {
-				Com_RunAndTimeServerPacket( &evFrom, &buf );
-			} else {
-				CL_PacketEvent( evFrom, &buf );
-			}
+		default:
+			// bk001129 - was ev.evTime
+			Com_Error( ERR_FATAL, "Com_EventLoop: bad event type %i", ev.evType );
 			break;
+		// case SE_PACKET:
+		// 	// this cvar allows simulation of connections that
+		// 	// drop a lot of packets.  Note that loopback connections
+		// 	// don't go through here at all.
+		// 	if ( com_dropsim->value > 0 ) {
+		// 		static int seed;
+
+		// 		if ( Q_random( &seed ) < com_dropsim->value ) {
+		// 			break;      // drop this packet
+		// 		}
+		// 	}
+
+		// 	evFrom = *(netadr_t *)ev.evPtr;
+		// 	buf.cursize = ev.evPtrLength - sizeof( evFrom );
+
+		// 	// we must copy the contents of the message out, because
+		// 	// the event buffers are only large enough to hold the
+		// 	// exact payload, but channel messages need to be large
+		// 	// enough to hold fragment reassembly
+		// 	if ( (unsigned)buf.cursize > buf.maxsize ) {
+		// 		Com_Printf( "Com_EventLoop: oversize packet\n" );
+		// 		continue;
+		// 	}
+		// 	memcpy( buf.data, ( byte * )( (netadr_t *)ev.evPtr + 1 ), buf.cursize );
+		// 	if ( com_sv_running->integer ) {
+		// 		Com_RunAndTimeServerPacket( &evFrom, &buf );
+		// 	} else {
+		// 		CL_PacketEvent( &evFrom, &buf );
+		// 	}
+		// 	break;
 		}
 
 		// free any block data
 		if ( ev.evPtr ) {
 			Z_Free( ev.evPtr );
+			ev.evPtr = NULL;
 		}
 	}
 
@@ -2944,6 +2950,8 @@ void Com_Init( char *commandLine ) {
 
 	cl_paused = Cvar_Get( "cl_paused", "0", CVAR_ROM );
 	sv_paused = Cvar_Get( "sv_paused", "0", CVAR_ROM );
+	sv_packetdelay = Cvar_Get( "sv_packetdelay", "0", CVAR_CHEAT );
+	cl_packetdelay = Cvar_Get( "cl_packetdelay", "0", CVAR_CHEAT );
 	com_sv_running = Cvar_Get( "sv_running", "0", CVAR_ROM );
 	com_cl_running = Cvar_Get( "cl_running", "0", CVAR_ROM );
 	com_buildScript = Cvar_Get( "com_buildScript", "0", 0 );
@@ -3052,6 +3060,8 @@ void Com_Init( char *commandLine ) {
 
 	com_fullyInitialized = qtrue;
 	Com_Printf( "--- Common Initialization Complete ---\n" );
+
+	NET_Init();
 }
 
 //==================================================================

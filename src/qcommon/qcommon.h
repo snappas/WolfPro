@@ -98,6 +98,10 @@ qbool Sys_IsDebugging(void);
 #define USE_AFFINITY_MASK
 #endif
 
+// stringify macro
+#define XSTRING(x)	STRING(x)
+#define STRING(x)	#x
+
 //======================= WIN32 DEFINES =================================
 
 #ifdef WIN32
@@ -197,6 +201,7 @@ NET
 
 ==============================================================
 */
+#define NET_ENABLEV4            0x01
 
 #define PACKET_BACKUP   32  // number of old messages that must be kept on client and
 							// server for delta comrpession and ping estimation
@@ -220,7 +225,8 @@ typedef enum {
 	NA_BAD,                 // an address lookup failed
 	NA_LOOPBACK,
 	NA_BROADCAST,
-	NA_IP
+	NA_IP,
+	NA_UNSPEC
 } netadrtype_t;
 
 typedef enum {
@@ -228,36 +234,35 @@ typedef enum {
 	NS_SERVER
 } netsrc_t;
 
-typedef struct {
-	netadrtype_t type;
+#define NET_ADDRSTRMAXLEN 48	// maximum length of an IPv6 address string including trailing '\0'
 
-	byte ip[4];
+typedef struct {
+	netadrtype_t	type;
 	union {
 		byte	_4[4];
-
 	} ipv;
 	uint16_t	port;
-
 } netadr_t;
 
-void        NET_Init( void );
-void        NET_Shutdown( void );
+void		NET_Init( void );
+void		NET_Shutdown( void );
 void		NET_FlushPacketQueue( int time_diff );
 void		NET_QueuePacket( netsrc_t sock, int length, const void *data, const netadr_t *to, int offset );
-void        NET_Restart( void );
-void        NET_Config( qboolean enableNetworking );
+void		NET_SendPacket( netsrc_t sock, int length, const void *data, const netadr_t *to );
+void		QDECL NET_OutOfBandPrint( netsrc_t net_socket, const netadr_t *adr, const char *format, ...);
+void		NET_OutOfBandCompress( netsrc_t sock, const netadr_t *adr, const byte *data, int len );
 
-void        NET_SendPacket( netsrc_t sock, int length, const void *data, netadr_t to );
-void QDECL NET_OutOfBandPrint( netsrc_t net_socket, netadr_t adr, const char *format, ... );
-void QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len );
-
-qboolean    NET_CompareAdr( netadr_t a, netadr_t b );
-qboolean    NET_CompareBaseAdr( netadr_t a, netadr_t b );
-qboolean    NET_IsLocalAddress( netadr_t adr );
-const char  *NET_AdrToString( netadr_t a );
-qboolean    NET_StringToAdr( const char *s, netadr_t *a );
-qboolean    NET_GetLoopPacket( netsrc_t sock, netadr_t *net_from, msg_t *net_message );
-void        NET_Sleep( int msec );
+qboolean	NET_CompareAdr( const netadr_t *a, const netadr_t *b );
+qboolean	NET_CompareBaseAdrMask( const netadr_t *a, const netadr_t *b, unsigned int netmask );
+qboolean	NET_CompareBaseAdr( const netadr_t *a, const netadr_t *b );
+qboolean	NET_IsLocalAddress( const netadr_t *adr );
+const char	*NET_AdrToString( const netadr_t *a );
+const char	*NET_AdrToStringwPort( const netadr_t *a );
+int         NET_StringToAdr( const char *s, netadr_t *a, netadrtype_t family );
+#ifndef DEDICATED
+qboolean	NET_GetLoopPacket( netsrc_t sock, netadr_t *net_from, msg_t *net_message );
+#endif
+qboolean	NET_Sleep( int timeout );
 
 #define	MAX_PACKETLEN	1400	// max size of a network packet
 
@@ -888,6 +893,8 @@ int         Com_RealTime( qtime_t *qtime );
 qboolean    Com_SafeMode( void );
 const char* Com_FormatBytes(uint64_t numBytes);
 
+void		Com_RunAndTimeServerPacket( const netadr_t *evFrom, msg_t *buf );
+
 void        Com_StartupVariable( const char *match );
 void        Com_SetRecommended();
 // checks for and removes command line "+set var arg" constructs
@@ -912,6 +919,7 @@ extern cvar_t  *com_cameraMode;
 extern cvar_t  *cl_paused;
 extern cvar_t  *sv_paused;
 extern	cvar_t	*cl_packetdelay;
+extern	cvar_t	*sv_packetdelay;
 extern	cvar_t	*com_cl_running;
 extern	cvar_t	*com_yieldCPU;
 
@@ -1029,7 +1037,7 @@ void CL_MouseEvent( int dx, int dy, int time );
 
 void CL_JoystickEvent( int axis, int value, int time );
 
-void CL_PacketEvent( netadr_t from, msg_t *msg );
+void CL_PacketEvent( const netadr_t *from, msg_t *msg );
 
 void CL_ConsolePrint( char *text );
 
@@ -1073,7 +1081,7 @@ void S_ClearSoundBuffer( void );
 void SV_Init( void );
 void SV_Shutdown( char *finalmsg );
 void SV_Frame( int msec );
-void SV_PacketEvent( netadr_t from, msg_t *msg );
+void SV_PacketEvent( const netadr_t *from, msg_t *msg );
 int SV_FrameMsec( void );
 qboolean SV_GameCommand( void );
 int SV_FrameSleepMS(void);
@@ -1186,12 +1194,12 @@ void    Sys_StreamSeek( fileHandle_t f, int offset, int origin );
 void    Sys_ShowConsole( int level, qboolean quitOnClose );
 void    Sys_SetErrorText( const char *text );
 
-void    Sys_SendPacket( int length, const void *data, netadr_t to );
+void	Sys_SendPacket( int length, const void *data, const netadr_t *to );
 
-qboolean    Sys_StringToAdr( const char *s, netadr_t *a );
+qboolean Sys_StringToAdr( const char *s, netadr_t *a, netadrtype_t family );
 //Does NOT parse port numbers, only base addresses.
 
-qboolean    Sys_IsLANAddress( netadr_t adr );
+qboolean    Sys_IsLANAddress(const netadr_t *adr );
 void        Sys_ShowIP( void );
 
 qboolean    Sys_CheckCD( void );

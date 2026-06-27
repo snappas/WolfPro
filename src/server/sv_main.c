@@ -91,7 +91,7 @@ cvar_t* sv_referencedPakNames;
 
 cvar_t *sv_levelTimeReset;
 
-void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
+void SVC_GameCompleteStatus( const netadr_t *from );       // NERVE - SMF
 
 /*
 =============================================================================
@@ -278,7 +278,7 @@ void SV_MasterHeartbeat( const char *hbname ) {
 			sv_master[i]->modified = qfalse;
 
 			Com_Printf( "Resolving %s\n", sv_master[i]->string );
-			if ( !NET_StringToAdr( sv_master[i]->string, &adr[i] ) ) {
+			if ( !NET_StringToAdr( sv_master[i]->string, &adr[i], NA_UNSPEC ) ) {
 				// if the address failed to resolve, clear it
 				// so we don't take repeated dns hits
 				Com_Printf( "Couldn't resolve address: %s\n", sv_master[i]->string );
@@ -290,7 +290,7 @@ void SV_MasterHeartbeat( const char *hbname ) {
 				adr[i].port = BigShort( PORT_MASTER );
 			}
 			Com_Printf( "%s resolved to %i.%i.%i.%i:%i\n", sv_master[i]->string,
-						adr[i].ip[0], adr[i].ip[1], adr[i].ip[2], adr[i].ip[3],
+						adr[i].ipv._4[0], adr[i].ipv._4[1], adr[i].ipv._4[2], adr[i].ipv._4[3],
 						BigShort( adr[i].port ) );
 		}
 
@@ -298,7 +298,7 @@ void SV_MasterHeartbeat( const char *hbname ) {
 		Com_Printf( "Sending heartbeat to %s\n", sv_master[i]->string );
 		// this command should be changed if the server info / status format
 		// ever incompatably changes
-		NET_OutOfBandPrint( NS_SERVER, adr[i], "heartbeat %s\n", hbname );
+		NET_OutOfBandPrint( NS_SERVER, &adr[i], "heartbeat %s\n", hbname );
 	}
 }
 
@@ -331,7 +331,7 @@ void SV_MasterGameCompleteStatus() {
 			sv_master[i]->modified = qfalse;
 
 			Com_Printf( "Resolving %s\n", sv_master[i]->string );
-			if ( !NET_StringToAdr( sv_master[i]->string, &adr[i] ) ) {
+			if ( !NET_StringToAdr( sv_master[i]->string, &adr[i], NA_UNSPEC ) ) {
 				// if the address failed to resolve, clear it
 				// so we don't take repeated dns hits
 				Com_Printf( "Couldn't resolve address: %s\n", sv_master[i]->string );
@@ -343,14 +343,14 @@ void SV_MasterGameCompleteStatus() {
 				adr[i].port = BigShort( PORT_MASTER );
 			}
 			Com_Printf( "%s resolved to %i.%i.%i.%i:%i\n", sv_master[i]->string,
-						adr[i].ip[0], adr[i].ip[1], adr[i].ip[2], adr[i].ip[3],
+						adr[i].ipv._4[0], adr[i].ipv._4[1], adr[i].ipv._4[2], adr[i].ipv._4[3],
 						BigShort( adr[i].port ) );
 		}
 
 		Com_Printf( "Sending gameCompleteStatus to %s\n", sv_master[i]->string );
 		// this command should be changed if the server info / status format
 		// ever incompatably changes
-		SVC_GameCompleteStatus( adr[i] );
+		SVC_GameCompleteStatus( &adr[i] );
 	}
 }
 
@@ -393,7 +393,7 @@ NERVE - SMF - Send serverinfo cvars, etc to master servers when
 game complete. Useful for tracking global player stats.
 =================
 */
-void SVC_GameCompleteStatus( netadr_t from ) {
+void SVC_GameCompleteStatus( const netadr_t *from ) {
 	char player[1024];
 	char status[MAX_MSGLEN];
 	int i;
@@ -448,7 +448,7 @@ SV_FlushRedirect
 ==============
 */
 void SV_FlushRedirect( char *outputbuf ) {
-	NET_OutOfBandPrint( NS_SERVER, svs.redirectAddress, "print\n%s", outputbuf );
+	NET_OutOfBandPrint( NS_SERVER, &svs.redirectAddress, "print\n%s", outputbuf );
 }
 
 /*
@@ -460,7 +460,7 @@ Shift down the remaining args
 Redirect all printfs
 ===============
 */
-void SVC_RemoteCommand( netadr_t from, msg_t *msg ) {
+void SVC_RemoteCommand( const netadr_t *from, msg_t *msg ) {
 	qboolean valid;
 	unsigned int time;
 	char remaining[1024];
@@ -493,7 +493,7 @@ void SVC_RemoteCommand( netadr_t from, msg_t *msg ) {
 	}
 
 	// start redirecting all print outputs to the packet
-	svs.redirectAddress = from;
+	svs.redirectAddress = *from;
 	// FIXME TTimo our rcon redirection could be improved
 	//   big rcon commands such as status lead to sending
 	//   out of band packets on every single call to Com_Printf
@@ -950,7 +950,7 @@ static int SVC_HashForAddress( const netadr_t *address ) {
 	int			i;
 
 	switch ( address->type ) {
-		case NA_IP:  ip = address->ip; size = 4;  break;
+		case NA_IP:  ip = address->ipv._4; size = 4;  break;
 		default: break;
 	}
 
@@ -1011,7 +1011,7 @@ static leakyBucket_t *SVC_BucketForAddress( const netadr_t *address, int burst, 
 		switch ( bucket->type ) {
 			case NA_IP:
 				//if ( memcmp( bucket->ipv._4, address->ipv._4, 4 ) == 0 ) {
-				if ( memcmp( bucket->ipv._4, address->ip, 4 ) == 0 ) {
+				if ( memcmp( bucket->ipv._4, address->ipv._4, 4 ) == 0 ) {
 					if ( n > 8 ) {
 						SVC_RelinkToHead( bucket, hash );
 					}
@@ -1049,7 +1049,7 @@ static leakyBucket_t *SVC_BucketForAddress( const netadr_t *address, int burst, 
 		if ( bucket->type == NA_BAD ) {
 			bucket->type = address->type;
 			switch ( address->type ) {
-				case NA_IP:  Com_Memcpy( bucket->ipv._4, address->ip, 4 );  break;
+				case NA_IP:  Com_Memcpy( bucket->ipv._4, address->ipv._4, 4 );  break;
 				default: break;
 			}
 
@@ -1208,7 +1208,7 @@ and all connected players.  Used for getting detailed information after
 the simple info query.
 ================
 */
-static void SVC_Status( netadr_t from ) {
+static void SVC_Status( const netadr_t *from ) {
 	char	player[MAX_NAME_LENGTH + 32]; // score + ping + name
 	char	status[MAX_PACKETLEN];
 	char	*s;
@@ -1227,7 +1227,7 @@ static void SVC_Status( netadr_t from ) {
 #endif
 
 	// Prevent using getstatus as an amplifier
-	if ( SVC_RateLimitAddress( &from, 10, 1000 ) ) {
+	if ( SVC_RateLimitAddress( from, 10, 1000 ) ) {
 		if ( com_developer->integer ) {
 			Com_Printf( "SVC_Status: rate limit from %s exceeded, dropping request\n",
 				NET_AdrToString( from ) );
@@ -1283,7 +1283,7 @@ Responds with a short info message that should be enough to determine
 if a user is interested in a server to do a full status
 ================
 */
-static void SVC_Info( netadr_t from ) {
+static void SVC_Info( const netadr_t *from ) {
 	char    *antilag;
 	int		i, count, humans;
 	const char	*gamedir;
@@ -1297,7 +1297,7 @@ static void SVC_Info( netadr_t from ) {
 #endif
 
 	// Prevent using getinfo as an amplifier
-	if ( SVC_RateLimitAddress( &from, 10, 1000 ) ) {
+	if ( SVC_RateLimitAddress( from, 10, 1000 ) ) {
 		if ( com_developer->integer ) {
 			Com_Printf( "SVC_Info: rate limit from %s exceeded, dropping request\n",
 				NET_AdrToString( from ) );
@@ -1465,7 +1465,7 @@ Clients that are in the game can still send
 connectionless packets.
 =================
 */
-static void SV_ConnectionlessPacket( netadr_t from, msg_t *msg ) {
+static void SV_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 	char    *s;
 	char    *c;
 
@@ -1511,7 +1511,7 @@ static void SV_ConnectionlessPacket( netadr_t from, msg_t *msg ) {
 SV_ReadPackets
 =================
 */
-void SV_PacketEvent( netadr_t from, msg_t *msg ) {
+void SV_PacketEvent( const netadr_t *from, msg_t *msg ) {
 	int i;
 	client_t    *cl;
 	int qport;
@@ -1540,7 +1540,7 @@ void SV_PacketEvent( netadr_t from, msg_t *msg ) {
 		if ( cl->state == CS_FREE ) {
 			continue;
 		}
-		if ( !NET_CompareBaseAdr( from, cl->netchan.remoteAddress ) ) {
+		if ( !NET_CompareBaseAdr( from, &cl->netchan.remoteAddress ) ) {
 			continue;
 		}
 		// it is possible to have multiple clients from a single IP
@@ -1554,9 +1554,9 @@ void SV_PacketEvent( netadr_t from, msg_t *msg ) {
 			// the IP port can't be used to differentiate clients, because
 			// some address translating routers periodically change UDP
 			// port assignments
-			if ( cl->netchan.remoteAddress.port != from.port ) {
+			if ( cl->netchan.remoteAddress.port != from->port ) {
 				Com_Printf( "SV_PacketEvent: fixing up a translated port\n" );
-				cl->netchan.remoteAddress.port = from.port;
+				cl->netchan.remoteAddress.port = from->port;
 			}
 			// zombie clients still need to do the Netchan_Process
 			// to make sure they don't need to retransmit the final

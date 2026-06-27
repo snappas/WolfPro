@@ -892,6 +892,14 @@ void ProjectPointOntoVector( vec3_t point, vec3_t vStart, vec3_t vEnd, vec3_t vP
 
 float DistanceFromLineSquared( vec3_t p, vec3_t lp1, vec3_t lp2 );
 
+#ifndef MAX
+#define MAX(x,y) ((x)>(y)?(x):(y))
+#endif
+
+#ifndef MIN
+#define MIN(x,y) ((x)<(y)?(x):(y))
+#endif
+
 //=============================================
 
 float Com_Clamp( float min, float max, float value );
@@ -1001,6 +1009,7 @@ char	*Q_stradd( char *dst, const char *src );
 int Q_PrintStrlen( const char *string );
 // removes color sequences from string
 char *Q_CleanStr( char *string );
+int Q_CountChar(const char *string, char tocount);
 // Ridah
 int Q_strncasecmp( char *s1, char *s2, int n );
 int Q_strcasecmp( char *s1, char *s2 );
@@ -1091,6 +1100,8 @@ default values.
 #define CVAR_CHEAT          512 // can not be changed if cheats are disabled
 #define CVAR_NORESTART      1024    // do not clear when a cvar_restart is issued
 #define CVAR_WOLFINFO       2048    // DHM - NERVE :: Like userinfo, but for wolf multiplayer info
+
+#define CVAR_ARCHIVE_ND		(CVAR_ARCHIVE)// | CVAR_NODEFAULT)
 
 // nothing outside the Cvar_*() functions should modify these fields!
 typedef struct cvar_s cvar_t;

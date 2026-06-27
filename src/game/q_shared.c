@@ -922,6 +922,18 @@ char *Q_CleanStr( char *string ) {
 	return string;
 }
 
+int Q_CountChar(const char *string, char tocount)
+{
+	int count;
+	
+	for(count = 0; *string; string++)
+	{
+		if(*string == tocount)
+			count++;
+	}
+	
+	return count;
+}
 
 #if	defined(_DEBUG) && defined(_WIN32)
 #include <windows.h>

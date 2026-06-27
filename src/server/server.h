@@ -411,10 +411,10 @@ void SV_SpawnServer( char *server, qboolean killBots );
 //
 // sv_client.c
 //
-void SV_GetChallenge( netadr_t from );
+void SV_GetChallenge( const netadr_t *from );
 void SV_InitChallenger( void );
 
-void SV_DirectConnect( netadr_t from );
+void SV_DirectConnect( const netadr_t *from );
 void SV_PrintClientStateChange( const client_t *cl, clientState_t newState );
 
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg );
