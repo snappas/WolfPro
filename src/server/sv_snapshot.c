@@ -382,6 +382,15 @@ static void SV_AddEntitiesVisibleFromPoint( const vec3_t origin, clientSnapshot_
 			continue;
 		}
 
+		if((ent->r.svFlags & SVF_VISDUMMY ) || (ent->r.svFlags & SVF_VISDUMMY_MULTIPLE ) ){
+			for ( int h = 0 ; h < svs.currFrame->count; h++ ) {
+				int sharedEntNum = svs.currFrame->ents[ h ]->number;
+				if( sharedEntNum == ent->s.otherEntityNum){
+					SV_AddIndexToSnapshot( &sv.svEntities[ sharedEntNum ], h, eNums );
+				}
+			}
+		}
+
 		// ignore if not touching a PV leaf
 		// check area
 		if ( !CM_AreasConnected( clientarea, svEnt->areanum ) ) {
@@ -439,13 +448,6 @@ static void SV_AddEntitiesVisibleFromPoint( const vec3_t origin, clientSnapshot_
 			SV_AddEntitiesVisibleFromPoint( ent->s.origin2, frame, eNums, portal );
 		}
 	}
-
-	ent = SV_GentityNum( frame->ps.clientNum );
-	// extension: merge second PVS at ent->r.s.origin2
-	// if ( ent->r.svFlags & SVF_SELF_PORTAL2 && !portal ) {
-	// 	SV_AddEntitiesVisibleFromPoint( ent->r.s.origin2, frame, eNums, qtrue );
-	// 	eNums->unordered = qtrue;
-	// }
 }
 
 
