@@ -1827,7 +1827,7 @@ each of the backup packets.
 static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 	int i, key;
 	int cmdCount;
-	usercmd_t nullcmd;
+	static const usercmd_t nullcmd = { 0 };
 	usercmd_t cmds[MAX_PACKET_USERCMDS];
 	usercmd_t   *cmd;
 	const usercmd_t *oldcmd;
@@ -1853,7 +1853,6 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 	// also use the last acknowledged server command in the key
 	key ^= MSG_HashKey(cl->reliableCommands[ cl->reliableAcknowledge & (MAX_RELIABLE_COMMANDS-1) ], 32);
 
-	Com_Memset( &nullcmd, 0, sizeof( nullcmd ) );
 	oldcmd = &nullcmd;
 	for ( i = 0 ; i < cmdCount ; i++ ) {
 		cmd = &cmds[i];
