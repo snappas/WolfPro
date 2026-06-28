@@ -654,42 +654,6 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 
 }
 
-/*
-==============
-SendPendingPredictableEvents
-==============
-*/
-void SendPendingPredictableEvents( playerState_t *ps ) {
-	/*
-	gentity_t *t;
-	int event, seq;
-	int extEvent, number;
-
-	// if there are still events pending
-	if ( ps->entityEventSequence < ps->eventSequence ) {
-		// create a temporary entity for this event which is sent to everyone
-		// except the client generated the event
-		seq = ps->entityEventSequence & (MAX_EVENTS-1);
-		event = ps->events[ seq ] | ( ( ps->entityEventSequence & 3 ) << 8 );
-		// set external event to zero before calling BG_PlayerStateToEntityState
-		extEvent = ps->externalEvent;
-		ps->externalEvent = 0;
-		// create temporary entity for event
-		t = G_TempEntity( ps->origin, event );
-		number = t->s.number;
-		BG_PlayerStateToEntityState( ps, &t->s, qtrue );
-		t->s.number = number;
-		t->s.eType = ET_EVENTS + event;
-		t->s.eFlags |= EF_PLAYER_EVENT;
-		t->s.otherEntityNum = ps->clientNum;
-		// send to everyone except the client who generated the event
-		t->r.svFlags |= SVF_NOTSINGLECLIENT;
-		t->r.singleClient = ps->clientNum;
-		// set back external event
-		ps->externalEvent = extEvent;
-	}
-	*/
-}
 
 // DHM - Nerve
 void WolfFindMedic( gentity_t *self ) {
@@ -1147,7 +1111,11 @@ void ClientThink_real( gentity_t *ent ) {
 	}
 
 	if(CheckAntilagConditions(ent)){
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qtrue );
+		if(g_ospmode.integer){
+			BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qfalse );
+		}else{
+			BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qtrue );
+		}
 	}else{
 		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qtrue );
 	}
@@ -1158,12 +1126,13 @@ void ClientThink_real( gentity_t *ent ) {
 		client->fireHeld = qfalse;      // for grapple
 	}
 
-//
-//	// use the precise origin for linking
-	VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
-//
-//	// use the snapped origin for linking so it matches client predicted versions
-	//VectorCopy( ent->s.pos.trBase, ent->r.currentOrigin );
+	if(g_ospmode.integer){
+		// use the snapped origin for linking so it matches client predicted versions
+		VectorCopy( ent->s.pos.trBase, ent->r.currentOrigin );
+	}else{
+		// use the precise origin for linking
+		VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
+	}
 
 	VectorCopy( pm.mins, ent->r.mins );
 	VectorCopy( pm.maxs, ent->r.maxs );
@@ -1754,10 +1723,6 @@ void ClientEndFrame( gentity_t *ent ) {
 		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
 	}
 	
-
-
-	//SendPendingPredictableEvents( &ent->client->ps );
-
 	// DHM - Nerve :: If it's been a couple frames since being revived, and props_frame_state
 	//					wasn't reset, go ahead and reset it
 	if ( ent->props_frame_state >= 0 && ( ( level.time - ent->s.effect3Time ) > 100 ) ) {
