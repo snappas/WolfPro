@@ -389,25 +389,25 @@ void SV_DirectConnect( const netadr_t *from ) {
 
 	// quick reject
 	newcl = NULL;
-	// for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
-	// 	if ( NET_CompareAdr( from, cl->netchan.remoteAddress ) ) {
-	// 		int elapsed = svs.time - cl->lastConnectTime;
-	// 		if ( elapsed < ( sv_reconnectlimit->integer * 1000 ) && elapsed >= 0 ) {
-	// 			int remains = ( ( sv_reconnectlimit->integer * 1000 ) - elapsed + 999 ) / 1000;
-	// 			if ( com_developer->integer ) {
-	// 				Com_Printf( "%s:reconnect rejected : too soon\n", NET_AdrToString( from ) );
-	// 			}
-	// 			// avoid excessive outgoing traffic
-	// 			if ( !SVC_RateLimit( &bucket, 10, 200 ) ) {
-	// 				NET_OutOfBandPrint( NS_SERVER, from, "print\nReconnecting, please wait %i second%s.\n",
-	// 					remains, (remains != 1) ? "s" : "" );
-	// 			}
-	// 			return;
-	// 		}
-	// 		newcl = cl; // we may reuse this slot
-	// 		break;
-	// 	}
-	// }
+	for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
+		if ( NET_CompareAdr( from, &cl->netchan.remoteAddress ) ) {
+			int elapsed = svs.time - cl->lastConnectTime;
+			if ( elapsed < ( sv_reconnectlimit->integer * 1000 ) && elapsed >= 0 ) {
+				int remains = ( ( sv_reconnectlimit->integer * 1000 ) - elapsed + 999 ) / 1000;
+				if ( com_developer->integer ) {
+					Com_Printf( "%s:reconnect rejected : too soon\n", NET_AdrToString( from ) );
+				}
+				// avoid excessive outgoing traffic
+				if ( !SVC_RateLimit( &bucket, 10, 200 ) ) {
+					NET_OutOfBandPrint( NS_SERVER, from, "print\nReconnecting, please wait %i second%s.\n",
+						remains, (remains != 1) ? "s" : "" );
+				}
+				return;
+			}
+			newcl = cl; // we may reuse this slot
+			break;
+		}
+	}
 
 	// if there is already a slot for this ip, reuse it
 	for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
