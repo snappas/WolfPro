@@ -62,18 +62,23 @@ typedef enum {
 	SS_GAME             // actively running
 } serverState_t;
 
+// we might not use all MAX_GENTITIES every frame
+// so leave more room for slow-snaps clients etc.
+#define NUM_SNAPSHOT_FRAMES (PACKET_BACKUP*4)
 
-#define MERGE_CMDS 16
-typedef struct mergedUserCmd_s {
-	usercmd_t userCmds[MERGE_CMDS];
-	usercmd_t merged;
-	int nextClientThinkTime;
+typedef struct snapshotFrame_s {
+	entityState_t *ents[ MAX_GENTITIES ];
+	int	frameNum;
+	int start;
 	int count;
-} mergedUserCmd_t;
+} snapshotFrame_t;
+
 
 typedef struct {
 	serverState_t state;
 	qboolean restarting;                // if true, send configstring changes during SS_LOADING
+	int	pure;				// fixed at level spawn
+	int	maxclients;			// fixed at level spawn
 	int serverId;                       // changes each server start
 	int restartedServerId;              // serverId before a map_restart
 	int checksumFeed;                   // the feed key that we use to compute the pure checksum strings
@@ -82,8 +87,8 @@ typedef struct {
 	int checksumFeedServerId;
 	int snapshotCounter;                // incremented for each snapshot built
 	int timeResidual;                   // <= 1000 / sv_frame->value
-	int nextFrameTime;                  // when time > nextFrameTime, process world
-	struct cmodel_s *models[MAX_MODELS];
+
+	//struct cmodel_s *models[MAX_MODELS];
 	char            *configstrings[MAX_CONFIGSTRINGS];
 	svEntity_t svEntities[MAX_GENTITIES];
 
@@ -98,22 +103,7 @@ typedef struct {
 	int gameClientSize;                 // will be > sizeof(playerState_t) due to game private data
 
 	int restartTime;
-
-	// NERVE - SMF - net debugging
-	int bpsWindow[MAX_BPS_WINDOW];
-	int bpsWindowSteps;
-	int bpsTotalBytes;
-	int bpsMaxBytes;
-
-	int ubpsWindow[MAX_BPS_WINDOW];
-	int ubpsTotalBytes;
-	int ubpsMaxBytes;
-
-	float ucompAve;
-	int ucompNum;
-	// -NERVE - SMF
-	mergedUserCmd_t mergedUserCmd[MAX_CLIENTS];
-	int mergeInterval;
+	int	time;
 
 	byte baselineUsed[ MAX_GENTITIES ];
 } server_t;
@@ -127,18 +117,18 @@ typedef struct {
 	byte areabits[MAX_MAP_AREA_BYTES];                  // portalarea visibility bits
 	playerState_t ps;
 	int num_entities;
-	int first_entity;                   // into the circular sv_packet_entities[]
-										// the entities MUST be in increasing state number
-										// order, otherwise the delta compression will fail
 	int messageSent;                    // time the message was transmitted
 	int messageAcked;                   // time the message was acked
 	int messageSize;                    // used to rate drop packets
+
+	int				frameNum;			// from snapshot storage to compare with last valid
+	entityState_t	*ents[ MAX_SNAPSHOT_ENTITIES ];
 } clientSnapshot_t;
 
 typedef enum {
 	CS_FREE,        // can be reused for a new connection
 	CS_ZOMBIE,      // client has been disconnected, but don't reuse connection for a couple seconds
-	CS_CONNECTED,   // has been assigned to a client_t, but no gamestate yet
+	CS_CONNECTED,   // has been assigned to a client_t, but no gamestate yet or downloading
 	CS_PRIMED,      // gamestate has been sent, but client hasn't sent a usercmd
 	CS_ACTIVE       // client is fully in game
 } clientState_t;
@@ -146,8 +136,38 @@ typedef enum {
 typedef struct netchan_buffer_s {
 	msg_t msg;
 	byte msgBuffer[MAX_MSGLEN];
+	char		clientCommandString[MAX_STRING_CHARS];	// valid command string for SV_Netchan_Encode
 	struct netchan_buffer_s *next;
 } netchan_buffer_t;
+
+typedef struct rateLimit_s {
+	int			lastTime;
+	int			burst;
+} rateLimit_t;
+
+typedef struct leakyBucket_s leakyBucket_t;
+struct leakyBucket_s {
+	netadrtype_t	type;
+
+	union {
+		byte	_4[4];
+		byte	_6[16];
+	} ipv;
+
+	rateLimit_t rate;
+
+	int			hash;
+	int			toxic;
+
+	leakyBucket_t *prev, *next;
+};
+
+typedef enum {
+	GSA_INIT = 0,	// gamestate never sent with current sv.serverId
+	GSA_SENT_ONCE,	// gamestate sent once, client can reply with any (messageAcknowledge - gamestateMessageNum) >= 0 and correct serverId
+	GSA_SENT_MANY,	// gamestate sent many times, client must reply with exact gamestateMessageNum == gamestateMessageNum and correct serverId
+	GSA_ACKED		// gamestate acknowledged, no retansmissions needed
+} gameStateAck_t;
 
 typedef struct client_s {
 	clientState_t state;
@@ -169,6 +189,9 @@ typedef struct client_s {
 	sharedEntity_t  *gentity;           // SV_GentityNum(clientnum)
 	char name[MAX_NAME_LENGTH];                     // extracted from userinfo, high bits masked
 
+	gameStateAck_t	gamestateAck;
+	qboolean		downloading;		// set at "download", reset at gamestate retransmission
+
 	// downloading
 	char downloadName[MAX_QPATH];            // if not empty string, we are downloading
 	fileHandle_t download;              // file being downloaded
@@ -182,10 +205,11 @@ typedef struct client_s {
 	qboolean downloadEOF;               // We have sent the EOF block
 	int downloadSendTime;               // time we last got an ack from the client
 
-	int deltaMessage;                   // frame last client usercmd message
 	int nextReliableTime;               // svs.time when another reliable command will be allowed
 	int lastPacketTime;                 // svs.time when packet was last received
 	int lastConnectTime;                // svs.time when connection started
+	int				lastDisconnectTime;
+	int				lastSnapshotTime;	// svs.time of last sent snapshot
 	int nextSnapshotTime;               // send another snapshot when svs.time >= nextSnapshotTime
 	qboolean rateDelayed;               // true if nextSnapshotTime was set based on rate instead of snapshotMsec
 	int timeoutCount;                   // must timeout a few frames in a row so debugging doesn't break
@@ -205,27 +229,27 @@ typedef struct client_s {
 	char guid[GUID_LEN];
 	int pingSamples[PACKET_BACKUP];
 	int pingSampleIndex;
+
+	qboolean		deltaActive;		// delta snapshots enabled
+	int				deltaStart;			// don't delta from messages earlier than this when CS_ACTIVE
+
+	// flood protection
+	rateLimit_t		cmd_rate;
+	rateLimit_t		info_rate;
+	rateLimit_t		gamestate_rate;
+	
+	int				oldServerTime;
+	qboolean		csUpdated[MAX_CONFIGSTRINGS];
+	
+	qboolean		compat; //ioq3
+	qboolean		justConnected;
+
+	// client can decode long strings
+	qboolean		longstr;
+
 } client_t;
 
 //=============================================================================
-
-
-// MAX_CHALLENGES is made large to prevent a denial
-// of service attack that could cycle all of them
-// out before legitimate users connected
-#define MAX_CHALLENGES  1024
-
-#define AUTHORIZE_TIMEOUT   5000
-
-typedef struct {
-	netadr_t adr;
-	int challenge;
-	int time;                       // time the last packet was sent to the autherize server
-	int pingTime;                   // time the challenge response was sent to client
-	int firstTime;                  // time the adr was first used, for authorize timeout checks
-	int firstPing;                  // Used for min and max ping checks
-	qboolean connected;
-} challenge_t;
 
 
 #define MAX_MASTERS 8               // max recipients for heartbeat packets
@@ -244,10 +268,20 @@ typedef struct {
 	int nextSnapshotEntities;               // next snapshotEntities to use
 	entityState_t   *snapshotEntities;      // [numSnapshotEntities]
 	int nextHeartbeatTime;
-	challenge_t challenges[MAX_CHALLENGES]; // to prevent invalid IPs from connecting
 	netadr_t redirectAddress;               // for rcon return messages
 
 	netadr_t authorizeAddress;              // for rcon return messages
+
+	// common snapshot storage
+	int			freeStorageEntities;
+	int			currentStoragePosition;	// next snapshotEntities to use
+	int			snapshotFrame;			// incremented with each common snapshot built
+	int			currentSnapshotFrame;	// for initializing empty frames
+	int			lastValidFrame;			// updated with each snapshot built
+	snapshotFrame_t	snapFrames[ NUM_SNAPSHOT_FRAMES ];
+	snapshotFrame_t	*currFrame; // current frame that clients can refer
+
+	int			msgTime;					// will be used as precise sent time
 } serverStatic_t;
 
 //================
@@ -288,6 +322,7 @@ extern cvar_t  *sv_friendlyFire;        // NERVE - SMF
 extern cvar_t  *sv_maxlives;            // NERVE - SMF
 extern cvar_t  *sv_tourney;             // NERVE - SMF
 extern cvar_t  *sv_maxclients;
+extern	cvar_t	*sv_maxclientsPerIP;
 
 extern cvar_t  *sv_privateClients;
 extern cvar_t  *sv_hostname;
@@ -325,6 +360,11 @@ extern cvar_t	*sv_serverCountry;
 
 extern cvar_t* sv_GameConfig;
 
+extern	cvar_t	*sv_dlRate;
+extern	cvar_t	*sv_referencedPakNames;
+
+extern	cvar_t *sv_levelTimeReset;
+
 
 //===========================================================
 
@@ -341,8 +381,15 @@ void SV_RemoveOperatorCommands( void );
 
 void SV_MasterHeartbeat( const char *hbname );
 void SV_MasterShutdown( void );
+int SV_RateMsec( const client_t *client );
 
 void SV_MasterGameCompleteStatus();     // NERVE - SMF
+
+qboolean SVC_RateLimit( rateLimit_t *bucket, int burst, int period );
+qboolean SVC_RateLimitAddress( const netadr_t *from, int burst, int period );
+void SVC_RateRestoreBurstAddress( const netadr_t *from, int burst, int period );
+void SVC_RateRestoreToxicAddress( const netadr_t *from, int burst, int period );
+void SVC_RateDropAddress( const netadr_t *from, int burst, int period );
 
 
 
@@ -351,6 +398,7 @@ void SV_MasterGameCompleteStatus();     // NERVE - SMF
 //
 void SV_SetConfigstring( int index, const char *val );
 void SV_GetConfigstring( int index, char *buffer, int bufferSize );
+void SV_UpdateConfigstrings( client_t *client );
 
 void SV_SetUserinfo( int index, const char *val );
 void SV_GetUserinfo( int index, char *buffer, int bufferSize );
@@ -363,22 +411,26 @@ void SV_SpawnServer( char *server, qboolean killBots );
 //
 // sv_client.c
 //
-void SV_GetChallenge( netadr_t from );
+void SV_GetChallenge( const netadr_t *from );
+void SV_InitChallenger( void );
 
-void SV_DirectConnect( netadr_t from );
-
-void SV_AuthorizeIpPacket( netadr_t from );
+void SV_DirectConnect( const netadr_t *from );
+void SV_PrintClientStateChange( const client_t *cl, clientState_t newState );
 
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg );
 void SV_UserinfoChanged( client_t *cl );
 
-void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd );
+void SV_ClientEnterWorld( client_t *client);
 void SV_DropClient( client_t *drop, const char *reason );
+void SV_FreeClient( client_t *client );
 
-void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK );
+qboolean SV_ExecuteClientCommand( client_t *cl, const char *s );
 void SV_ClientThink( client_t *cl, usercmd_t *cmd );
 
-void SV_WriteDownloadToClient( client_t *cl, msg_t *msg );
+int SV_SendDownloadMessages( void );
+int SV_SendQueuedMessages( void );
+
+int SV_RemainingGameState( void );
 
 //
 // sv_ccmds.c
@@ -395,6 +447,9 @@ void SV_WriteFrameToClient( client_t *client, msg_t *msg );
 void SV_SendMessageToClient( msg_t *msg, client_t *client );
 void SV_SendClientMessages( void );
 void SV_SendClientSnapshot( client_t *client );
+
+void SV_InitSnapshotStorage( void );
+void SV_IssueNewSnapshot( void );
 
 //
 // sv_game.c
@@ -484,6 +539,7 @@ void SV_ClipToEntity( trace_t *trace, const vec3_t start, const vec3_t mins, con
 // sv_net_chan.c
 //
 void SV_Netchan_Transmit( client_t *client, msg_t *msg );
-void SV_Netchan_TransmitNextFragment( client_t *client );
+int SV_Netchan_TransmitNextFragment( client_t *client );
 qboolean SV_Netchan_Process( client_t *client, msg_t *msg );
+void SV_Netchan_FreeQueue( client_t *client );
 #endif

@@ -541,7 +541,7 @@ void SV_ClipMoveToEntities( moveclip_t *clip ) {
 
 	num = SV_AreaEntities( clip->boxmins, clip->boxmaxs, touchlist, MAX_GENTITIES );
 
-	if ( clip->passEntityNum != ENTITYNUM_NONE ) {
+	if ( clip->passEntityNum != ENTITYNUM_NONE && clip->passEntityNum != -1) {
 		passOwnerNum = ( SV_GentityNum( clip->passEntityNum ) )->r.ownerNum;
 		if ( passOwnerNum == ENTITYNUM_NONE ) {
 			passOwnerNum = -1;

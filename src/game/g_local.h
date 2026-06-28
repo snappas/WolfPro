@@ -1627,6 +1627,8 @@ extern vmCvar_t g_OmniBotPlaying;
 extern vmCvar_t g_OmniBotGib;
 extern vmCvar_t g_botTeam;
 
+extern vmCvar_t g_ospmode;
+
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );

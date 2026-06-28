@@ -90,14 +90,18 @@ Netchan_Setup
 called to open a channel to a remote system
 ==============
 */
-void Netchan_Setup( netsrc_t sock, netchan_t *chan, netadr_t adr, int qport ) {
-	memset( chan, 0, sizeof( *chan ) );
-
+void Netchan_Setup( netsrc_t sock, netchan_t *chan, const netadr_t *adr, int port, int challenge, qboolean compat )
+{
+	Com_Memset (chan, 0, sizeof(*chan));
+	
 	chan->sock = sock;
-	chan->remoteAddress = adr;
-	chan->qport = qport;
+	chan->remoteAddress = *adr;
+	chan->qport = port;
 	chan->incomingSequence = 0;
 	chan->outgoingSequence = 1;
+	chan->challenge = challenge;
+	chan->compat = compat;
+	chan->isLANAddress = Sys_IsLANAddress( adr );
 }
 
 /*
@@ -108,23 +112,28 @@ Send one fragment of the current message
 =================
 */
 void Netchan_TransmitNextFragment( netchan_t *chan ) {
-	msg_t send;
-	byte send_buf[MAX_PACKETLEN];
-	int fragmentLength;
+	msg_t		send;
+	byte		send_buf[MAX_PACKETLEN+8];
+	int			fragmentLength;
+	int			outgoingSequence;
 
 	// write the packet header
-	MSG_InitOOB( &send, send_buf, sizeof( send_buf ) );                // <-- only do the oob here
+	MSG_InitOOB( &send, send_buf, sizeof(send_buf)-8 );
 
-	MSG_WriteLong( &send, chan->outgoingSequence | FRAGMENT_BIT );
+	outgoingSequence = chan->outgoingSequence | FRAGMENT_BIT;
+	MSG_WriteLong( &send, outgoingSequence );
 
 	// send the qport if we are a client
 	if ( chan->sock == NS_CLIENT ) {
 		MSG_WriteShort( &send, qport->integer );
 	}
 
+	if ( !chan->compat )
+		MSG_WriteLong(&send, NETCHAN_GENCHECKSUM(chan->challenge, chan->outgoingSequence));
+
 	// copy the reliable message to the packet first
 	fragmentLength = FRAGMENT_SIZE;
-	if ( chan->unsentFragmentStart  + fragmentLength > chan->unsentLength ) {
+	if ( chan->unsentFragmentStart + fragmentLength > chan->unsentLength ) {
 		fragmentLength = chan->unsentLength - chan->unsentFragmentStart;
 	}
 
@@ -133,14 +142,18 @@ void Netchan_TransmitNextFragment( netchan_t *chan ) {
 	MSG_WriteData( &send, chan->unsentBuffer + chan->unsentFragmentStart, fragmentLength );
 
 	// send the datagram
-	NET_SendPacket( chan->sock, send.cursize, send.data, chan->remoteAddress );
+	NET_SendPacket( chan->sock, send.cursize, send.data, &chan->remoteAddress );
+
+	// Store send time and size of this packet for rate control
+	chan->lastSentTime = Sys_Milliseconds();
+	chan->lastSentSize = send.cursize;
 
 	if ( showpackets->integer ) {
-		Com_Printf( "%s send %4i : s=%i fragment=%i,%i\n"
-					, netsrcString[ chan->sock ]
-					, send.cursize
-					, chan->outgoingSequence
-					, chan->unsentFragmentStart, fragmentLength );
+		Com_Printf ("%s send %4i : s=%i fragment=%i,%i\n"
+			, netsrcString[ chan->sock ]
+			, send.cursize
+			, chan->outgoingSequence
+			, chan->unsentFragmentStart, fragmentLength);
 	}
 
 	chan->unsentFragmentStart += fragmentLength;
@@ -157,6 +170,59 @@ void Netchan_TransmitNextFragment( netchan_t *chan ) {
 
 
 /*
+=================
+EnqueueFragments
+=================
+*/
+static void Netchan_EnqueueFragments( const netchan_t *chan, const int length, const byte *data ) {
+	msg_t		send;
+	byte		send_buf[MAX_PACKETLEN + 8];
+	int			fragmentLength;
+	int			unsentFragmentStart = 0;
+
+	for ( ;; ) {
+		// write the packet header
+		MSG_InitOOB( &send, send_buf, sizeof( send_buf ) - 8 );
+
+		MSG_WriteLong( &send, chan->outgoingSequence | FRAGMENT_BIT );
+
+		// send the qport if we are a client
+		if ( chan->sock == NS_CLIENT ) {
+			MSG_WriteShort( &send, qport->integer );
+		}
+
+		if ( !chan->compat ) {
+			MSG_WriteLong( &send, NETCHAN_GENCHECKSUM( chan->challenge, chan->outgoingSequence ) );
+		}
+
+		// copy the reliable message to the packet first
+		fragmentLength = FRAGMENT_SIZE;
+		if ( unsentFragmentStart + fragmentLength > length ) {
+			fragmentLength = length - unsentFragmentStart;
+		}
+
+		MSG_WriteShort( &send, unsentFragmentStart );
+		MSG_WriteShort( &send, fragmentLength );
+		MSG_WriteData( &send, data + unsentFragmentStart, fragmentLength );
+
+		// enqueue the datagram
+		NET_QueuePacket( chan->sock, send.cursize, send.data, &chan->remoteAddress, 0 /*offset*/ );
+
+		// TODO: add showpackets debug info
+
+		unsentFragmentStart += fragmentLength;
+
+		// this exit condition is a little tricky, because a packet
+		// that is exactly the fragment length still needs to send
+		// a second packet of zero length so that the other side
+		// can tell there aren't more to follow
+		if ( unsentFragmentStart == length && fragmentLength != FRAGMENT_SIZE ) {
+			break;
+		}
+	}
+}
+
+/*
 ===============
 Netchan_Transmit
 
@@ -165,12 +231,13 @@ A 0 length will still generate a packet.
 ================
 */
 void Netchan_Transmit( netchan_t *chan, int length, const byte *data ) {
-	msg_t send;
-	byte send_buf[MAX_PACKETLEN];
+	msg_t		send;
+	byte		send_buf[MAX_PACKETLEN+8];
 
 	if ( length > MAX_MSGLEN ) {
-		Com_Error( ERR_DROP, "Netchan_Transmit: length = %i", length );
+		Com_Error( ERR_DROP, "%s: length = %i", __func__, length );
 	}
+
 	chan->unsentFragmentStart = 0;
 
 	// fragment large reliable messages
@@ -181,33 +248,81 @@ void Netchan_Transmit( netchan_t *chan, int length, const byte *data ) {
 
 		// only send the first fragment now
 		Netchan_TransmitNextFragment( chan );
-
 		return;
 	}
 
 	// write the packet header
-	MSG_InitOOB( &send, send_buf, sizeof( send_buf ) );
+	MSG_InitOOB( &send, send_buf, sizeof(send_buf)-8 );
 
 	MSG_WriteLong( &send, chan->outgoingSequence );
-	chan->outgoingSequence++;
 
 	// send the qport if we are a client
-	if ( chan->sock == NS_CLIENT ) {
+	if ( chan->sock == NS_CLIENT )
 		MSG_WriteShort( &send, qport->integer );
-	}
+
+	if ( !chan->compat )
+		MSG_WriteLong(&send, NETCHAN_GENCHECKSUM(chan->challenge, chan->outgoingSequence));
+
+	chan->outgoingSequence++;
 
 	MSG_WriteData( &send, data, length );
 
 	// send the datagram
-	NET_SendPacket( chan->sock, send.cursize, send.data, chan->remoteAddress );
+	NET_SendPacket( chan->sock, send.cursize, send.data, &chan->remoteAddress );
+
+	// Store send time and size of this packet for rate control
+	chan->lastSentTime = Sys_Milliseconds();
+	chan->lastSentSize = send.cursize;
 
 	if ( showpackets->integer ) {
 		Com_Printf( "%s send %4i : s=%i ack=%i\n"
-					, netsrcString[ chan->sock ]
-					, send.cursize
-					, chan->outgoingSequence - 1
-					, chan->incomingSequence );
+			, netsrcString[ chan->sock ]
+			, send.cursize
+			, chan->outgoingSequence - 1
+			, chan->incomingSequence );
 	}
+}
+
+/*
+===============
+Netchan_Enqueue
+
+Enqueue a message to a queue#1, fragmenting if necessary
+A 0 length will still generate a packet.
+================
+*/
+void Netchan_Enqueue( netchan_t *chan, int length, const byte *data ) {
+	byte		send_buf[MAX_PACKETLEN + 8];
+	msg_t		send;
+
+	if ( length > MAX_MSGLEN ) {
+		Com_Error( ERR_DROP, "%s: length = %i", __func__, length );
+	}
+
+	// fragment large reliable messages
+	if ( length >= FRAGMENT_SIZE ) {
+		Netchan_EnqueueFragments( chan, length, data );
+		return;
+	}
+
+	// write the packet header
+	MSG_InitOOB( &send, send_buf, sizeof( send_buf ) - 8 );
+
+	MSG_WriteLong( &send, chan->outgoingSequence );
+
+	// send the qport if we are a client
+	if ( chan->sock == NS_CLIENT )
+		MSG_WriteShort( &send, qport->integer );
+
+	if ( !chan->compat )
+		MSG_WriteLong( &send, NETCHAN_GENCHECKSUM( chan->challenge, chan->outgoingSequence ) );
+
+	MSG_WriteData( &send, data, length );
+
+	// enqueue the datagram
+	NET_QueuePacket( chan->sock, send.cursize, send.data, &chan->remoteAddress, 0 /*offset*/ );
+
+	// TODO: add showpackets debug info
 }
 
 /*
@@ -223,11 +338,14 @@ copied out.
 =================
 */
 qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
-	int sequence;
-	int fragmentStart, fragmentLength;
-	qboolean fragmented;
+	int			sequence;
+	int			fragmentStart, fragmentLength;
+	qboolean	fragmented;
 
-	// get sequence numbers
+	// XOR unscramble all data in the packet after the header
+//	Netchan_UnScramblePacket( msg );
+
+	// get sequence numbers		
 	MSG_BeginReadingOOB( msg );
 	sequence = MSG_ReadLong( msg );
 
@@ -241,7 +359,15 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 
 	// read the qport if we are a server
 	if ( chan->sock == NS_SERVER ) {
-		MSG_ReadShort( msg );
+		/*qport=*/ MSG_ReadShort( msg );
+	}
+
+	if ( !chan->compat ) {
+		int checksum = MSG_ReadLong( msg );
+
+		// UDP spoofing protection
+		if (NETCHAN_GENCHECKSUM( chan->challenge, sequence ) != checksum )
+			return qfalse;
 	}
 
 	// read the fragment information
@@ -249,34 +375,34 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 		fragmentStart = MSG_ReadShort( msg );
 		fragmentLength = MSG_ReadShort( msg );
 	} else {
-		fragmentStart = 0;      // stop warning message
+		fragmentStart = 0;		// stop warning message
 		fragmentLength = 0;
 	}
 
 	if ( showpackets->integer ) {
 		if ( fragmented ) {
 			Com_Printf( "%s recv %4i : s=%i fragment=%i,%i\n"
-						, netsrcString[ chan->sock ]
-						, msg->cursize
-						, sequence
-						, fragmentStart, fragmentLength );
+				, netsrcString[ chan->sock ]
+				, msg->cursize
+				, sequence
+				, fragmentStart, fragmentLength );
 		} else {
 			Com_Printf( "%s recv %4i : s=%i\n"
-						, netsrcString[ chan->sock ]
-						, msg->cursize
-						, sequence );
+				, netsrcString[ chan->sock ]
+				, msg->cursize
+				, sequence );
 		}
 	}
 
 	//
 	// discard out of order or duplicated packets
 	//
-	if ( sequence <= chan->incomingSequence ) {
+	if ( sequence - chan->incomingSequence <= 0 ) {
 		if ( showdrop->integer || showpackets->integer ) {
 			Com_Printf( "%s:Out of order packet %i at %i\n"
-						, NET_AdrToString( chan->remoteAddress )
-						,  sequence
-						, chan->incomingSequence );
+				, NET_AdrToString( &chan->remoteAddress )
+				,  sequence
+				, chan->incomingSequence );
 		}
 		return qfalse;
 	}
@@ -284,20 +410,20 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 	//
 	// dropped packets don't keep the message from being used
 	//
-	chan->dropped = sequence - ( chan->incomingSequence + 1 );
+	chan->dropped = sequence - (chan->incomingSequence+1);
 	if ( chan->dropped > 0 ) {
 		if ( showdrop->integer || showpackets->integer ) {
 			Com_Printf( "%s:Dropped %i packets at %i\n"
-						, NET_AdrToString( chan->remoteAddress )
-						, chan->dropped
-						, sequence );
+			, NET_AdrToString( &chan->remoteAddress )
+			, chan->dropped
+			, sequence );
 		}
 	}
-
+	
 
 	//
-	// if this is the final framgent of a reliable message,
-	// bump incoming_reliable_sequence
+	// if this is the final fragment of a reliable message,
+	// bump incoming_reliable_sequence 
 	//
 	if ( fragmented ) {
 		// TTimo
@@ -314,8 +440,7 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 		if ( fragmentStart != chan->fragmentLength ) {
 			if ( showdrop->integer || showpackets->integer ) {
 				Com_Printf( "%s:Dropped a message fragment\n"
-							, NET_AdrToString( chan->remoteAddress )
-							, sequence );
+				, NET_AdrToString( &chan->remoteAddress ));
 			}
 			// we can still keep the part that we have so far,
 			// so we don't need to clear chan->fragmentLength
@@ -324,16 +449,16 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 
 		// copy the fragment to the fragment buffer
 		if ( fragmentLength < 0 || msg->readcount + fragmentLength > msg->cursize ||
-			 chan->fragmentLength + fragmentLength > sizeof( chan->fragmentBuffer ) ) {
+			chan->fragmentLength + fragmentLength > sizeof( chan->fragmentBuffer ) ) {
 			if ( showdrop->integer || showpackets->integer ) {
-				Com_Printf( "%s:illegal fragment length\n"
-							, NET_AdrToString( chan->remoteAddress ) );
+				Com_Printf ("%s:illegal fragment length\n"
+				, NET_AdrToString( &chan->remoteAddress ) );
 			}
 			return qfalse;
 		}
 
-		memcpy( chan->fragmentBuffer + chan->fragmentLength,
-				msg->data + msg->readcount, fragmentLength );
+		Com_Memcpy( chan->fragmentBuffer + chan->fragmentLength, 
+			msg->data + msg->readcount, fragmentLength );
 
 		chan->fragmentLength += fragmentLength;
 
@@ -344,27 +469,26 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 
 		if ( chan->fragmentLength > msg->maxsize ) {
 			Com_Printf( "%s:fragmentLength %i > msg->maxsize\n"
-						, NET_AdrToString( chan->remoteAddress ),
-						chan->fragmentLength );
+				, NET_AdrToString( &chan->remoteAddress ),
+				chan->fragmentLength );
 			return qfalse;
 		}
 
 		// copy the full message over the partial fragment
 
 		// make sure the sequence number is still there
-		*(int *)msg->data = LittleLong( sequence );
+		*(int32_t *)msg->data = LittleLong( sequence );
 
-		memcpy( msg->data + 4, chan->fragmentBuffer, chan->fragmentLength );
+		Com_Memcpy( msg->data + 4, chan->fragmentBuffer, chan->fragmentLength );
 		msg->cursize = chan->fragmentLength + 4;
 		chan->fragmentLength = 0;
-		msg->readcount = 4; // past the sequence number
-		msg->bit = 32;  // past the sequence number
-
+		msg->readcount = 4;	// past the sequence number
+		msg->bit = 32;	// past the sequence number
 
 		// TTimo
 		// clients were not acking fragmented messages
 		chan->incomingSequence = sequence;
-
+		
 		return qtrue;
 	}
 
@@ -379,77 +503,6 @@ qboolean Netchan_Process( netchan_t *chan, msg_t *msg ) {
 
 //==============================================================================
 
-/*
-===================
-NET_CompareBaseAdr
-
-Compares without the port
-===================
-*/
-qboolean    NET_CompareBaseAdr( netadr_t a, netadr_t b ) {
-	if ( a.type != b.type ) {
-		return qfalse;
-	}
-
-	if ( a.type == NA_LOOPBACK ) {
-		return qtrue;
-	}
-
-	if ( a.type == NA_IP ) {
-		if ( a.ip[0] == b.ip[0] && a.ip[1] == b.ip[1] && a.ip[2] == b.ip[2] && a.ip[3] == b.ip[3] ) {
-			return qtrue;
-		}
-		return qfalse;
-	}
-
-
-
-	Com_Printf( "NET_CompareBaseAdr: bad address type\n" );
-	return qfalse;
-}
-
-const char  *NET_AdrToString( netadr_t a ) {
-	static char s[64];
-
-	if ( a.type == NA_LOOPBACK ) {
-		Com_sprintf( s, sizeof( s ), "loopback" );
-	} else if ( a.type == NA_BOT ) {
-		Com_sprintf( s, sizeof( s ), "bot" );
-	} else if ( a.type == NA_IP ) {
-		Com_sprintf( s, sizeof( s ), "%i.%i.%i.%i:%hu",
-					 a.ip[0], a.ip[1], a.ip[2], a.ip[3], BigShort( a.port ) );
-	}
-
-	return s;
-}
-
-
-qboolean    NET_CompareAdr( netadr_t a, netadr_t b ) {
-	if ( a.type != b.type ) {
-		return qfalse;
-	}
-
-	if ( a.type == NA_LOOPBACK ) {
-		return qtrue;
-	}
-
-	if ( a.type == NA_IP ) {
-		if ( a.ip[0] == b.ip[0] && a.ip[1] == b.ip[1] && a.ip[2] == b.ip[2] && a.ip[3] == b.ip[3] && a.port == b.port ) {
-			return qtrue;
-		}
-		return qfalse;
-	}
-
-
-	Com_Printf( "NET_CompareAdr: bad address type\n" );
-	return qfalse;
-}
-
-
-qboolean    NET_IsLocalAddress( netadr_t adr ) {
-	return adr.type == NA_LOOPBACK;
-}
-
 
 
 /*
@@ -462,7 +515,7 @@ LOOPBACK BUFFERS FOR LOCAL PLAYER
 
 // there needs to be enough loopback messages to hold a complete
 // gamestate of maximum size
-#define MAX_LOOPBACK    16
+#define MAX_LOOPBACK    32
 
 typedef struct {
 	byte data[MAX_PACKETLEN];
@@ -503,7 +556,7 @@ qboolean    NET_GetLoopPacket( netsrc_t sock, netadr_t *net_from, msg_t *net_mes
 }
 
 
-void NET_SendLoopPacket( netsrc_t sock, int length, const void *data, netadr_t to ) {
+void NET_SendLoopPacket( netsrc_t sock, int length, const void *data) {
 	int i;
 	loopback_t  *loop;
 
@@ -519,26 +572,145 @@ void NET_SendLoopPacket( netsrc_t sock, int length, const void *data, netadr_t t
 //=============================================================================
 
 
-void NET_SendPacket( netsrc_t sock, int length, const void *data, netadr_t to ) {
+typedef struct packetQueue_s {
+		struct packetQueue_s *next;
+		struct packetQueue_s *prev;
+		int length;
+		byte *data;
+		netadr_t to;
+		netsrc_t sock;
+		int release;
+} packetQueue_t;
+
+static packetQueue_t *packetQueue = NULL;
+
+static packetQueue_t *list_remove( packetQueue_t *head, packetQueue_t *item ) {
+	if ( item->next != item ) {
+		item->next->prev = item->prev;
+		item->prev->next = item->next;
+	} else {
+		item->next = item->prev = NULL;
+	}
+	return item == head ? item->next : head;
+}
+
+
+static packetQueue_t *list_insert( packetQueue_t *head, packetQueue_t *item )
+{
+	if ( head ) {
+		packetQueue_t *prev = head->prev;
+		packetQueue_t *next = head;
+		prev->next = item;
+		next->prev = item;
+		item->prev = prev;
+		item->next = next;
+		return head;
+	} else {
+		item->prev = item->next = item;
+		return item;
+	}
+}
+
+static packetQueue_t *list_process( packetQueue_t *head, const int time_diff )
+{
+	packetQueue_t *item = head;
+	int do_break = 0;
+	int now;
+	do {
+		if ( head == NULL ) {
+			break;
+		}
+		if ( head->prev == item ) {
+			do_break = 1;
+		}
+		now = Sys_Milliseconds();
+		if ( now - item->release >= time_diff ) {
+			packetQueue_t *next = item->next;
+#ifndef DEDICATED
+			if ( item->to.type == NA_LOOPBACK )
+				NET_SendLoopPacket( item->sock, item->length, item->data );
+			else
+#endif
+				Sys_SendPacket( item->length, item->data, &item->to );
+			head = list_remove( head, item );
+			Z_Free( item );
+			item = next;
+		} else {
+			item = item->next;
+		}
+	} while ( do_break == 0 );
+
+	return head;
+}
+
+
+void NET_QueuePacket( netsrc_t sock, int length, const void *data, const netadr_t *to, int offset )
+{
+	packetQueue_t *new;
+
+	if ( to->type == NA_BOT ) {
+		return;
+	}
+	if ( to->type == NA_BAD ) {
+		return;
+	}
+	if ( com_timescale->value == 0.0f ) {
+		return;
+	}
+
+	if ( offset > 999 ) {
+		offset = 999;
+	}
+
+	new = S_Malloc(sizeof(*new) + length);
+	new->data = (byte *)( new + 1 );
+	Com_Memcpy(new->data, data, length);
+	new->length = length;
+	new->to = *to;
+	new->sock = sock;
+	new->release = Sys_Milliseconds() + (int)( (float)offset / com_timescale->value );
+	new->next = NULL;
+
+	packetQueue = list_insert( packetQueue, new );
+}
+
+
+void NET_FlushPacketQueue( int time_diff )
+{
+	packetQueue = list_process( packetQueue, time_diff );
+}
+
+void NET_SendPacket( netsrc_t sock, int length, const void *data, const netadr_t *to ) {
 
 	// sequenced packets are shown in netchan, so just show oob
-	if ( showpackets->integer && *(int *)data == -1 ) {
-		Com_Printf( "send packet %4i\n", length );
+	if ( showpackets->integer && *(int32_t *)data == -1 ) {
+		Com_Printf ("send packet %4i\n", length);
 	}
 
-	if ( to.type == NA_LOOPBACK ) {
-		NET_SendLoopPacket( sock, length, data, to );
+	if ( to->type == NA_BOT ) {
 		return;
 	}
-	if ( to.type == NA_BOT ) {
+	if ( to->type == NA_BAD ) {
 		return;
 	}
-	if ( to.type == NA_BAD ) {
-		return;
+#ifndef DEDICATED
+	if ( sock == NS_CLIENT && cl_packetdelay->integer > 0 ) {
+		NET_QueuePacket( sock, length, data, to, cl_packetdelay->integer );
+	} else
+#endif
+	if ( sock == NS_SERVER && sv_packetdelay->integer > 0 ) {
+		NET_QueuePacket( sock, length, data, to, sv_packetdelay->integer );
 	}
-
-	Sys_SendPacket( length, data, to );
+#ifndef DEDICATED
+	else if ( to->type == NA_LOOPBACK ) {
+		NET_SendLoopPacket( sock, length, data );
+	}
+#endif
+	else {
+		Sys_SendPacket( length, data, to );
+	}
 }
+
 
 /*
 ===============
@@ -547,7 +719,7 @@ NET_OutOfBandPrint
 Sends a text message in an out-of-band datagram
 ================
 */
-void QDECL NET_OutOfBandPrint( netsrc_t sock, netadr_t adr, const char *format, ... ) {
+void QDECL NET_OutOfBandPrint( netsrc_t sock, const netadr_t *adr, const char *format, ... ) {
 	va_list argptr;
 	char string[MAX_MSGLEN];
 
@@ -574,7 +746,7 @@ NET_OutOfBandPrint
 Sends a data message in an out-of-band datagram (only used for "connect")
 ================
 */
-void QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len ) {
+void QDECL NET_OutOfBandData( netsrc_t sock, const netadr_t *adr, byte *format, int len ) {
 	byte string[MAX_MSGLEN * 2];
 	int i;
 	msg_t mbuf;
@@ -602,46 +774,99 @@ void QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len
 NET_StringToAdr
 
 Traps "localhost" for loopback, passes everything else to system
+return 0 on address not found, 1 on address found with port, 2 on address found without port.
 =============
 */
-qboolean    NET_StringToAdr( const char *s, netadr_t *a ) {
-	qboolean r;
-	char base[MAX_STRING_CHARS];
-	char    *port;
+int NET_StringToAdr( const char *s, netadr_t *a, netadrtype_t family )
+{
+	char	base[MAX_STRING_CHARS], *search;
+	char	*port = NULL;
 
-	if ( !strcmp( s, "localhost" ) ) {
-		memset( a, 0, sizeof( *a ) );
+	if (!strcmp (s, "localhost")) {
+		Com_Memset (a, 0, sizeof(*a));
 		a->type = NA_LOOPBACK;
-		return qtrue;
+		// as NA_LOOPBACK doesn't require ports report port was given.
+		return 1;
 	}
 
-	// look for a port number
 	Q_strncpyz( base, s, sizeof( base ) );
-	port = strstr( base, ":" );
-	if ( port ) {
-		*port = 0;
-		port++;
+	
+	if(*base == '[' || Q_CountChar(base, ':') > 1)
+	{
+		// This is an ipv6 address, handle it specially.
+		search = strchr(base, ']');
+		if(search)
+		{
+			*search = '\0';
+			search++;
+
+			if(*search == ':')
+				port = search + 1;
+		}
+		
+		if(*base == '[')
+			search = base + 1;
+		else
+			search = base;
+	}
+	else
+	{
+		// look for a port number
+		port = strchr( base, ':' );
+		
+		if ( port ) {
+			*port = '\0';
+			port++;
+		}
+		
+		search = base;
 	}
 
-	r = Sys_StringToAdr( base, a );
-
-	if ( !r ) {
+	if(!Sys_StringToAdr(search, a, family))
+	{
 		a->type = NA_BAD;
-		return qfalse;
+		return 0;
 	}
 
-	// inet_addr returns this if out of range
-	if ( a->ip[0] == 255 && a->ip[1] == 255 && a->ip[2] == 255 && a->ip[3] == 255 ) {
-		a->type = NA_BAD;
-		return qfalse;
+	if(port)
+	{
+		a->port = BigShort((short) atoi(port));
+		return 1;
 	}
-
-	if ( port ) {
-		a->port = BigShort( (short)atoi( port ) );
-	} else {
-		a->port = BigShort( PORT_SERVER );
+	else
+	{
+		a->port = BigShort(PORT_SERVER);
+		return 2;
 	}
-
-	return qtrue;
 }
 
+
+/*
+===============
+NET_OutOfBandCompress
+
+Sends a compressed message in an out-of-band datagram (only used for "connect")
+================
+*/
+void NET_OutOfBandCompress( netsrc_t sock, const netadr_t *adr, const byte *data, int len ) {
+	byte		string[MAX_INFO_STRING*2];
+	int			i;
+	msg_t		mbuf;
+
+	// set the header
+	string[0] = 0xff;
+	string[1] = 0xff;
+	string[2] = 0xff;
+	string[3] = 0xff;
+
+	for(i=0;i<len;i++) {
+		string[i+4] = data[i];
+	}
+
+	mbuf.data = string;
+	mbuf.cursize = len+4;
+	DynHuff_Compress( &mbuf, 12 );
+
+	// send the datagram
+	NET_SendPacket( sock, mbuf.cursize, mbuf.data, adr );
+}

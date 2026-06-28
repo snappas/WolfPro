@@ -3,6 +3,9 @@
 #include "../game/q_shared.h"
 #include "qcommon.h"
 
+#define MD5_BLOCK_SIZE 64
+#define MD5_DIGEST_SIZE 16
+
 #ifndef Q3_BIG_ENDIAN
 #define byteReverse(buf, len)	/* Nothing */
 #else
@@ -39,6 +42,11 @@ static void MD5Init(struct MD5Context *ctx)
 	ctx->bits[1] = 0;
 }
 /* The four core functions - F1 is optimized somewhat */
+
+static void MD5Copy( struct MD5Context *to, const struct MD5Context *from )
+{
+	memcpy( to, from, sizeof( *to ) );
+}
 
 /* #define F1(x, y, z) (x & y | ~x & z) */
 #define F1(x, y, z) (z ^ (x & (y ^ z)))
@@ -318,4 +326,62 @@ char *Com_MD5(const void *data, int length, const char *prefix, int prefix_len, 
 		Q_strcat(final, sizeof(final), va(fmt, digest[i]));
 	}
 	return final;
+}
+
+
+// stateless challenges
+
+static struct MD5Context hmac_ctx_in;
+static struct MD5Context hmac_ctx_out;
+
+void Com_MD5Init( void )
+{
+	struct {
+		byte key1[MD5_BLOCK_SIZE];
+		byte key2[MD5_BLOCK_SIZE];
+	} secret;
+
+	Sys_RandomBytes( (byte*)&secret, sizeof( secret ) );
+
+	// initialize inner context
+	MD5Init( &hmac_ctx_in );
+	MD5Update( &hmac_ctx_in, secret.key1, sizeof( secret.key1 ) );
+
+	// initialize outer context
+	MD5Init( &hmac_ctx_out );
+	MD5Update( &hmac_ctx_out, secret.key2, sizeof( secret.key2 ) );
+}
+
+
+int Com_MD5Addr( const netadr_t *addr, int timestamp )
+{
+	struct MD5Context ctx_in;
+	struct MD5Context ctx_out;
+	union {
+		byte b[MD5_DIGEST_SIZE];
+		int i[MD5_DIGEST_SIZE/sizeof(int)];
+	} digest;
+
+	MD5Copy( &ctx_in, &hmac_ctx_in );
+	MD5Copy( &ctx_out, &hmac_ctx_out );
+
+	// inner_hash = MD5( key1 | address | port | timestamp )
+	switch ( addr->type ) {
+		case NA_BROADCAST:
+		case NA_IP: 
+			MD5Update( &ctx_in, addr->ipv._4, 4 ); 
+				break;
+		default:
+			break;
+	}
+
+	MD5Update( &ctx_in, (byte*)&addr->port, sizeof( addr->port ) );
+	MD5Update( &ctx_in, (byte*)&timestamp, sizeof( timestamp ) );
+	MD5Final( &ctx_in, digest.b );
+
+	// MD5( key2 | inner_hash )
+	MD5Update( &ctx_out, digest.b, sizeof( digest.b ) );
+	MD5Final( &ctx_out, digest.b );
+
+	return digest.i[0];
 }

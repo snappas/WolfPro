@@ -1481,11 +1481,9 @@ void Script_AddListItem( itemDef_t *item, char **args ) {
 // -NERVE - SMF
 // DHM - Nerve
 void Script_CheckAutoUpdate( itemDef_t *item, char **args ) {
-	DC->checkAutoUpdate();
 }
 
 void Script_GetAutoUpdate( itemDef_t *item, char **args ) {
-	DC->getAutoUpdate();
 }
 // DHM - Nerve
 

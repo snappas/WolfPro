@@ -94,6 +94,14 @@ qbool Sys_IsDebugging(void);
 	#error "compiler not supported"
 #endif
 
+#if defined (_WIN32) || defined(__linux__)
+#define USE_AFFINITY_MASK
+#endif
+
+// stringify macro
+#define XSTRING(x)	STRING(x)
+#define STRING(x)	#x
+
 //======================= WIN32 DEFINES =================================
 
 #ifdef WIN32
@@ -110,15 +118,15 @@ qbool Sys_IsDebugging(void);
 // msg.c
 //
 typedef struct {
-	qboolean allowoverflow;     // if false, do a Com_Error
-	qboolean overflowed;        // set to true if the buffer size failed (with allowoverflow set)
-	qboolean oob;               // set to true if the buffer size failed (with allowoverflow set)
-	byte    *data;
-	int maxsize;
-	int cursize;
-	int uncompsize;             // NERVE - SMF - net debugging
-	int readcount;
-	int bit;                    // for bitwise reads and writes
+	qboolean	allowoverflow;	// if false, do a Com_Error
+	qboolean	overflowed;		// set to true if the buffer size failed (with allowoverflow set)
+	qboolean	oob;			// raw out-of-band operation, no static huffman encoding/decoding
+	byte	*data;
+	int		maxsize;
+	int		maxbits;			// maxsize in bits, for overflow checks
+	int		cursize;
+	int		readcount;
+	int		bit;				// for bitwise reads and writes
 } msg_t;
 
 void MSG_Init( msg_t *buf, byte *data, int length );
@@ -164,13 +172,14 @@ char    *MSG_ReadBigString( msg_t *sb );
 char    *MSG_ReadStringLine( msg_t *sb );
 float   MSG_ReadAngle16( msg_t *sb );
 void    MSG_ReadData( msg_t *sb, void *buffer, int size );
-
+int MSG_ReadEntitynum( msg_t *msg );
+int MSG_HashKey(const char *string, int maxlen);
 
 void MSG_WriteDeltaUsercmd( msg_t *msg, struct usercmd_s *from, struct usercmd_s *to );
 void MSG_ReadDeltaUsercmd( msg_t *msg, struct usercmd_s *from, struct usercmd_s *to );
 
-void MSG_WriteDeltaUsercmdKey( msg_t *msg, int key, usercmd_t *from, usercmd_t *to );
-void MSG_ReadDeltaUsercmdKey( msg_t *msg, int key, usercmd_t *from, usercmd_t *to );
+void MSG_WriteDeltaUsercmdKey( msg_t *msg, int key, const usercmd_t *from, usercmd_t *to );
+void MSG_ReadDeltaUsercmdKey( msg_t *msg, int key, const usercmd_t *from, usercmd_t *to );
 
 void MSG_WriteDeltaEntity( msg_t *msg, struct entityState_s *from, struct entityState_s *to
 						   , qboolean force );
@@ -192,12 +201,15 @@ NET
 
 ==============================================================
 */
+#define NET_ENABLEV4            0x01
 
 #define PACKET_BACKUP   32  // number of old messages that must be kept on client and
 							// server for delta comrpession and ping estimation
 #define PACKET_MASK     ( PACKET_BACKUP - 1 )
 
 #define MAX_PACKET_USERCMDS     32      // max number of usercmd_t in a packet
+
+#define	MAX_SNAPSHOT_ENTITIES	256
 
 #define PORT_ANY            -1
 
@@ -213,7 +225,8 @@ typedef enum {
 	NA_BAD,                 // an address lookup failed
 	NA_LOOPBACK,
 	NA_BROADCAST,
-	NA_IP
+	NA_IP,
+	NA_UNSPEC
 } netadrtype_t;
 
 typedef enum {
@@ -221,41 +234,49 @@ typedef enum {
 	NS_SERVER
 } netsrc_t;
 
-typedef struct {
-	netadrtype_t type;
+#define NET_ADDRSTRMAXLEN 48	// maximum length of an IPv6 address string including trailing '\0'
 
-	byte ip[4];
-	
-	unsigned short port;
+typedef struct {
+	netadrtype_t	type;
+	union {
+		byte	_4[4];
+	} ipv;
+	uint16_t	port;
 } netadr_t;
 
-void        NET_Init( void );
-void        NET_Shutdown( void );
-void        NET_Restart( void );
-void        NET_Config( qboolean enableNetworking );
+void		NET_Init( void );
+void		NET_Shutdown( void );
+void		NET_FlushPacketQueue( int time_diff );
+void		NET_QueuePacket( netsrc_t sock, int length, const void *data, const netadr_t *to, int offset );
+void		NET_SendPacket( netsrc_t sock, int length, const void *data, const netadr_t *to );
+void		QDECL NET_OutOfBandPrint( netsrc_t net_socket, const netadr_t *adr, const char *format, ...);
+void		NET_OutOfBandCompress( netsrc_t sock, const netadr_t *adr, const byte *data, int len );
 
-void        NET_SendPacket( netsrc_t sock, int length, const void *data, netadr_t to );
-void QDECL NET_OutOfBandPrint( netsrc_t net_socket, netadr_t adr, const char *format, ... );
-void QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len );
+qboolean	NET_CompareAdr( const netadr_t *a, const netadr_t *b );
+qboolean	NET_CompareBaseAdrMask( const netadr_t *a, const netadr_t *b, unsigned int netmask );
+qboolean	NET_CompareBaseAdr( const netadr_t *a, const netadr_t *b );
+qboolean	NET_IsLocalAddress( const netadr_t *adr );
+const char	*NET_AdrToString( const netadr_t *a );
+const char	*NET_AdrToStringwPort( const netadr_t *a );
+int         NET_StringToAdr( const char *s, netadr_t *a, netadrtype_t family );
+#ifndef DEDICATED
+qboolean	NET_GetLoopPacket( netsrc_t sock, netadr_t *net_from, msg_t *net_message );
+#endif
+qboolean	NET_Sleep( int timeout );
 
-qboolean    NET_CompareAdr( netadr_t a, netadr_t b );
-qboolean    NET_CompareBaseAdr( netadr_t a, netadr_t b );
-qboolean    NET_IsLocalAddress( netadr_t adr );
-const char  *NET_AdrToString( netadr_t a );
-qboolean    NET_StringToAdr( const char *s, netadr_t *a );
-qboolean    NET_GetLoopPacket( netsrc_t sock, netadr_t *net_from, msg_t *net_message );
-void        NET_Sleep( int msec );
-
+#define	MAX_PACKETLEN	1400	// max size of a network packet
 
 //----(SA)	increased for larger submodel entity counts
 #define MAX_MSGLEN              32768       // max length of a message, which may
+//#define	MAX_MSGLEN				16384		// max length of a message, which may
+// be fragmented into multiple packets
 #define	MAX_MSGLEN_BUF	(MAX_MSGLEN+8)	// real buffer size that we need to allocate
 										// to safely handle overflows
 //#define	MAX_MSGLEN				16384		// max length of a message, which may
 // be fragmented into multiple packets
-#define MAX_DOWNLOAD_WINDOW         8       // max of eight download frames
-#define MAX_DOWNLOAD_BLKSIZE        2048    // 2048 byte block chunks
-
+#define MAX_DOWNLOAD_WINDOW         48       // max of eight download frames
+#define MAX_DOWNLOAD_BLKSIZE        1024    // 2048 byte block chunks
+#define NETCHAN_GENCHECKSUM(challenge, sequence) ((challenge) ^ ((sequence) * (challenge)))
 
 /*
 Netchan handles packet fragmentation and out of order / duplicate suppression
@@ -284,13 +305,20 @@ typedef struct {
 	int unsentFragmentStart;
 	int unsentLength;
 	byte unsentBuffer[MAX_MSGLEN];
+
+	int			challenge;
+	int			lastSentTime;
+	int			lastSentSize;
+	qboolean	compat; // ioq3 extension
+	qboolean	isLANAddress;
 } netchan_t;
 
 void Netchan_Init( int qport );
-void Netchan_Setup( netsrc_t sock, netchan_t *chan, netadr_t adr, int qport );
+void Netchan_Setup( netsrc_t sock, netchan_t *chan, const netadr_t *adr, int port, int challenge, qboolean compat );
 
 void Netchan_Transmit( netchan_t *chan, int length, const byte *data );
 void Netchan_TransmitNextFragment( netchan_t *chan );
+void Netchan_Enqueue( netchan_t *chan, int length, const byte *data );
 
 qboolean Netchan_Process( netchan_t *chan, msg_t *msg );
 
@@ -327,27 +355,9 @@ You or the server may be running older versions of the game. Press the auto-upda
 // NERVE - SMF - wolf multiplayer master servers
 #define UPDATE_SERVER_NAME      "wolfmotd.idsoftware.com"            // 192.246.40.65
 #define MASTER_SERVER_NAME      "wolfmaster.idsoftware.com"
-#define AUTHORIZE_SERVER_NAME   "wolfauthorize.idsoftware.com"
 
-// TTimo: allow override for easy dev/testing..
-// see cons -- update_server=myhost
-#if !defined( AUTOUPDATE_SERVER_NAME )
-  #define AUTOUPDATE_SERVER1_NAME   "au2rtcw1.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER2_NAME   "au2rtcw2.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER3_NAME   "au2rtcw3.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER4_NAME   "au2rtcw4.activision.com"            // DHM - Nerve
-  #define AUTOUPDATE_SERVER5_NAME   "au2rtcw5.activision.com"            // DHM - Nerve
-#else
-  #define AUTOUPDATE_SERVER1_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER2_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER3_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER4_NAME   AUTOUPDATE_SERVER_NAME
-  #define AUTOUPDATE_SERVER5_NAME   AUTOUPDATE_SERVER_NAME
-#endif
 
 #define PORT_MASTER         27950
-#define PORT_UPDATE         27951
-#define PORT_AUTHORIZE      27952
 #define PORT_SERVER         27960
 #define NUM_SERVER_PORTS    4       // broadcast scan this many ports after
 									// PORT_SERVER so a single machine can
@@ -489,6 +499,11 @@ void Cbuf_Execute( void );
 // Normally called once per frame, but may be explicitly invoked.
 // Do not call inside a command function, or current args will be destroyed.
 
+void Cbuf_Wait( void );
+// Checks if wait command timeout remaining
+
+void	Cmd_Args_Sanitize( const char *separators );
+
 //===========================================================================
 
 /*
@@ -527,6 +542,7 @@ char    *Cmd_Cmd( void );
 // if arg > argc, so string operations are allways safe.
 
 void    Cmd_TokenizeString( const char *text );
+void	Cmd_TokenizeStringIgnoreQuotes( const char *text_in );
 // Takes a null terminated string.  Does not need to be /n terminated.
 // breaks the string up into arg tokens.
 
@@ -582,6 +598,7 @@ void Cvar_SetLatched( const char *var_name, const char *value );
 
 void    Cvar_SetValue( const char *var_name, float value );
 // expands value to a string and calls Cvar_Set
+void	Cvar_SetIntegerValue( const char *var_name, int value );
 
 float   Cvar_VariableValue( const char *var_name );
 int     Cvar_VariableIntegerValue( const char *var_name );
@@ -610,8 +627,8 @@ void    Cvar_WriteVariables( fileHandle_t f );
 
 void    Cvar_Init( void );
 
-char    *Cvar_InfoString( int bit );
-char    *Cvar_InfoString_Big( int bit, qboolean *truncated );
+const char    *Cvar_InfoString( int bit, qboolean *truncated );
+const char    *Cvar_InfoString_Big( int bit, qboolean *truncated );
 // returns an info string containing all the cvars that have the given bit set
 // in their flags ( CVAR_USERINFO, CVAR_SERVERINFO, CVAR_SYSTEMINFO, etc )
 void    Cvar_InfoStringBuffer( int bit, char *buff, int buffsize );
@@ -839,10 +856,24 @@ void Com_AppendCDKey( const char *filename );
 int Com_ReadCDKey( const char *filename );
 void Com_WriteNewKey(const char* filename);
 
+extern	int	CPU_Flags;
+
+// x86 flags
+#define CPU_FCOM   0x01
+#define CPU_MMX    0x02
+#define CPU_SSE    0x04
+#define CPU_SSE2   0x08
+#define CPU_SSE3   0x10
+#define CPU_SSE41  0x20
+
+// ARM flags
+#define CPU_ARMv7  0x01
+#define CPU_IDIVA  0x02
+#define CPU_VFPv3  0x04
 
 // TTimo
 // centralized and cleaned, that's the max string you can send to a Com_Printf / Com_DPrintf (above gets truncated)
-#define MAXPRINTMSG 4096
+#define MAXPRINTMSG 8192
 
 char        *CopyString( const char *in );
 void        Info_Print( const char *s );
@@ -863,6 +894,8 @@ int         Com_FilterPath( char *filter, char *name, int casesensitive );
 int         Com_RealTime( qtime_t *qtime );
 qboolean    Com_SafeMode( void );
 const char* Com_FormatBytes(uint64_t numBytes);
+
+void		Com_RunAndTimeServerPacket( const netadr_t *evFrom, msg_t *buf );
 
 void        Com_StartupVariable( const char *match );
 void        Com_SetRecommended();
@@ -887,6 +920,12 @@ extern cvar_t  *com_cameraMode;
 // both client and server must agree to pause
 extern cvar_t  *cl_paused;
 extern cvar_t  *sv_paused;
+extern	cvar_t	*cl_packetdelay;
+extern	cvar_t	*sv_packetdelay;
+extern	cvar_t	*com_cl_running;
+extern	cvar_t	*com_yieldCPU;
+
+extern	cvar_t	*com_affinityMask;
 
 // com_speeds times
 extern int time_game;
@@ -905,6 +944,7 @@ typedef enum {
 	TAG_GENERAL,
 	TAG_BOTLIB,
 	TAG_RENDERER,
+	TAG_CLIENTS,
 	TAG_SMALL,
 	TAG_STATIC
 } memtag_t;
@@ -965,6 +1005,7 @@ void Com_TouchMemory( void );
 
 // commandLine should not include the executable name (argv[0])
 void Com_Init( char *commandLine );
+void Com_FrameInit( void );
 void Com_Frame( void );
 void Com_Shutdown( void );
 
@@ -998,7 +1039,7 @@ void CL_MouseEvent( int dx, int dy, int time );
 
 void CL_JoystickEvent( int axis, int value, int time );
 
-void CL_PacketEvent( netadr_t from, msg_t *msg );
+void CL_PacketEvent( const netadr_t *from, msg_t *msg );
 
 void CL_ConsolePrint( char *text );
 
@@ -1027,12 +1068,6 @@ void CL_StartHunkUsers( void );
 
 qboolean CL_IsFrameSleepEnabled(void);
 
-
-#ifndef UPDATE_SERVER
-void CL_CheckAutoUpdate( void );
-// Send a message to auto-update server
-#endif
-
 void Key_WriteBindings( fileHandle_t f );
 // for writing the config files
 
@@ -1048,9 +1083,11 @@ void S_ClearSoundBuffer( void );
 void SV_Init( void );
 void SV_Shutdown( char *finalmsg );
 void SV_Frame( int msec );
-void SV_PacketEvent( netadr_t from, msg_t *msg );
+void SV_PacketEvent( const netadr_t *from, msg_t *msg );
+int SV_FrameMsec( void );
 qboolean SV_GameCommand( void );
 int SV_FrameSleepMS(void);
+int SV_SendQueuedPackets( void );
 
 
 //
@@ -1132,6 +1169,9 @@ char    *Sys_GetClipboardData( void );  // note that this isn't journaled...
 
 void    Sys_Print( const char *msg );
 
+uint64_t Sys_GetAffinityMask( void );
+qboolean Sys_SetAffinityMask( const uint64_t mask );
+
 
 // Sys_Milliseconds should only be used for profiling purposes,
 // any game related timing information should come from event timestamps
@@ -1141,6 +1181,9 @@ void Sys_MicroSleep( int us );
 void Sys_Sleep( int ms );
 
 void    Sys_SnapVector( float *v );
+
+qboolean Sys_RandomBytes( byte *string, int len );
+
 
 // the system console is shown when a dedicated server is running
 void    Sys_DisplaySystemConsole( qboolean show );
@@ -1153,12 +1196,12 @@ void    Sys_StreamSeek( fileHandle_t f, int offset, int origin );
 void    Sys_ShowConsole( int level, qboolean quitOnClose );
 void    Sys_SetErrorText( const char *text );
 
-void    Sys_SendPacket( int length, const void *data, netadr_t to );
+void	Sys_SendPacket( int length, const void *data, const netadr_t *to );
 
-qboolean    Sys_StringToAdr( const char *s, netadr_t *a );
+qboolean Sys_StringToAdr( const char *s, netadr_t *a, netadrtype_t family );
 //Does NOT parse port numbers, only base addresses.
 
-qboolean    Sys_IsLANAddress( netadr_t adr );
+qboolean    Sys_IsLANAddress(const netadr_t *adr );
 void        Sys_ShowIP( void );
 
 qboolean    Sys_CheckCD( void );
@@ -1304,6 +1347,11 @@ typedef struct MD5Context {
 // MD5
 char* Com_MD5File(const char* fn, int length, const char* prefix, int prefix_len);
 char* Com_MD5(const void* data, int length, const char* prefix, int prefix_len, int hexcase);
+
+// stateless challenge functions
+void		Com_MD5Init( void );
+int			Com_MD5Addr( const netadr_t *addr, int timestamp );
+
 
 cvar_t* Cvar_FindVar(const char* var_name);
 void	Cmd_TokenizeLine(const char* text_in, const char* delim, char* pos);

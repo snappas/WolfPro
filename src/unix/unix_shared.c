@@ -25,7 +25,8 @@ If you have questions concerning this license or the applicable additional terms
 
 ===========================================================================
 */
-
+#define _GNU_SOURCE
+#include <sched.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -385,33 +386,74 @@ char* Sys_GetScreenshotPath(char* filename){
 }
 
 
-static void LIN_MicroSleep( int us )
+/*
+==================
+Sys_RandomBytes
+==================
+*/
+qboolean Sys_RandomBytes( byte *string, int len )
 {
-	struct timespec req, rem;
-	req.tv_sec = us / 1000000;
-	req.tv_nsec = (us % 1000000) * 1000;
-	while (clock_nanosleep(CLOCK_REALTIME, 0, &req, &rem) == EINTR) {
-		req = rem;
+	FILE *fp;
+
+	fp = fopen( "/dev/urandom", "r" );
+	if( !fp )
+		return qfalse;
+
+	setvbuf( fp, NULL, _IONBF, 0 ); // don't buffer reads from /dev/urandom
+
+	if ( fread( string, sizeof( byte ), len, fp ) != len ) {
+		fclose( fp );
+		return qfalse;
+	}
+
+	fclose( fp );
+	return qtrue;
+}
+
+/*
+=================
+Sys_GetAffinityMask
+=================
+*/
+uint64_t Sys_GetAffinityMask( void )
+{
+	cpu_set_t cpu_set;
+
+	if ( sched_getaffinity( getpid(), sizeof( cpu_set ), &cpu_set ) == 0 ) {
+		uint64_t mask = 0;
+		int cpu;
+		for ( cpu = 0; cpu < sizeof( mask ) * 8; cpu++ ) {
+			if ( CPU_ISSET( cpu, &cpu_set ) ) {
+				mask |= (1ULL << cpu);
+			}
+		}
+		return mask;
+	} else {
+		return 0;
 	}
 }
 
 
-void Sys_Sleep( int ms )
+/*
+=================
+Sys_SetAffinityMask
+=================
+*/
+qboolean Sys_SetAffinityMask( const uint64_t mask )
 {
-	LIN_MicroSleep(ms * 1000);
-}
+	cpu_set_t cpu_set;
+	int cpu;
 
+	CPU_ZERO( &cpu_set );
+	for ( cpu = 0; cpu < sizeof( mask ) * 8; cpu++ ) {
+		if ( mask & (1ULL << cpu) ) {
+			CPU_SET( cpu, &cpu_set );
+		}
+	}
 
-void Sys_MicroSleep( int us )
-{
-	LIN_MicroSleep(us);
-}
-
-
-int64_t Sys_Microseconds(void)
-{
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-
-	return (int64_t)ts.tv_sec * 1000000 + (int64_t)ts.tv_nsec / 1000;
+	if ( sched_setaffinity( getpid(), sizeof( cpu_set ), &cpu_set ) == 0 ) {
+		return qtrue;
+	} else {
+		return qfalse;
+	}
 }

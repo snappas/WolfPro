@@ -532,6 +532,11 @@ static void CL_ParseServerInfo(void)
 	Q_strncpyz(clc.sv_dlURL,
 		Info_ValueForKey(serverInfo, "sv_dlURL"),
 		sizeof(clc.sv_dlURL));
+
+	/* remove ending slash in URLs */
+	size_t len = strlen( clc.sv_dlURL );
+	if ( len > 0 &&  clc.sv_dlURL[len-1] == '/' )
+		clc.sv_dlURL[len-1] = '\0';
 }
 
 /*
@@ -625,6 +630,34 @@ void CL_ParseGamestate( msg_t *msg ) {
 
 
 //=====================================================================
+/*
+=====================
+CL_ValidPakSignature
+
+checks for valid ZIP signature
+returns qtrue for normal and empty archives
+=====================
+*/
+qboolean CL_ValidPakSignature( const byte *data, int len )
+{
+	// maybe it is not 100% correct to check for file size here
+	// because we may receive more data in future packets
+	// but situation when server sends fragmented/shortened
+	// zip header in first packet - looks pretty suspicious
+	if ( len < 22 )
+		return qfalse; // minimal ZIP file length is 22 bytes
+
+	if ( data[0] != 'P' || data[1] != 'K' )
+		return qfalse;
+
+	if ( data[2] == 0x3 && data[3] == 0x4 )
+		return qtrue; // local file header
+
+	if ( data[2] == 0x5 && data[3] == 0x6 )
+		return qtrue; // EOCD
+
+	return qfalse;
+}
 
 /*
 =====================
@@ -634,86 +667,100 @@ A download message has been received from the server
 =====================
 */
 void CL_ParseDownload( msg_t *msg ) {
-	int size;
-	unsigned char data[MAX_MSGLEN];
-	int block;
+	int		size;
+	unsigned char data[ MAX_MSGLEN ];
+	uint16_t block;
 
-	if ( !*clc.downloadTempName ) {
-		Com_Printf( "Server sending download, but no download was requested\n" );
-		CL_AddReliableCommand( "stopdl" );
+	if (!*clc.downloadTempName) {
+		Com_Printf("Server sending download, but no download was requested\n");
+		CL_AddReliableCommand( "stopdl");
 		return;
 	}
 
+	if ( clc.demofile != 0 ) {
+		CL_StopRecord_f();
+	}
+
 	// read the data
-	block = MSG_ReadShort( msg );
+	block = MSG_ReadShort ( msg );
 
-	if ( !block ) {
+	if(!block && !clc.downloadBlock)
+	{
 		// block zero is special, contains file size
-		clc.downloadSize = MSG_ReadLong( msg );
+		clc.downloadSize = MSG_ReadLong ( msg );
 
-		Cvar_SetValue( "cl_downloadSize", clc.downloadSize );
+		Cvar_SetIntegerValue( "cl_downloadSize", clc.downloadSize );
 
-		if ( clc.downloadSize < 0 ) {
-			Com_Error( ERR_DROP, MSG_ReadString( msg ) );
+		if (clc.downloadSize < 0)
+		{
+			Com_Error( ERR_DROP, "%s", MSG_ReadString( msg ) );
 			return;
 		}
 	}
 
-	size = MSG_ReadShort( msg );
-	if ( size < 0 || size > sizeof( data ) ) {
-		Com_Error( ERR_DROP, "CL_ParseDownload: Invalid size %d for download chunk.", size );
+	size = MSG_ReadShort ( msg );
+	if (size < 0 || size > sizeof(data))
+	{
+		Com_Error(ERR_DROP, "CL_ParseDownload: Invalid size %d for download chunk", size);
 		return;
 	}
 
-	MSG_ReadData( msg, data, size );
+	MSG_ReadData(msg, data, size);
 
-	if ( clc.downloadBlock != block ) {
-		Com_DPrintf( "CL_ParseDownload: Expected block %d, got %d\n", clc.downloadBlock, block );
+	if((clc.downloadBlock & 0xFFFF) != block)
+	{
+		Com_DPrintf( "CL_ParseDownload: Expected block %d, got %d\n", (clc.downloadBlock & 0xFFFF), block);
 		return;
 	}
 
 	// open the file if not opened yet
-	if ( !clc.download ) {
+	if ( clc.download == 0 )
+	{
+		if ( !CL_ValidPakSignature( data, size ) )
+		{
+			Com_Printf( S_COLOR_YELLOW "Invalid pak signature for %s\n", clc.downloadName );
+			CL_AddReliableCommand( "stopdl");
+			CL_NextDownload();
+			return;
+		}
+
 		clc.download = FS_SV_FOpenFileWrite( clc.downloadTempName );
 
-		if ( !clc.download ) {
+		if ( clc.download == 0 )
+		{
 			Com_Printf( "Could not create %s\n", clc.downloadTempName );
-			CL_AddReliableCommand( "stopdl" );
+			CL_AddReliableCommand( "stopdl");
 			CL_NextDownload();
 			return;
 		}
 	}
 
-	if ( size ) {
+	if (size)
 		FS_Write( data, size, clc.download );
-	}
 
-	CL_AddReliableCommand( va( "nextdl %d", clc.downloadBlock ) );
+	CL_AddReliableCommand( va("nextdl %d", clc.downloadBlock));
 	clc.downloadBlock++;
 
 	clc.downloadCount += size;
 
 	// So UI gets access to it
-	Cvar_SetValue( "cl_downloadCount", clc.downloadCount );
+	Cvar_SetIntegerValue( "cl_downloadCount", clc.downloadCount );
 
-	if ( !size ) { // A zero length block means EOF
-		if ( clc.download ) {
+	if ( size == 0 ) { // A zero length block means EOF
+		if ( clc.download != 0 ) {
 			FS_FCloseFile( clc.download );
 			clc.download = 0;
 
 			// rename the file
 			FS_SV_Rename( clc.downloadTempName, clc.downloadName );
 		}
-		*clc.downloadTempName = *clc.downloadName = 0;
-		Cvar_Set( "cl_downloadName", "" );
 
 		// send intentions now
 		// We need this because without it, we would hold the last nextdl and then start
 		// loading right away.  If we take a while to load, the server is happily trying
 		// to send us that last block over and over.
 		// Write it twice to help make sure we acknowledge the download
-		CL_WritePacket();
-		CL_WritePacket();
+		CL_WritePacket( 1 );
 
 		// get another file if needed
 		CL_NextDownload();
@@ -761,21 +808,29 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		Com_Printf( "------------------\n" );
 	}
 
+	//clc.eventMask = 0;
 	MSG_Bitstream( msg );
 
 	// get the reliable sequence acknowledge number
 	clc.reliableAcknowledge = MSG_ReadLong( msg );
-	//
-	if ( clc.reliableAcknowledge < clc.reliableSequence - MAX_RELIABLE_COMMANDS ) {
+
+	if ( clc.reliableSequence - clc.reliableAcknowledge > MAX_RELIABLE_COMMANDS ) {
+		if ( !clc.demoplaying ) {
+			Com_Printf( S_COLOR_YELLOW "WARNING: dropping %i commands from server\n", clc.reliableSequence - clc.reliableAcknowledge );
+		}
 		clc.reliableAcknowledge = clc.reliableSequence;
+	} else if ( clc.reliableSequence - clc.reliableAcknowledge < 0 ) {
+		if ( clc.demoplaying ) {
+			clc.reliableSequence = clc.reliableAcknowledge;
+		} else {
+			Com_Error( ERR_DROP, "%s: incorrect reliable sequence acknowledge number", __func__ );
+		}
 	}
 
-	//
 	// parse the message
-	//
 	while ( 1 ) {
 		if ( msg->readcount > msg->cursize ) {
-			Com_Error( ERR_DROP,"CL_ParseServerMessage: read past end of server message" );
+			Com_Error( ERR_DROP,"%s: read past end of server message", __func__ );
 			break;
 		}
 
@@ -787,8 +842,8 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		}
 
 		if ( cl_shownet->integer >= 2 ) {
-			if ( !svc_strings[cmd] ) {
-				Com_Printf( "%3i:BAD CMD %i\n", msg->readcount - 1, cmd );
+			if ( (unsigned) cmd >= ARRAY_LEN( svc_strings ) ) {
+				Com_Printf( "%3i:BAD CMD %i\n", msg->readcount-1, cmd );
 			} else {
 				SHOWNET( msg, svc_strings[cmd] );
 			}
@@ -797,7 +852,7 @@ void CL_ParseServerMessage( msg_t *msg ) {
 		// other commands
 		switch ( cmd ) {
 		default:
-			Com_Error( ERR_DROP,"CL_ParseServerMessage: Illegible server message %d\n", cmd );
+			Com_Error( ERR_DROP,"%s: Illegible server message", __func__ );
 			break;
 		case svc_nop:
 			break;
@@ -811,6 +866,8 @@ void CL_ParseServerMessage( msg_t *msg ) {
 			CL_ParseSnapshot( msg );
 			break;
 		case svc_download:
+			if ( clc.demofile != 0 )
+				return;
 			CL_ParseDownload( msg );
 			break;
 		}

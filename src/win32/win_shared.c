@@ -50,10 +50,21 @@ void Sys_DebugBreak(void){
 }
 #endif
 
-void Sys_Sleep( int ms )
+void Sys_Sleep( int msec )
 {
-	if (ms >= 1)
-		Sleep(ms);
+	if ( msec < 0 ) {
+		// special case: wait for event or network packet
+		DWORD dwResult;
+		msec = 300;
+		do {
+			dwResult = MsgWaitForMultipleObjects( 0, NULL, FALSE, msec, QS_ALLEVENTS );
+		}
+		while ( dwResult == WAIT_TIMEOUT && NET_Sleep( 10 * 1000 ) );
+		//WaitMessage();
+		return;
+	}
+
+	Sleep(msec);
 }
 
 /*
@@ -129,7 +140,28 @@ void Sys_MicroSleep( int us )
 }
 
 
+/*
+================
+Sys_RandomBytes
+================
+*/
+qboolean Sys_RandomBytes( byte *string, int len )
+{
+	HCRYPTPROV  prov;
 
+	if( !CryptAcquireContext( &prov, NULL, NULL,
+		PROV_RSA_FULL, CRYPT_VERIFYCONTEXT ) )  {
+
+		return qfalse;
+	}
+
+	if( !CryptGenRandom( prov, len, (BYTE *)string ) )  {
+		CryptReleaseContext( prov, 0 );
+		return qfalse;
+	}
+	CryptReleaseContext( prov, 0 );
+	return qtrue;
+}
 
 int Sys_GetHighQualityCPU() {
 	return 1;
@@ -162,4 +194,44 @@ char* Sys_GetScreenshotPath(char* filename){
 	char* gamepath = Cvar_VariableString("fs_game");
 
 	return va("%s/%s/screenshots/%s.jpg", basepath, gamepath, filename);
+}
+
+/*
+================
+Sys_SetAffinityMask
+================
+*/
+static HANDLE hCurrentProcess = 0;
+
+uint64_t Sys_GetAffinityMask( void )
+{
+	DWORD_PTR dwProcessAffinityMask;
+	DWORD_PTR dwSystemAffinityMask;
+
+	if ( hCurrentProcess == 0 )	{
+		hCurrentProcess = GetCurrentProcess();
+	}
+
+	if ( GetProcessAffinityMask( hCurrentProcess, &dwProcessAffinityMask, &dwSystemAffinityMask ) )	{
+		return (uint64_t)dwProcessAffinityMask;
+	}
+
+	return 0;
+}
+
+
+qboolean Sys_SetAffinityMask( const uint64_t mask )
+{
+	DWORD_PTR dwProcessAffinityMask = (DWORD_PTR)mask;
+
+	if ( hCurrentProcess == 0 ) {
+		hCurrentProcess = GetCurrentProcess();
+	}
+
+	if ( SetProcessAffinityMask( hCurrentProcess, dwProcessAffinityMask ) )	{
+		//Sleep( 0 );
+		return qtrue;
+	}
+
+	return qfalse;
 }

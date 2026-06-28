@@ -472,7 +472,7 @@ SV_BotClientCommand
 ==================
 */
 void BotClientCommand( int client, char *command ) {
-	SV_ExecuteClientCommand( &svs.clients[client], command, qtrue );
+	SV_ExecuteClientCommand( &svs.clients[client], command);
 }
 
 /*
@@ -696,6 +696,8 @@ SV_BotGetSnapshotEntity
 ==================
 */
 int SV_BotGetSnapshotEntity( int client, int sequence ) {
+	return 0;
+	#if 0
 	client_t            *cl;
 	clientSnapshot_t    *frame;
 
@@ -705,5 +707,6 @@ int SV_BotGetSnapshotEntity( int client, int sequence ) {
 		return -1;
 	}
 	return svs.snapshotEntities[( frame->first_entity + sequence ) % svs.numSnapshotEntities].number;
+	#endif
 }
 

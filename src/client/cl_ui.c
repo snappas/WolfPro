@@ -171,9 +171,9 @@ static int LAN_AddServer( int source, const char *name, const char *address ) {
 		break;
 	}
 	if ( servers && *count < max ) {
-		NET_StringToAdr( address, &adr );
+		NET_StringToAdr( address, &adr, NA_UNSPEC );
 		for ( i = 0; i < *count; i++ ) {
-			if ( NET_CompareAdr( servers[i].adr, adr ) ) {
+			if ( NET_CompareAdr(&servers[i].adr, &adr ) ) {
 				break;
 			}
 		}
@@ -218,9 +218,9 @@ static void LAN_RemoveServer( int source, const char *addr ) {
 	}
 	if ( servers ) {
 		netadr_t comp;
-		NET_StringToAdr( addr, &comp );
+		NET_StringToAdr( addr, &comp, NA_UNSPEC);
 		for ( i = 0; i < *count; i++ ) {
-			if ( NET_CompareAdr( comp, servers[i].adr ) ) {
+			if ( NET_CompareAdr(&comp, &servers[i].adr ) ) {
 				int j = i;
 				while ( j < *count - 1 ) {
 					Com_Memcpy( &servers[j], &servers[j + 1], sizeof( servers[j] ) );
@@ -266,25 +266,25 @@ static void LAN_GetServerAddressString( int source, int n, char *buf, int buflen
 	switch ( source ) {
 	case AS_LOCAL:
 		if ( n >= 0 && n < MAX_OTHER_SERVERS ) {
-			Q_strncpyz( buf, NET_AdrToString( cls.localServers[n].adr ), buflen );
+			Q_strncpyz( buf, NET_AdrToString(&cls.localServers[n].adr ), buflen );
 			return;
 		}
 		break;
 	case AS_MPLAYER:
 		if ( n >= 0 && n < MAX_OTHER_SERVERS ) {
-			Q_strncpyz( buf, NET_AdrToString( cls.mplayerServers[n].adr ), buflen );
+			Q_strncpyz( buf, NET_AdrToString(&cls.mplayerServers[n].adr ), buflen );
 			return;
 		}
 		break;
 	case AS_GLOBAL:
 		if ( n >= 0 && n < MAX_GLOBAL_SERVERS ) {
-			Q_strncpyz( buf, NET_AdrToString( cls.globalServers[n].adr ), buflen );
+			Q_strncpyz( buf, NET_AdrToString(&cls.globalServers[n].adr ), buflen );
 			return;
 		}
 		break;
 	case AS_FAVORITES:
 		if ( n >= 0 && n < MAX_OTHER_SERVERS ) {
-			Q_strncpyz( buf, NET_AdrToString( cls.favoriteServers[n].adr ), buflen );
+			Q_strncpyz( buf, NET_AdrToString(&cls.favoriteServers[n].adr ), buflen );
 			return;
 		}
 		break;
@@ -335,7 +335,7 @@ static void LAN_GetServerInfo( int source, int n, char *buf, int buflen ) {
 		Info_SetValueForKey( info, "game", server->game );
 		Info_SetValueForKey( info, "gametype", va( "%i",server->gameType ) );
 		Info_SetValueForKey( info, "nettype", va( "%i",server->netType ) );
-		Info_SetValueForKey( info, "addr", NET_AdrToString( server->adr ) );
+		Info_SetValueForKey( info, "addr", NET_AdrToString(&server->adr ) );
 		Info_SetValueForKey( info, "sv_allowAnonymous", va( "%i", server->allowAnonymous ) );
 		Info_SetValueForKey( info, "friendlyFire", va( "%i", server->friendlyFire ) );               // NERVE - SMF
 		Info_SetValueForKey( info, "maxlives", va( "%i", server->maxlives ) );                       // NERVE - SMF
@@ -1143,11 +1143,9 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 
 		// DHM - Nerve
 	case UI_CHECKAUTOUPDATE:
-		CL_CheckAutoUpdate();
 		return 0;
 
 	case UI_GET_AUTOUPDATE:
-		CL_GetAutoUpdate();
 		return 0;
 		// DHM - Nerve
 

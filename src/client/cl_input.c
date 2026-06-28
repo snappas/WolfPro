@@ -760,9 +760,9 @@ qboolean CL_ReadyToSendPacket( void ) {
 	}
 
 	// send every frame for loopbacks
-	if ( clc.netchan.remoteAddress.type == NA_LOOPBACK ) {
-		return qtrue;
-	}
+	// if ( clc.netchan.remoteAddress.type == NA_LOOPBACK ) {
+	// 	return qtrue;
+	// }
 
 	// send every frame for LAN
 	// if ( Sys_IsLANAddress( clc.netchan.remoteAddress ) ) {
@@ -806,25 +806,26 @@ During normal gameplay, a client packet will contain something like:
 
 ===================
 */
-void CL_WritePacket( void ) {
-	msg_t buf;
-	byte data[MAX_MSGLEN];
-	int i, j;
-	usercmd_t   *cmd, *oldcmd;
-	usercmd_t nullcmd;
-	int packetNum;
-	int oldPacketNum;
-	int count, key;
+void CL_WritePacket( int repeat ) {
+	msg_t		buf;
+	byte		data[ MAX_MSGLEN_BUF ];
+	int			i, j, n;
+	usercmd_t	*cmd; 
+	const usercmd_t *oldcmd;
+	usercmd_t	nullcmd;
+	int			packetNum;
+	int			oldPacketNum;
+	int			count, key;
 
 	// don't send anything if playing back a demo
 	if ( clc.demoplaying || cls.state == CA_CINEMATIC ) {
 		return;
 	}
 
-	memset( &nullcmd, 0, sizeof( nullcmd ) );
+	Com_Memset( &nullcmd, 0, sizeof(nullcmd) );
 	oldcmd = &nullcmd;
 
-	MSG_Init( &buf, data, sizeof( data ) );
+	MSG_Init( &buf, data, MAX_MSGLEN );
 
 	MSG_Bitstream( &buf );
 	// write the current serverId so the server
@@ -840,27 +841,23 @@ void CL_WritePacket( void ) {
 	MSG_WriteLong( &buf, clc.serverCommandSequence );
 
 	// write any unacknowledged clientCommands
-	// NOTE TTimo: if you verbose this, you will see that there are quite a few duplicates
-	// typically several unacknowledged cp or userinfo commands stacked up
-	for ( i = clc.reliableAcknowledge + 1 ; i <= clc.reliableSequence ; i++ ) {
+	n = clc.reliableSequence - clc.reliableAcknowledge;
+	for ( i = 0; i < n; i++ ) {
+		const int index = clc.reliableAcknowledge + 1 + i;
 		MSG_WriteByte( &buf, clc_clientCommand );
-		MSG_WriteLong( &buf, i );
-		MSG_WriteString( &buf, clc.reliableCommands[ i & ( MAX_RELIABLE_COMMANDS - 1 ) ] );
+		MSG_WriteLong( &buf, index );
+		MSG_WriteString( &buf, clc.reliableCommands[ index & ( MAX_RELIABLE_COMMANDS - 1 ) ] );
 	}
 
 	// we want to send all the usercmds that were generated in the last
 	// few packet, so even if a couple packets are dropped in a row,
 	// all the cmds will make it to the server
-	if ( cl_packetdup->integer < 0 ) {
-		Cvar_Set( "cl_packetdup", "0" );
-	} else if ( cl_packetdup->integer > 5 ) {
-		Cvar_Set( "cl_packetdup", "5" );
-	}
-	oldPacketNum = ( clc.netchan.outgoingSequence - 1 - cl_packetdup->integer ) & PACKET_MASK;
+
+	oldPacketNum = (clc.netchan.outgoingSequence - 1 - cl_packetdup->integer) & PACKET_MASK;
 	count = cl.cmdNumber - cl.outPackets[ oldPacketNum ].p_cmdNumber;
 	if ( count > MAX_PACKET_USERCMDS ) {
 		count = MAX_PACKET_USERCMDS;
-		Com_Printf( "MAX_PACKET_USERCMDS\n" );
+		Com_Printf("MAX_PACKET_USERCMDS\n");
 	}
 	if ( count >= 1 ) {
 		if ( cl_showSend->integer ) {
@@ -868,8 +865,7 @@ void CL_WritePacket( void ) {
 		}
 
 		// begin a client move command
-		if ( cl_nodelta->integer || !cl.snap.valid || clc.demowaiting
-			 || clc.serverMessageSequence != cl.snap.messageNum ) {
+		if ( cl_nodelta->integer || !cl.snap.valid || clc.demowaiting || clc.serverMessageSequence != cl.snap.messageNum ) {
 			MSG_WriteByte( &buf, clc_moveNoDelta );
 		} else {
 			MSG_WriteByte( &buf, clc_move );
@@ -883,13 +879,13 @@ void CL_WritePacket( void ) {
 		// also use the message acknowledge
 		key ^= clc.serverMessageSequence;
 		// also use the last acknowledged server command in the key
-		key ^= Com_HashKey( clc.serverCommands[ clc.serverCommandSequence & ( MAX_RELIABLE_COMMANDS - 1 ) ], 32 );
+		key ^= MSG_HashKey(clc.serverCommands[ clc.serverCommandSequence & (MAX_RELIABLE_COMMANDS-1) ], 32);
 
 		// write all the commands, including the predicted command
 		for ( i = 0 ; i < count ; i++ ) {
-			j = ( cl.cmdNumber - count + i + 1 ) & cl.cmdMask;
+			j = (cl.cmdNumber - count + i + 1) & cl.cmdMask;
 			cmd = &cl.cmds[j];
-			MSG_WriteDeltaUsercmdKey( &buf, key, oldcmd, cmd );
+			MSG_WriteDeltaUsercmdKey (&buf, key, oldcmd, cmd);
 			oldcmd = cmd;
 		}
 	}
@@ -906,18 +902,21 @@ void CL_WritePacket( void ) {
 	if ( cl_showSend->integer ) {
 		Com_Printf( "%i ", buf.cursize );
 	}
-	CL_Netchan_Transmit( &clc.netchan, &buf );
 
-	// clients never really should have messages large enough
-	// to fragment, but in case they do, fire them all off
-	// at once
-	// TTimo: this causes a packet burst, which is bad karma for winsock
-	// added a WARNING message, we'll see if there are legit situations where this happens
-	while ( clc.netchan.unsentFragments ) {
-		if ( cl_showSend->integer ) {
-			Com_Printf( "WARNING: unsent fragments (not supposed to happen!)\n" );
+	MSG_WriteByte( &buf, clc_EOF );
+
+	if ( buf.overflowed ) {
+		if ( cls.state >= CA_CONNECTED && cls.state != CA_CINEMATIC ) {
+			cls.state = CA_CONNECTING; // to avoid recursive error
 		}
-		CL_Netchan_TransmitNextFragment( &clc.netchan );
+		Com_Error( ERR_DROP, "%s: message overflowed", __func__ );
+	}
+
+	if ( repeat == 0 || clc.netchan.remoteAddress.type == NA_LOOPBACK ) {
+		CL_Netchan_Transmit( &clc.netchan, &buf );
+	} else {
+		CL_Netchan_Enqueue( &clc.netchan, &buf, repeat + 1 );
+		NET_FlushPacketQueue( 0 );
 	}
 }
 
@@ -950,7 +949,7 @@ void CL_SendCmd( void ) {
 		return;
 	}
 
-	CL_WritePacket();
+	CL_WritePacket(0);
 }
 
 /*

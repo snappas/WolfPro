@@ -239,6 +239,8 @@ vmCvar_t g_OmniBotPlaying;
 vmCvar_t g_OmniBotGib;
 vmCvar_t g_botTeam;
 
+vmCvar_t g_ospmode;
+
 
 cvarTable_t gameCvarTable[] = {
 	// don't override the cheat state set by the system
@@ -456,6 +458,8 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_OmniBotFlags,              "omnibot_flags",                "0",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotGib,                "g_botGib",                     "1",                    0,                                                  0,          qfalse },
 	{ &g_botTeam,                   "g_botTeam",                    "0",                    0,                                                  0,          qfalse },
+
+	{ &g_ospmode, "g_ospmode", "0", CVAR_ARCHIVE, 0, qtrue },
 	
 };
 
