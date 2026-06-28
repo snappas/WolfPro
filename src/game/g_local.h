@@ -787,8 +787,6 @@ struct gclient_s {
 	int dropWeaponTime;         // JPW NERVE last time a weapon was dropped
 	int limboDropWeapon;         // JPW NERVE weapon to drop in limbo
 	int deployQueueNumber;         // JPW NERVE player order in reinforcement FIFO queue
-	int sniperRifleFiredTime;         // JPW NERVE last time a sniper rifle was fired (for muzzle flip effects)
-	float sniperRifleMuzzleYaw;       // JPW NERVE for time-dependent muzzle flip in multiplayer
 	int lastBurnTime;         // JPW NERVE last time index for flamethrower burn
 	int PCSpecialPickedUpCount;         // JPW NERVE used to count # of times somebody's picked up this LTs ammo (or medic health) (for scoring)
 	int saved_persistant[MAX_PERSISTANT];           // DHM - Nerve :: Save ps->persistant here during Limbo
