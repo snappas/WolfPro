@@ -898,24 +898,6 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.pm_type = PM_NORMAL;
 	}
 	
-
-	// JPW NERVE do some time-based muzzle flip -- this never gets touched in single player (see g_weapon.c)
-	// #define RIFLE_SHAKE_TIME 150 // JPW NERVE this one goes with the commented out old damped "realistic" behavior below
-	#define RIFLE_SHAKE_TIME 300 // per Id request, longer recoil time
-	if ( client->sniperRifleFiredTime ) {
-		if ( level.time - client->sniperRifleFiredTime > RIFLE_SHAKE_TIME ) {
-			client->sniperRifleFiredTime = 0;
-		} else {
-			VectorCopy( client->ps.viewangles,muzzlebounce );
-
-			// JPW per Id request, longer recoil time
-			muzzlebounce[PITCH] -= 2 * cos( 2.5 * ( level.time - client->sniperRifleFiredTime ) / RIFLE_SHAKE_TIME );
-			muzzlebounce[YAW] += 0.5*client->sniperRifleMuzzleYaw*cos( 1.0 - ( level.time - client->sniperRifleFiredTime ) * 3 / RIFLE_SHAKE_TIME );
-			muzzlebounce[PITCH] -= 0.25 * random() * ( 1.0f - ( level.time - client->sniperRifleFiredTime ) / RIFLE_SHAKE_TIME );
-			muzzlebounce[YAW] += 0.5 * crandom() * ( 1.0f - ( level.time - client->sniperRifleFiredTime ) / RIFLE_SHAKE_TIME );
-			SetClientViewAngle( ent,muzzlebounce );
-		}
-	}
 	if ( client->ps.stats[STAT_PLAYER_CLASS] == PC_MEDIC ) {
 		if ( level.time > client->ps.powerups[PW_REGEN] + 5000 ) {
 			client->ps.powerups[PW_REGEN] = level.time;
@@ -1684,7 +1666,6 @@ void ClientEndFrame( gentity_t *ent ) {
 		ent->client->pers.teamState.lastfraggedcarrier += time_delta;
 		ent->client->ps.classWeaponTime += time_delta;
 		ent->client->respawnTime += time_delta;
-		ent->client->sniperRifleFiredTime += time_delta;
 		ent->lastHintCheckTime += time_delta;
 		ent->pain_debounce_time += time_delta;
 		ent->s.onFireEnd += time_delta;

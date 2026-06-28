@@ -2886,13 +2886,6 @@ void FireWeapon( gentity_t *ent ) {
 		break;
 	case WP_SNIPERRIFLE:
 		Bullet_Fire( ent, SNIPER_SPREAD * aimSpreadScale, SNIPER_DAMAGE );
-// JPW NERVE -- added muzzle flip in multiplayer
-		VectorCopy( ent->client->ps.viewangles,viewang );
-//			viewang[PITCH] -= 6; // handled in clientthink instead
-		ent->client->sniperRifleMuzzleYaw = crandom() * 0.5; // used in clientthink
-		ent->client->sniperRifleFiredTime = level.time;
-		SetClientViewAngle( ent,viewang );
-
 		break;
 	case WP_MAUSER:
 		aimSpreadScale = 1.0;
