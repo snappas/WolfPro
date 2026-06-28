@@ -44,12 +44,14 @@ void MSG_Init( msg_t *buf, byte *data, int length ) {
 	memset( buf, 0, sizeof( *buf ) );
 	buf->data = data;
 	buf->maxsize = length;
+	buf->maxbits = length * 8;
 }
 
 void MSG_InitOOB( msg_t *buf, byte *data, int length ) {
 	memset( buf, 0, sizeof( *buf ) );
 	buf->data = data;
 	buf->maxsize = length;
+	buf->maxbits = length * 8;
 	buf->oob = qtrue;
 }
 
@@ -95,124 +97,128 @@ bit functions
 
 // negative bit values include signs
 void MSG_WriteBits( msg_t *msg, int value, int bits ) {
-	int i, bitIndex;
-
-
-	msg->uncompsize += bits;            // NERVE - SMF - net debugging
-
-	// this isn't an exact overflow check, but close enough
-	if ( msg->maxsize - msg->cursize < 4 ) {
-		msg->overflowed = qtrue;
-		return;
-	}
+	int	i;
 
 	if ( bits == 0 || bits < -31 || bits > 32 ) {
 		Com_Error( ERR_DROP, "MSG_WriteBits: bad bits %i", bits );
 	}
 
+	if ( msg->overflowed != qfalse )
+		return;
+
 	if ( bits < 0 ) {
 		bits = -bits;
 	}
-	if ( msg->oob ) {
+	if (msg->oob) {
 		if ( bits == 8 ) {
 			msg->data[msg->cursize] = value;
 			msg->cursize += 1;
 			msg->bit += 8;
 		} else if ( bits == 16 ) {
-			unsigned short *sp = (unsigned short *)&msg->data[msg->cursize];
-			*sp = LittleShort( value );
+			short temp = value;
+			
+			CopyLittleShort(&msg->data[msg->cursize], &temp);
 			msg->cursize += 2;
 			msg->bit += 16;
-		} else if ( bits == 32 ) {
-			unsigned int *ip = (unsigned int *)&msg->data[msg->cursize];
-			*ip = LittleLong( value );
+		} else if ( bits==32 ) {
+			CopyLittleLong(&msg->data[msg->cursize], &value);
 			msg->cursize += 4;
 			msg->bit += 32;
 		} else {
-			Com_Error( ERR_DROP, "can't read %d bits\n", bits );
+			Com_Error(ERR_DROP, "can't write %d bits", bits);
 		}
 	} else {
-		value &= ( 0xffffffff >> ( 32 - bits ) );
+		value &= (0xffffffff>>(32-bits));
 		if ( bits & 7 ) {
 			int nbits;
-			nbits = bits & 7;
-			bitIndex = msg->bit;
-			for ( i = 0; i < nbits; i++ ) {
-				StatHuff_WriteBit((value & 1), msg->data, bitIndex);
-				value = ( value >> 1 );
-				bitIndex++;
+			nbits = bits&7;
+			for ( i = 0; i < nbits ; i++ ) {
+				StatHuff_WriteBit((value & 1), msg->data, msg->bit);
+				msg->bit++;
+				value = (value>>1);
 			}
-			msg->bit = bitIndex;
 			bits = bits - nbits;
 		}
 		if ( bits ) {
-			bitIndex = msg->bit;
-			for ( i = 0; i < bits; i += 8 ) {
-				bitIndex += StatHuff_WriteSymbol((value & 0xff), msg->data, bitIndex);
-				value = ( value >> 8 );
+			for( i = 0 ; i < bits ; i += 8 ) {
+				msg->bit += StatHuff_WriteSymbol((value & 0xff), msg->data, msg->bit);
+				value = (value>>8);
 			}
-			msg->bit = bitIndex;
 		}
-		msg->cursize = ( msg->bit >> 3 ) + 1;
+		msg->cursize = (msg->bit>>3)+1;
+	}
+
+	if ( msg->bit > msg->maxbits ) {
+		msg->overflowed = qtrue;
 	}
 }
 
 int MSG_ReadBits( msg_t *msg, int bits ) {
-	int value;
-	int get;
-	qboolean sgn;
-	int i, nbits, bitIndex;
+	int		value;
+	qboolean	sgn;
+	int		i;
+	unsigned int	sym;
+	const byte *buffer = msg->data; // dereference optimization
+
+	if ( msg->bit >= msg->maxbits )
+		return 0;
 
 	value = 0;
 
 	if ( bits < 0 ) {
-		bits = -bits;
+		bits = -bits; // always greater than zero
 		sgn = qtrue;
 	} else {
 		sgn = qfalse;
 	}
 
 	if ( msg->oob ) {
-		if ( bits == 8 ) {
-			value = msg->data[msg->readcount];
+		if( bits == 8 )
+		{
+			value = *(buffer + msg->readcount);
 			msg->readcount += 1;
 			msg->bit += 8;
-		} else if ( bits == 16 ) {
-			unsigned short *sp = (unsigned short *)&msg->data[msg->readcount];
-			value = LittleShort( *sp );
+		}
+		else if ( bits == 16 )
+		{
+			short temp;
+			CopyLittleShort( &temp, buffer + msg->readcount );
+			value = temp;
 			msg->readcount += 2;
 			msg->bit += 16;
-		} else if ( bits == 32 ) {
-			unsigned int *ip = (unsigned int *)&msg->data[msg->readcount];
-			value = LittleLong( *ip );
+		}
+		else if ( bits == 32 )
+		{
+			CopyLittleLong( &value, buffer + msg->readcount );
 			msg->readcount += 4;
 			msg->bit += 32;
-		} else {
-			Com_Error( ERR_DROP, "can't read %d bits\n", bits );
 		}
+		else
+			Com_Error( ERR_DROP, "can't read %d bits", bits );
 	} else {
-		nbits = 0;
-		if ( bits & 7 ) {
-			nbits = bits & 7;
-			bitIndex = msg->bit;
+		const int nbits = bits & 7;
+		int bitIndex = msg->bit; // dereference optimization
+		if ( nbits )
+		{		
 			for ( i = 0; i < nbits; i++ ) {
 				value |= StatHuff_ReadBit(msg->data, bitIndex) << i;
 				bitIndex++;
 			}
-			msg->bit = bitIndex;
-			bits = bits - nbits;
+			bits -= nbits;
 		}
-		if ( bits ) {
-			bitIndex = msg->bit;
-			for ( i = 0; i < bits; i += 8 ) {
-				bitIndex += StatHuff_ReadSymbol(&get, msg->data, bitIndex);
-				value |= ( get << ( i + nbits ) );
+		if ( bits )
+		{
+			for ( i = 0; i < bits; i += 8 )
+			{
+				bitIndex += StatHuff_ReadSymbol(&sym, msg->data, bitIndex);
+				value |= ( sym << (i+nbits) );
 			}
-			msg->bit = bitIndex;
 		}
-		msg->readcount = ( msg->bit >> 3 ) + 1;
+		msg->bit = bitIndex;
+		msg->readcount = (bitIndex >> 3) + 1;
 	}
-	if ( sgn ) {
+
+	if ( sgn && bits < 32 ) {
 		if ( value & ( 1 << ( bits - 1 ) ) ) {
 			value |= -1 ^ ( ( 1 << bits ) - 1 );
 		}
