@@ -2788,7 +2788,6 @@ FireWeapon
 */
 void FireWeapon( gentity_t *ent ) {
 	float aimSpreadScale;
-	vec3_t viewang;  // JPW NERVE
 	gentity_t *pFiredShot = 0; // Omni-bot To tell bots about projectiles
 	qboolean callEvent = qtrue;
 

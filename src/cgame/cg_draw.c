@@ -1360,7 +1360,7 @@ static void CG_DrawUpperRight( void ) {
 
 	// enemy respawn timer
 	const char* info = CG_ConfigString(CS_SERVERINFO);
-	char* allowErt = Info_ValueForKey(info, "g_allowEnemySpawnTimer");
+	const char* allowErt = Info_ValueForKey(info, "g_allowEnemySpawnTimer");
 
 	if (allowErt != NULL && !Q_stricmp(allowErt, "1"))
 	{
@@ -2812,7 +2812,7 @@ static void CG_DrawVote( void ) {
 
 		// RtcwPro exit complaint dialog if g_tournament is 1
 		const char* info = CG_ConfigString(CS_SERVERINFO);
-		char* isTournament = Info_ValueForKey(info, "g_tournament");
+		const char* isTournament = Info_ValueForKey(info, "g_tournament");
 		if (isTournament != NULL && !Q_stricmp(isTournament, "1"))
 			return;
 
@@ -3132,7 +3132,7 @@ static void CG_DrawWarmup( void ) {
 	const char* t;
 
 	const char* info = CG_ConfigString(CS_SERVERINFO);
-	char* configName = Info_ValueForKey(info, "sv_GameConfig");
+	const char* configName = Info_ValueForKey(info, "sv_GameConfig");
 	configString = va("^3%s Config Loaded", strlen(configName) == 0 ? "No" : configName);
 
 

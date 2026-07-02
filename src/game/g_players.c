@@ -9,7 +9,8 @@ void pCmd_players(gentity_t *ent, qboolean fParam) {
 	gclient_t *cl;
 	gentity_t *cl_ent;
 	char n1[MAX_NETNAME], ready[16], ref[16], rate[256];
-	char *s, *tc, *coach, userinfo[MAX_INFO_STRING];
+	const char* s;
+	char *tc, * coach, userinfo[MAX_INFO_STRING];
 
 
 	if (g_gamestate.integer == GS_PLAYING) {

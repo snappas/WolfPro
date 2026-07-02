@@ -797,8 +797,7 @@ If force is not set, then nothing at all will be generated if the entity is
 identical, under the assumption that the in-order delta code will catch it.
 ==================
 */
-void MSG_WriteDeltaEntity( msg_t *msg, struct entityState_s *from, struct entityState_s *to,
-						   qboolean force ) {
+void MSG_WriteDeltaEntity( msg_t *msg, const entityState_t *from, const entityState_t *to, qboolean force ) {
 	int i, lc;
 	int numFields;
 	netField_t  *field;
@@ -939,8 +938,7 @@ Can go from either a baseline or a previous packet_entity
 */
 extern cvar_t  *cl_shownet;
 
-void MSG_ReadDeltaEntity( msg_t *msg, entityState_t *from, entityState_t *to,
-						  int number ) {
+void MSG_ReadDeltaEntity( msg_t *msg, const entityState_t *from, entityState_t *to, int number ) {
 	int i, lc;
 	int numFields;
 	netField_t  *field;
@@ -1154,7 +1152,7 @@ MSG_WriteDeltaPlayerstate
 
 =============
 */
-void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct playerState_s *to ) {
+void MSG_WriteDeltaPlayerstate(msg_t* msg, const playerState_t* from, const playerState_t* to) {
 	int i, j, lc;
 	playerState_t dummy;
 	int statsbits;
@@ -1493,7 +1491,7 @@ void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct p
 MSG_ReadDeltaPlayerstate
 ===================
 */
-void MSG_ReadDeltaPlayerstate( msg_t *msg, playerState_t *from, playerState_t *to ) {
+void MSG_ReadDeltaPlayerstate(msg_t* msg, const playerState_t* from, playerState_t* to) {
 	int i, j, lc;
 	int bits;
 	netField_t  *field;

@@ -2022,7 +2022,7 @@ void FindIntermissionPoint( void ) {
 	gentity_t   *ent, *target;
 	vec3_t dir;
 	char cs[MAX_STRING_CHARS];              // DHM - Nerve
-	char        *buf;                       // DHM - Nerve
+	const char        *buf;                       // DHM - Nerve
 	int winner;                             // DHM - Nerve
 
 	if ( g_gametype.integer >= GT_WOLF ) {
@@ -2397,7 +2397,7 @@ ScoreIsTied
 qboolean ScoreIsTied( void ) {
 	int a, b;
 	char cs[MAX_STRING_CHARS];
-	char    *buf;
+	const char    *buf;
 
 	// DHM - Nerve :: GT_WOLF checks the current value of
 	if ( g_gametype.integer >= GT_WOLF ) {

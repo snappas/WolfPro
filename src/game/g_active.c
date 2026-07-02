@@ -773,7 +773,6 @@ void ClientThink_real( gentity_t *ent ) {
 	usercmd_t   *ucmd;
 // JPW NERVE
 	int i;
-	vec3_t muzzlebounce;
 	gitem_t *item;
 	gentity_t *ent2;
 	vec3_t velocity, org, offset;
