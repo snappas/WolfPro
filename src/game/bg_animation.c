@@ -2560,7 +2560,7 @@ void BG_PlayerAnglesToAxis(vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAng
 
 }
 
-void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, const vec3_t entityAxis[3], const vec3_t parentOrigin, vec3_t parentAxis[3], orientation_t *orientation){
+void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], const vec3_t parentOrigin, const vec3_t parentAxis[3], orientation_t *orientation){
 	vec3_t tempAxis[3];
 	// FIXME: allow origin offsets along tag?
 	VectorCopy( parentOrigin, entityOrigin );

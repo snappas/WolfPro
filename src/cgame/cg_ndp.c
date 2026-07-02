@@ -56,7 +56,7 @@ If we know what it is we don't need to look for it again
 
 qbool CG_NDP_FindGameVersion(void) {
 	const char* info = CG_ConfigString(CS_SERVERINFO);
-	char* current_gamename = Info_ValueForKey(info, "gamename");
+	const char* current_gamename = Info_ValueForKey(info, "gamename");
 	if (strlen(current_gamename) == 0) {
 		return qfalse;
 	}

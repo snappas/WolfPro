@@ -1411,7 +1411,7 @@ if desired.
 void ClientUserinfoChanged( int clientNum ) {
 
 	gentity_t *ent;
-	char    *s;
+	const char    *s;
 	char model[MAX_QPATH], modelname[MAX_QPATH];
 
 //----(SA) added this for head separation
@@ -1420,7 +1420,7 @@ void ClientUserinfoChanged( int clientNum ) {
 	char oldusername[MAX_STRING_CHARS];
 	char oldnetname[MAX_STRING_CHARS];
 	gclient_t   *client;
-	char    *c1;
+	const char    *c1;
 	char userinfo[MAX_INFO_STRING];
 
 	ent = g_entities + clientNum;
@@ -1721,7 +1721,7 @@ restarts.
 ============
 */
 char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
-	char        *value;
+	const char        *value;
 	gclient_t   *client;
 	char userinfo[MAX_INFO_STRING];
 	gentity_t   *ent;
@@ -1909,7 +1909,7 @@ void ClientBegin( int clientNum ) {
 
 	// Xian - Check for maxlives enforcement
 	if ( g_enforcemaxlives.integer == 1 && ( g_maxlives.integer > 0 || g_axismaxlives.integer > 0 || g_alliedmaxlives.integer > 0 ) ) {
-		char *value;
+		const char *value;
 		char userinfo[MAX_INFO_STRING];
 		trap_GetUserinfo( clientNum, userinfo, sizeof( userinfo ) );
 		value = Info_ValueForKey( userinfo, "cl_guid" );

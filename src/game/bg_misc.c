@@ -3431,7 +3431,7 @@ weapon_t BG_GrenadeTypeForTeam(team_t team) {
 
 
 // Return true/false if the player "needs" the ammo
-qboolean BG_AddMagicAmmo(const playerState_t* ps, int teamNum) {
+qboolean BG_AddMagicAmmo(playerState_t* ps, int teamNum) {
 	int i, weapon;
 	int needsAmmo = qfalse;
 	int maxammo;
@@ -3527,7 +3527,7 @@ qboolean BG_CanItemBeGrabbed( const entityState_t *ent, const playerState_t *ps 
 	case IT_WEAPON:
 // JPW NERVE -- medics & engineers can only pick up same weapon type
 		if ( item->giTag == WP_AMMO ) { // magic ammo for any two-handed weapon
-			return BG_AddMagicAmmo( ps, ps->persistant[PERS_TEAM] ); // RtcwPro - check to see if player needs the ammo (ET Port)
+			return BG_AddMagicAmmo( (playerState_t *)ps, ps->persistant[PERS_TEAM] ); // RtcwPro - check to see if player needs the ammo (ET Port)
 		}
 		if ( ( ps->stats[STAT_PLAYER_CLASS] == PC_MEDIC ) || ( ps->stats[STAT_PLAYER_CLASS] == PC_ENGINEER ) ) {
 			if ( !COM_BitCheck( ps->weapons, item->giTag ) ) {

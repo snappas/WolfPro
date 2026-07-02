@@ -3807,7 +3807,8 @@ void WM_SetObjective( int objectiveIndex ) {
 	itemDef_t *def_pic, *def_desc, *def_button;
 	menuDef_t *menu = Menu_GetFocused();
 	int team, numobjectives, i;
-	char *s, *teamStr;
+	const char* s;
+	const char *teamStr;
 	qboolean playRoq = qfalse;
 
 	uiInfo.selectedObjective = objectiveIndex;

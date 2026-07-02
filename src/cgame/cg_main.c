@@ -2666,7 +2666,7 @@ static char *restrict_argv[MAX_STRING_TOKENS];
 static char origRestrictString[BIG_INFO_STRING]; 
 static char restrictStringTokenized[BIG_INFO_STRING + MAX_STRING_TOKENS]; 
 
-void CG_TokenizeRestrictString(char *text_in){
+void CG_TokenizeRestrictString(const char *text_in){
 	/*
 ============
 Cmd_TokenizeString
@@ -2772,7 +2772,7 @@ will point into this temporary buffer.
 
 }
 
-void CG_LoadRestriction(char *name, char *restrictString, int i){
+static void CG_LoadRestriction(const char *name, const char *restrictString, int i){
 	cvarRange_t *cvar = &cvarRestrictions[i];
 	Q_strncpyz(cvar->cvarName, name, sizeof(cvar->cvarName));
 

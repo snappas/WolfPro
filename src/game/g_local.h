@@ -198,7 +198,7 @@ struct gentity_s {
 
 	qboolean inuse;
 
-	char        *classname;         // set in QuakeEd
+	const char        *classname;         // set in QuakeEd
 	int spawnflags;                 // set in QuakeEd
 
 	qboolean neverFree;             // if true, FreeEntity will only unlink
@@ -1162,7 +1162,7 @@ char    *vtos( const vec3_t v );
 
 void G_AddPredictableEvent( gentity_t *ent, int event, int eventParm );
 void G_AddEvent( gentity_t *ent, int event, int eventParm );
-void G_SetOrigin( gentity_t *ent, vec3_t origin );
+void G_SetOrigin( gentity_t *ent, const vec3_t origin );
 void AddRemap( const char *oldShader, const char *newShader, float timeOffset );
 const char *BuildShaderStateConfig();
 void G_SetAngle( gentity_t *ent, vec3_t angle );
@@ -1298,10 +1298,10 @@ void G_ClientCleanName( const char *in, char *out, int outSize );
 //
 qboolean    ConsoleCommand( void );
 void G_ProcessIPBans( void );
-qboolean G_FilterPacket( char *from );
-qboolean G_FilterMaxLivesPacket( char *from );
+qboolean G_FilterPacket( const char *from );
+qboolean G_FilterMaxLivesPacket( const char *from );
 void AddMaxLivesIP( char *str );
-void AddMaxLivesGUID( char *str );
+void AddMaxLivesGUID( const char *str );
 void ClearMaxLivesIP();
 void ClearMaxLivesGUID();
 

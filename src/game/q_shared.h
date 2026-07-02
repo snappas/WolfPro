@@ -895,9 +895,24 @@ void RotateAroundDirection( vec3_t axis[3], float yaw );
 void MakeNormalVectors( const vec3_t forward, vec3_t right, vec3_t up );
 // perpendicular vector could be replaced by this
 
-int PlaneTypeForNormal( vec3_t normal );
+/************************************************************************/
+/* Matrix3x3                                                            */
+/************************************************************************/
 
-void MatrixMultiply( float in1[3][3], float in2[3][3], float out[3][3] );
+#define mat3_mult(in1, in2, o)                                                                          \
+		o[0][0] = (in1)[0][0] * (in2)[0][0] + (in1)[0][1] * (in2)[1][0] + (in1)[0][2] * (in2)[2][0],        \
+		o[0][1] = (in1)[0][0] * (in2)[0][1] + (in1)[0][1] * (in2)[1][1] + (in1)[0][2] * (in2)[2][1],        \
+		o[0][2] = (in1)[0][0] * (in2)[0][2] + (in1)[0][1] * (in2)[1][2] + (in1)[0][2] * (in2)[2][2],        \
+		o[1][0] = (in1)[1][0] * (in2)[0][0] + (in1)[1][1] * (in2)[1][0] + (in1)[1][2] * (in2)[2][0],        \
+		o[1][1] = (in1)[1][0] * (in2)[0][1] + (in1)[1][1] * (in2)[1][1] + (in1)[1][2] * (in2)[2][1],        \
+		o[1][2] = (in1)[1][0] * (in2)[0][2] + (in1)[1][1] * (in2)[1][2] + (in1)[1][2] * (in2)[2][2],        \
+		o[2][0] = (in1)[2][0] * (in2)[0][0] + (in1)[2][1] * (in2)[1][0] + (in1)[2][2] * (in2)[2][0],        \
+		o[2][1] = (in1)[2][0] * (in2)[0][1] + (in1)[2][1] * (in2)[1][1] + (in1)[2][2] * (in2)[2][1],        \
+		o[2][2] = (in1)[2][0] * (in2)[0][2] + (in1)[2][1] * (in2)[1][2] + (in1)[2][2] * (in2)[2][2]
+
+#define MatrixMultiply(in1, in2, o) mat3_mult(in1, in2, o)
+
+void _MatrixMultiply(float in1[3][3], float in2[3][3], float out[3][3]);
 void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up );
 void PerpendicularVector( vec3_t dst, const vec3_t src );
 
