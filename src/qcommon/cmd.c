@@ -689,6 +689,30 @@ void    Cmd_RemoveCommand( const char *cmd_name ) {
 	}
 }
 
+/*
+============
+Cmd_RemoveCgameCommands
+
+Remove cgame-created commands
+============
+*/
+void Cmd_RemoveCgameCommands( void )
+{
+	const cmd_function_t *cmd;
+	qboolean removed;
+
+	do {
+		removed = qfalse;
+		for ( cmd = cmd_functions ; cmd ; cmd = cmd->next ) {
+			if ( cmd->function == NULL ) {
+				Cmd_RemoveCommand( cmd->name );
+				removed = qtrue;
+				break;
+			}
+		}
+	} while ( removed );
+}
+
 
 /*
 ============

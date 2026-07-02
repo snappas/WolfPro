@@ -22,6 +22,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "client.h"
 
+#define ALLOWED_PROTOCOLS ( CURLPROTO_HTTP | CURLPROTO_HTTPS | CURLPROTO_FTP | CURLPROTO_FTPS )
+
+#define ALLOWED_PROTOCOLS_STR "http,https,ftp,ftps"
 
 /*
 =================
@@ -70,8 +73,13 @@ void CL_cURL_Cleanup(void)
 	}
 }
 
+#if CURL_AT_LEAST_VERSION(7, 32, 0)
+static int CL_cURL_CallbackProgress( void *dummy, curl_off_t dltotal, curl_off_t dlnow,
+	curl_off_t ultotal, curl_off_t ulnow )
+#else
 static int CL_cURL_CallbackProgress( void *dummy, double dltotal, double dlnow,
 	double ultotal, double ulnow )
+#endif
 {
 	clc.downloadSize = (int)dltotal;
 	Cvar_SetValue( "cl_downloadSize", clc.downloadSize );
@@ -113,6 +121,13 @@ CURLcode qcurl_easy_setopt_warn(CURL *curl, CURLoption option, ...)
 	return result;
 }
 
+static void CL_cURL_CloseDownload( void ) 
+{
+	if ( clc.download != FS_INVALID_HANDLE )
+		FS_FCloseFile( clc.download );
+	clc.download = FS_INVALID_HANDLE;
+}
+
 void CL_cURL_BeginDownload( const char *localName, const char *remoteURL )
 {
 	CURLMcode result;
@@ -133,7 +148,9 @@ void CL_cURL_BeginDownload( const char *localName, const char *remoteURL )
 	Cvar_Set("cl_downloadName", localName);
 	Cvar_Set("cl_downloadSize", "0");
 	Cvar_Set("cl_downloadCount", "0");
-	Cvar_SetValue("cl_downloadTime", cls.realtime);
+	Cvar_SetIntegerValue("cl_downloadTime", cls.realtime);
+
+	CL_cURL_CloseDownload();
 
 	clc.downloadBlock = 0; // Starting new file
 	clc.downloadCount = 0;
@@ -163,16 +180,27 @@ void CL_cURL_BeginDownload( const char *localName, const char *remoteURL )
 		CL_cURL_CallbackWrite);
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_WRITEDATA, &clc.download);
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_NOPROGRESS, 0);
+#if CURL_AT_LEAST_VERSION(7, 32, 0)
+	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_XFERINFOFUNCTION,
+		CL_cURL_CallbackProgress);
+	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_XFERINFODATA, NULL);
+#else
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROGRESSFUNCTION,
 		CL_cURL_CallbackProgress);
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROGRESSDATA, NULL);
+#endif
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_FAILONERROR, 1);
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_FOLLOWLOCATION, 1);
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_MAXREDIRS, 5);
     qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_SSL_VERIFYPEER, 0);
-	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROTOCOLS,
-		CURLPROTO_HTTP | CURLPROTO_HTTPS | CURLPROTO_FTP | CURLPROTO_FTPS);
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROTOCOLS_STR, ALLOWED_PROTOCOLS_STR);
+#else
+	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_PROTOCOLS, ALLOWED_PROTOCOLS);
+#endif
+#ifdef CURL_MAX_READ_SIZE
 	qcurl_easy_setopt_warn(clc.downloadCURL, CURLOPT_BUFFERSIZE, CURL_MAX_READ_SIZE);
+#endif
 	clc.downloadCURLM = qcurl_multi_init();	
 	if(!clc.downloadCURLM) {
 		qcurl_easy_cleanup(clc.downloadCURL);
@@ -191,7 +219,7 @@ void CL_cURL_BeginDownload( const char *localName, const char *remoteURL )
 
 	if(!(clc.sv_allowDownload & DLF_NO_DISCONNECT) &&
 		!clc.cURLDisconnected) {
-
+		clc.disconnecting = qtrue;
 		CL_AddReliableCommand("disconnect");
 		CL_WritePacket(2);
 		clc.cURLDisconnected = qtrue;

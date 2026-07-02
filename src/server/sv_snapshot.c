@@ -59,7 +59,7 @@ SV_EmitPacketEntities
 Writes a delta update of an entityState_t list to the message.
 =============
 */
-static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to, msg_t *msg ) {
+static void SV_EmitPacketEntities( const clientSnapshot_t *from, const clientSnapshot_t *to, msg_t *msg ) {
 	entityState_t   *oldent, *newent;
 	int oldindex, newindex;
 	int oldnum, newnum;
@@ -200,14 +200,16 @@ static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 	MSG_WriteData( msg, frame->areabits, frame->areabytes );
 
 	// don't send any changes to zombies
-	if ( client->state <= CS_ZOMBIE ) {
-		// playerstate
-		MSG_WriteByte( msg, 0 ); // # of changes
-		MSG_WriteBits( msg, 0, 1 ); // no array changes
-		// packet entities
-		MSG_WriteBits( msg, (MAX_GENTITIES-1), GENTITYNUM_BITS );
-		return;
-	}
+	//
+	// this results in a Com_Error while downloading via curl...  
+	// if ( client->state <= CS_ZOMBIE ) {
+	// 	// playerstate
+	// 	MSG_WriteByte( msg, 0 ); // # of changes
+	// 	MSG_WriteBits( msg, 0, 1 ); // no array changes
+	// 	// packet entities
+	// 	MSG_WriteBits( msg, (MAX_GENTITIES-1), GENTITYNUM_BITS );
+	// 	return;
+	// }
 
 	// delta encode the playerstate
 	if ( oldframe ) {

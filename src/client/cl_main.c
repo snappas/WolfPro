@@ -163,14 +163,25 @@ not have future usercmd_t executed before it is executed
 */
 void CL_AddReliableCommand( const char *cmd ) {
 	int index;
+	int		unacknowledged = clc.reliableSequence - clc.reliableAcknowledge;
+	qboolean justDisconnected = clc.disconnecting;
+	if(justDisconnected)
+		clc.disconnecting = qfalse;
 
 	if ( clc.serverAddress.type == NA_BAD )
 		return;
 
 	// if we would be losing an old command that hasn't been acknowledged,
 	// we must drop the connection
-	if ( clc.reliableSequence - clc.reliableAcknowledge >= MAX_RELIABLE_COMMANDS ) {
-		Com_Error( ERR_DROP, "Client command overflow" );
+	// also leave one slot open for the disconnect command in this case.
+
+	if ((justDisconnected && unacknowledged > MAX_RELIABLE_COMMANDS) ||
+		(!justDisconnected && unacknowledged >= MAX_RELIABLE_COMMANDS))
+	{
+		if( com_errorEntered )
+			return;
+		else
+			Com_Error(ERR_DROP, "Client command overflow");
 	}
 	clc.reliableSequence++;
 	index = clc.reliableSequence & ( MAX_RELIABLE_COMMANDS - 1 );
@@ -800,11 +811,11 @@ void CL_Disconnect( qboolean showMainMenu ) {
 		CL_StopRecord_f();
 	}
 
-	if ( clc.download ) {
+	if ( clc.download != 0 ) {
 		FS_FCloseFile( clc.download );
 		clc.download = 0;
 	}
-	*clc.downloadTempName = *clc.downloadName = 0;
+	*clc.downloadTempName = *clc.downloadName = '\0';
 	Cvar_Set( "cl_downloadName", "" );
 
 	if ( clc.demofile ) {
@@ -812,16 +823,22 @@ void CL_Disconnect( qboolean showMainMenu ) {
 		clc.demofile = 0;
 	}
 
-	if ( uivm && showMainMenu ) {
-		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NONE );
+	if ( cgvm ) {
+		// do that right after we rendered last video frame
+		CL_ShutdownCGame();
 	}
 
 	SCR_StopCinematic();
 	S_ClearSoundBuffer();
 
+	if ( uivm && showMainMenu ) {
+		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NONE );
+	}
+
 	// send a disconnect message to the server
 	// send it a few times in case one is dropped
 	if ( cls.state >= CA_CONNECTED ) {
+		clc.disconnecting = qtrue;
 		CL_AddReliableCommand( "disconnect" );
 		CL_WritePacket(2);
 	}
@@ -847,6 +864,8 @@ void CL_Disconnect( qboolean showMainMenu ) {
 	cls.state = CA_DISCONNECTED;
 	// allow cheats locally
 	Cvar_Set( "sv_cheats", "1" );
+
+	Cmd_RemoveCgameCommands();
 
 	// not connected to a pure server anymore
 	cl_connectedToPureServer = qfalse;
@@ -1750,7 +1769,7 @@ CL_MotdPacket
 ===================
 */
 void CL_MotdPacket( const netadr_t *from ) {
-	char    *challenge;
+	const char    *challenge;
 	char    *info;
 
 	// if not from our server, ignore it
@@ -1955,11 +1974,16 @@ void CL_ServersResponsePacket( const netadr_t *from, msg_t *msg ) {
 CL_ConnectionlessPacket
 
 Responses to broadcasts, etc
+
+return true only for commands indicating that our server is alive
+or connection sequence is going into the right way
 =================
 */
-void CL_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
-	char    *s;
-	char    *c;
+static qboolean CL_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
+	qboolean fromserver;
+	const char *s;
+	const char *c;
+	int challenge = 0;
 
 	MSG_BeginReadingOOB( msg );
 	MSG_ReadLong( msg );    // skip the -1
@@ -1970,123 +1994,211 @@ void CL_ConnectionlessPacket( const netadr_t *from, msg_t *msg ) {
 
 	c = Cmd_Argv( 0 );
 
-	Com_DPrintf( "CL packet %s: %s\n", NET_AdrToString( from ), c );
+	if ( com_developer->integer ) {
+		Com_Printf( "CL packet %s: %s\n", NET_AdrToStringwPort( from ), s );
+	}
 
 	// challenge from the server we are connecting to
-	if ( !Q_stricmp( c, "challengeResponse" ) ) {
-		if ( cls.state != CA_CONNECTING ) {
-			Com_Printf( "Unwanted challenge response received.  Ignored.\n" );
-		} else {
-			// start sending challenge repsonse instead of challenge request packets
-			clc.challenge = atoi( Cmd_Argv( 1 ) );
-			if ( Cmd_Argc() > 2 ) {
-				clc.onlyVisibleClients = atoi( Cmd_Argv( 2 ) );         // DHM - Nerve
-			} else {
-				clc.onlyVisibleClients = 0;
-			}
-			cls.state = CA_CHALLENGING;
-			clc.connectPacketCount = 0;
-			clc.connectTime = -99999;
+	if ( !Q_stricmp(c, "challengeResponse" ) ) {
 
-			// take this address as the new server address.  This allows
-			// a server proxy to hand off connections to multiple servers
-			clc.serverAddress = *from;
-			Com_DPrintf( "challenge: %d\n", clc.challenge );
+		if ( cls.state != CA_CONNECTING ) {
+			Com_DPrintf( "Unwanted challenge response received. Ignored.\n" );
+			return qfalse;
 		}
-		return;
+
+		c = Cmd_Argv( 2 );
+		if ( *c != '\0' )
+			challenge = atoi( c );
+
+		// clc.compat = qtrue;
+		// s = Cmd_Argv( 3 ); // analyze server protocol version
+		// if ( *s != '\0' ) {
+		// 	int sv_proto = atoi( s );
+		// 	if ( sv_proto > PROTOCOL_VERSION ) {
+		// 		if ( sv_proto == NEW_PROTOCOL_VERSION || sv_proto == com_protocol->integer ) {
+		// 			clc.compat = qfalse;
+		// 		} else {
+		// 			int cl_proto = com_protocol->integer;
+		// 			if ( cl_proto == DEFAULT_PROTOCOL_VERSION ) {
+		// 				// we support new protocol features by default
+		// 				cl_proto = NEW_PROTOCOL_VERSION;
+		// 			}
+		// 			Com_Printf( S_COLOR_YELLOW "Warning: Server reports protocol version %d, "
+		// 				"we have %d. Trying legacy protocol %d.\n",
+		// 				sv_proto, cl_proto, OLD_PROTOCOL_VERSION );
+		// 		}
+		// 	}
+		// }
+
+		// if ( clc.compat )
+		// {
+			if ( !NET_CompareAdr( from, &clc.serverAddress ) )
+			{
+				// This challenge response is not coming from the expected address.
+				// Check whether we have a matching client challenge to prevent
+				// connection hi-jacking.
+				if ( *c == '\0' || challenge != clc.challenge )
+				{
+					Com_DPrintf( "Challenge response received from unexpected source. Ignored.\n" );
+					return qfalse;
+				}
+			}
+		// }
+		// else
+		// {
+		// 	if ( *c == '\0' || challenge != clc.challenge )
+		// 	{
+		// 		Com_Printf( "Bad challenge for challengeResponse. Ignored.\n" );
+		// 		return qfalse;
+		// 	}
+		// }
+
+		// start sending connect instead of challenge request packets
+		clc.challenge = atoi(Cmd_Argv(1));
+		cls.state = CA_CHALLENGING;
+		clc.connectPacketCount = 0;
+		clc.connectTime = cls.realtime - RECONNECT_TIMEOUT;
+
+		// take this address as the new server address.  This allows
+		// a server proxy to hand off connections to multiple servers
+		clc.serverAddress = *from;
+		Com_DPrintf( "challengeResponse: %d\n", clc.challenge );
+		return qtrue;
 	}
 
 	// server connection
-	if ( !Q_stricmp( c, "connectResponse" ) ) {
+	if ( !Q_stricmp(c, "connectResponse") ) {
 		if ( cls.state >= CA_CONNECTED ) {
-			Com_Printf( "Dup connect received.  Ignored.\n" );
-			return;
+			Com_Printf( "Dup connect received. Ignored.\n" );
+			return qfalse;
 		}
 		if ( cls.state != CA_CHALLENGING ) {
-			Com_Printf( "connectResponse packet while not connecting.  Ignored.\n" );
-			return;
+			Com_Printf( "connectResponse packet while not connecting. Ignored.\n" );
+			return qfalse;
 		}
-		if ( !NET_CompareBaseAdr( from, &clc.serverAddress ) ) {
-			Com_Printf( "connectResponse from a different address.  Ignored.\n" );
-			Com_Printf( "%s should have been %s\n", NET_AdrToString( from ),
-						NET_AdrToString(&clc.serverAddress ) );
-			return;
+		if ( !NET_CompareAdr( from, &clc.serverAddress ) ) {
+			Com_Printf( "connectResponse from wrong address. Ignored.\n" );
+			return qfalse;
 		}
 
+		// if ( !clc.compat ) {
+		// 	// first argument: challenge response
+		// 	c = Cmd_Argv( 1 );
+		// 	if ( *c != '\0' ) {
+		// 		challenge = atoi( c );
+		// 	} else {
+		// 		Com_Printf( "Bad connectResponse received. Ignored.\n" );
+		// 		return qfalse;
+		// 	}
+
+		// 	if ( challenge != clc.challenge ) {
+		// 		Com_Printf( "ConnectResponse with bad challenge received. Ignored.\n" );
+		// 		return qfalse;
+		// 	}
+
+		// 	if ( com_protocolCompat ) {
+		// 		// enforce dm68-compatible stream for legacy/unknown servers
+		// 		clc.compat = qtrue;
+		// 	}
+
+		// 	// second (optional) argument: actual protocol version used on server-side
+		// 	c = Cmd_Argv( 2 );
+		// 	if ( *c != '\0' ) {
+		// 		int protocol = atoi( c );
+		// 		if ( protocol > 0 ) {
+		// 			if ( protocol <= OLD_PROTOCOL_VERSION ) {
+		// 				clc.compat = qtrue;
+		// 			} else {
+		// 				clc.compat = qfalse;
+		// 			}
+		// 		}
+		// 	}
+		// }
 
 		Netchan_Setup( NS_CLIENT, &clc.netchan, from, Cvar_VariableIntegerValue( "net_qport" ), clc.challenge, qtrue ); //clc.compat );
 
 		cls.state = CA_CONNECTED;
-		clc.lastPacketSentTime = -9999;     // send first packet immediately
-		return;
+		clc.lastPacketSentTime = cls.realtime - RETRANSMIT_TIMEOUT; // send first packet immediately
+		return qtrue;
 	}
 
+
 	// server responding to an info broadcast
-	if ( !Q_stricmp( c, "infoResponse" ) ) {
+	if ( !Q_stricmp(c, "infoResponse") ) {
 		CL_ServerInfoPacket( from, msg );
-		return;
+		return qfalse;
 	}
 
 	// server responding to a get playerlist
-	if ( !Q_stricmp( c, "statusResponse" ) ) {
+	if ( !Q_stricmp(c, "statusResponse") ) {
 		CL_ServerStatusResponse( from, msg );
-		return;
+		return qfalse;
 	}
 
 	// a disconnect message from the server, which will happen if the server
 	// dropped the connection but it is still getting packets from us
 	if ( !Q_stricmp( c, "disconnect" ) ) {
 		CL_DisconnectPacket( from );
-		return;
+		return qfalse;
 	}
 
 	// echo request from server
 	if ( !Q_stricmp( c, "echo" ) ) {
-		NET_OutOfBandPrint( NS_CLIENT, from, "%s", Cmd_Argv( 1 ) );
-		return;
+		// NOTE: we may have to add exceptions for auth and update servers
+		if ( (fromserver = NET_CompareAdr( from, &clc.serverAddress )) != qfalse ) {// || NET_CompareAdr( from, &rcon_address ) ) {
+			NET_OutOfBandPrint( NS_CLIENT, from, "%s", Cmd_Argv(1) );
+		}
+		return fromserver;
 	}
 
 	// cd check
 	if ( !Q_stricmp( c, "keyAuthorize" ) ) {
 		// we don't use these now, so dump them on the floor
-		return;
+		return qfalse;
 	}
 
 	// global MOTD from id
 	if ( !Q_stricmp( c, "motd" ) ) {
 		CL_MotdPacket( from );
-		return;
+		return qfalse;
 	}
 
 	// echo request from server
 	if ( !Q_stricmp( c, "print" ) ) {
-		CL_PrintPacket( from, msg );
-		return;
+		// NOTE: we may have to add exceptions for auth and update servers
+		if ( (fromserver = NET_CompareAdr( from, &clc.serverAddress )) != qfalse ){ // || NET_CompareAdr( from, &rcon_address ) ) {
+			CL_PrintPacket( from, msg );
+		}
+		return fromserver;
 	}
 
 	// NERVE - SMF - bugfix, make this compare first n chars so it doesnt bail if token is parsed incorrectly
 	// echo request from server
 	if ( !Q_strncmp( c, "getserversResponse", 18 ) ) {
 		CL_ServersResponsePacket( from, msg );
-		return;
+		return qfalse;
 	}
 
 	if (!Q_stricmp(c, "getRestrictedList")) {
 
 		if (cls.state < CA_CONNECTED) {
 			Com_DPrintf("Not connected. Restrict check Ignored.\n");
-			return;
+			return qfalse;
 		}
 
 		if (!NET_CompareBaseAdr( from, &clc.serverAddress)) {
 			Com_DPrintf("getRestrictedList connectResponse from a different address.  Ignored.\n");
-			return;
+			return qfalse;
 		}
-		Cvar_RestBuildList(va("%s", Cmd_Args()));
-		return;
+		if ( (fromserver = NET_CompareAdr( from, &clc.serverAddress )) != qfalse ){
+			Cvar_RestBuildList(va("%s", Cmd_Args()));
+		}
+		return fromserver;
+		
 	}
 
 	Com_DPrintf( "Unknown connectionless packet command.\n" );
+	return qfalse;
 }
 
 
@@ -2100,28 +2212,29 @@ A packet has arrived from the main event loop
 void CL_PacketEvent( const netadr_t *from, msg_t *msg ) {
 	int headerBytes;
 
-	if ( msg->cursize >= 4 && *(int *)msg->data == -1 ) {
-		CL_ConnectionlessPacket( from, msg );
+	if ( msg->cursize < 5 ) {
+		Com_DPrintf( "%s: Runt packet\n", NET_AdrToStringwPort( from ) );
 		return;
 	}
 
-	clc.lastPacketTime = cls.realtime;
+	if ( *(int *)msg->data == -1 ) {
+		if ( CL_ConnectionlessPacket( from, msg ) )
+			clc.lastPacketTime = cls.realtime;
+		return;
+	}
 
 	if ( cls.state < CA_CONNECTED ) {
-		return;     // can't be a valid sequenced packet
-	}
-
-	if ( msg->cursize < 4 ) {
-		Com_Printf( "%s: Runt packet\n",NET_AdrToString( from ) );
-		return;
+		return;		// can't be a valid sequenced packet
 	}
 
 	//
 	// packet from server
 	//
 	if ( !NET_CompareAdr( from, &clc.netchan.remoteAddress ) ) {
-		Com_DPrintf( "%s:sequenced packet without connection\n"
-					 ,NET_AdrToString( from ) );
+		if ( com_developer->integer ) {
+			Com_Printf( "%s:sequenced packet without connection\n",
+				NET_AdrToStringwPort( from ) );
+		}
 		// FIXME: send a client disconnect?
 		return;
 	}
@@ -2906,7 +3019,7 @@ void CL_ServerInfoPacket( const netadr_t *from, msg_t *msg ) {
 	char info[MAX_INFO_STRING];
 	char    *infoString;
 	int prot;
-	char    *gameName;
+	const char    *gameName;
 
 	infoString = MSG_ReadString( msg );
 

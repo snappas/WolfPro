@@ -40,7 +40,8 @@ If you have questions concerning this license or the applicable additional terms
 #include "../game/bg_public.h"
 #include "cl_curl.h"
 
-#define RETRANSMIT_TIMEOUT  3000    // time between connection packet retransmits
+#define	RECONNECT_TIMEOUT	3000	// time between packet retransmits at CA_CONNECTING / CA_CHALLENGING
+#define	RETRANSMIT_TIMEOUT	1000	// time between packet retransmits at CA_CONNECTED / CA_LOADING
 
 #define LIMBOCHAT_WIDTH     140     // NERVE - SMF - NOTE TTimo buffer size indicator, not related to screen bbox
 #define LIMBOCHAT_HEIGHT    7       // NERVE - SMF
@@ -55,6 +56,7 @@ typedef struct {
 	int messageNum;                 // copied from netchan->incoming_sequence
 	int deltaNum;                   // messageNum the delta is from
 	int ping;                       // time from when cmdNum-1 was sent to time packet was reeceived
+	int				areabytes;
 	byte areamask[MAX_MAP_AREA_BYTES];                  // portalarea visibility bits
 
 	int cmdNum;                     // the next cmdNum the server is expecting
@@ -86,8 +88,8 @@ typedef struct {
 
 // the parseEntities array must be large enough to hold PACKET_BACKUP frames of
 // entities, so that when a delta compressed message arives from the server
-// it can be un-deltad from the original
-#define MAX_PARSE_ENTITIES  2048
+// it can be un-deltad from the original 
+#define	MAX_PARSE_ENTITIES	( PACKET_BACKUP * MAX_SNAPSHOT_ENTITIES )
 
 extern int g_console_field_width;
 
@@ -152,6 +154,8 @@ typedef struct {
 	entityState_t entityBaselines[MAX_GENTITIES];   // for delta compression when not in previous frame
 
 	entityState_t parseEntities[MAX_PARSE_ENTITIES];
+
+	byte			baselineUsed[MAX_GENTITIES];
 
 	// NERVE - SMF
 	// NOTE TTimo - UI uses LIMBOCHAT_WIDTH strings (140),
@@ -254,6 +258,7 @@ typedef struct {
 	CURLM		*downloadCURLM;
 	int		sv_allowDownload;
 	char		sv_dlURL[MAX_CVAR_VALUE_STRING];
+	qboolean disconnecting;
 
 	// big stuff at end of structure so most offsets are 15 bits or less
 	netchan_t netchan;

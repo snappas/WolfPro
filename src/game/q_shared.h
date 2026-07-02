@@ -279,6 +279,18 @@ If you have questions concerning this license or the applicable additional terms
 
 #endif
 
+// Modifier for printing size_t values portably
+
+#if (defined _WIN64)
+#define PRIz "I64"
+#elif (defined _WIN32)
+#define PRIz "I32"
+#elif (defined Q3_VM)
+#define PRIz ""
+#else
+#define PRIz "z"
+#endif
+
 
 // buildstring will be incorporated into the version string
 #ifdef _WIN32
@@ -480,6 +492,10 @@ static inline int  FloatAsInt(float f) {
 #define ARRAY_LEN(x)		(sizeof(x) / sizeof(*(x)))
 
 #define PAD(base, alignment)	(((base)+(alignment)-1) & ~((alignment)-1))
+#define PADLEN(base, alignment)	(PAD((base), (alignment)) - (base))
+
+#define PADP(base, alignment)	((void *) PAD((intptr_t) (base), (alignment)))
+
 
 // angle indexes
 #define PITCH               0       // up / down
@@ -590,10 +606,10 @@ typedef enum {
 } ha_pref;
 
 #ifdef HUNK_DEBUG
-#define Hunk_Alloc( size, preference )              Hunk_AllocDebug( size, preference, # size, __FILE__, __LINE__ )
-void *Hunk_AllocDebug( int size, ha_pref preference, char *label, char *file, int line );
+#define Hunk_Alloc( size, preference )				Hunk_AllocDebug(size, preference, #size, __FILE__, __LINE__)
+void *Hunk_AllocDebug( size_t size, ha_pref preference, const char *label, const char *file, int line );
 #else
-void *Hunk_Alloc( int size, ha_pref preference );
+void *Hunk_Alloc( size_t size, ha_pref preference );
 #endif
 
 #ifdef __linux__
