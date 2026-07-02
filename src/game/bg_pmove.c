@@ -2365,6 +2365,57 @@ void PM_AdjustAimSpreadScale( void ) {
 	pm->ps->aimSpreadScale = (int)pm->ps->aimSpreadScaleFloat;  // update the int for the client
 }
 
+
+#define FPS_RECOIL_FACTOR 83
+
+/**
+ * @brief PM_HandleRecoil
+ */
+static void PM_HandleRecoil(void)
+{
+	if (pm->pmext->weapRecoilTime)
+	{
+		vec3_t muzzlebounce;
+		int    i;
+		int    cmdAngle;
+		int    deltaTime = pm->cmd.serverTime - pm->pmext->weapRecoilTime;
+
+		if (deltaTime > pm->pmext->weapRecoilDuration)
+		{
+			pm->pmext->weapRecoilTime      = 0;
+			pm->pmext->lastRecoilDeltaTime = 0;
+			return;
+		}
+
+		VectorCopy(pm->ps->viewangles, muzzlebounce);
+
+		for (i = pm->pmext->lastRecoilDeltaTime; i < deltaTime; i += pml.msec)
+		{
+			if (pm->pmext->weapRecoilPitch > 0.f)
+			{
+				muzzlebounce[PITCH] -= pml.frametime * FPS_RECOIL_FACTOR * 2 * pm->pmext->weapRecoilPitch * cos(2.5 * (i) / pm->pmext->weapRecoilDuration);
+				muzzlebounce[PITCH] -= pml.frametime * FPS_RECOIL_FACTOR * 0.25f * random() * (1.0f - (i) / pm->pmext->weapRecoilDuration);
+			}
+
+			if (pm->pmext->weapRecoilYaw > 0.f)
+			{
+				muzzlebounce[YAW] += pml.frametime * FPS_RECOIL_FACTOR * 0.5f * pm->pmext->weapRecoilYaw * cos(1.0 - (i) * 3 / pm->pmext->weapRecoilDuration);
+				muzzlebounce[YAW] += pml.frametime * FPS_RECOIL_FACTOR * 0.5f * crandom() * (1.0f - (i) / pm->pmext->weapRecoilDuration);
+			}
+		}
+
+		// set the delta angle
+		for (i = 0; i < 3; i++)
+		{
+			cmdAngle                = ANGLE2SHORT(muzzlebounce[i]);
+			pm->ps->delta_angles[i] = cmdAngle - pm->cmd.angles[i];
+		}
+		VectorCopy(muzzlebounce, pm->ps->viewangles);
+
+		pm->pmext->lastRecoilDeltaTime = deltaTime;
+	}
+}
+
 #define weaponstateFiring ( pm->ps->weaponstate == WEAPON_FIRING || pm->ps->weaponstate == WEAPON_FIRINGALT )
 
 #define GRENADE_DELAY   250
@@ -2517,6 +2568,9 @@ static void PM_Weapon( void ) {
 		pm->ps->pm_flags &= ~PMF_USE_ITEM_HELD;
 	}
 
+	// check for weapon recoil
+	// do the recoil before setting the values, that way it will be shown next frame and not this
+	PM_HandleRecoil();
 
 	delayedFire = qfalse;
 
@@ -2990,7 +3044,6 @@ static void PM_Weapon( void ) {
 	pm->pmext->releasedFire = qfalse;
 	pm->ps->lastFireTime = pm->cmd.serverTime;
 
-
 	aimSpreadScaleAdd = 0;
 
 	switch ( pm->ps->weapon ) {
@@ -3041,7 +3094,11 @@ static void PM_Weapon( void ) {
 		// avoid exploiting centerview to go around the spread
 		pm->pmext->blockCenterViewTime = pm->cmd.serverTime + 1000;
 		aimSpreadScaleAdd = 100;
-		
+		pm->pmext->lastRecoilDeltaTime = 0;
+		pm->pmext->weapRecoilTime      = pm->cmd.serverTime;
+		pm->pmext->weapRecoilDuration  = 300;
+		pm->pmext->weapRecoilYaw       = 1.0f * crandom() * 0.5f;
+		pm->pmext->weapRecoilPitch     = 1.0f;
 		// jpw
 
 		break;

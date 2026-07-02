@@ -298,6 +298,11 @@ typedef struct {
 	float weapHeat[MAX_WEAPONS]; //sten/venom heat
 	qboolean rocketMode;
 	qboolean releasedFire; //pistol shooting
+	int weapRecoilTime;            ///< time at which a weapon that has a recoil kickback has been fired last
+	int weapRecoilDuration;
+	float weapRecoilYaw;
+	float weapRecoilPitch;
+	int lastRecoilDeltaTime;
 
 } pmoveExt_t;   // data used both in client and server - store it here
 // generally useful for data you want to manipulate in bg_* and cgame, or bg_* and game
