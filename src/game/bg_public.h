@@ -1808,7 +1808,7 @@ void BG_PlayerAngles(int entityNum, entityState_t *es, int frameTime, lerpFrame_
 					vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] );
 void BG_PlayerAnglesToAxis(vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] );
 animModelInfo_t *BG_ModelInfoForClient( int client );
-void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], vec3_t parentOrigin, vec3_t parentAxis[3], orientation_t *orientation);
+void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], const vec3_t parentOrigin, const vec3_t parentAxis[3], orientation_t *orientation);
 void BG_LerpCrouchingAnimation(int clientNum, lerpFrame_t *lf, lerpFrame_t *torsoLerpframe, lerpFrame_t *legsLerpFrame, int newAnimation, int oldAnimNum, animation_t *oldanim);
 void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 						 int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame,

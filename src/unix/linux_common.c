@@ -47,5 +47,5 @@ qbool Sys_IsDebugging(void){
 }
 
 void Sys_DebugBreak(void){
-	return;
+	;
 }

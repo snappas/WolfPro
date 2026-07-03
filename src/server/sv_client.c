@@ -220,7 +220,7 @@ void SV_DirectConnect( const netadr_t *from ) {
 	int			cl_proto;// , sv_proto;
 	const char	*ip, *info, *v;
 	qboolean	compat;
-	qboolean	longstr;
+	//qboolean	longstr;
 
 	Com_DPrintf( "SVC_DirectConnect()\n" );
 
@@ -766,7 +766,7 @@ It will be resent if the client acknowledges a later message but has
 the wrong gamestate.
 ================
 */
-void SV_SendClientGameState( client_t *client ) {
+static void SV_SendClientGameState( client_t *client ) {
 	int start;
 	entityState_t nullstate;
 	const svEntity_t *svEnt;
@@ -1541,7 +1541,7 @@ into a more C friendly form.
 =================
 */
 void SV_UserinfoChanged( client_t *cl ) {
-	char    *val;
+	const char    *val;
 	const char *ip;
 	int i;
 
@@ -1553,7 +1553,7 @@ void SV_UserinfoChanged( client_t *cl ) {
 	}
 
 	// name for C code
-	char *username = Info_ValueForKey( cl->userinfo, "username" );
+	const char *username = Info_ValueForKey( cl->userinfo, "username" );
 	if(!strlen(username)){
 		Q_strncpyz( cl->name, Info_ValueForKey( cl->userinfo, "name" ), sizeof( cl->name ) );
 	}else{

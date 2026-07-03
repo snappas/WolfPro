@@ -201,11 +201,11 @@ void PrintMaxLivesGUID() {
 G_FilterPacket
 =================
 */
-qboolean G_FilterPacket( char *from ) {
+qboolean G_FilterPacket( const char *from ) {
 	int i;
 	unsigned in;
 	byte m[4];
-	char *p;
+	const char *p;
 
 	i = 0;
 	p = from;
@@ -234,7 +234,7 @@ qboolean G_FilterPacket( char *from ) {
 /*
  Check to see if the user is trying to sneak back in with g_enforcemaxlives enabled
 */
-qboolean G_FilterMaxLivesPacket( char *from ) {
+qboolean G_FilterMaxLivesPacket( const char *from ) {
 	int i;
 
 	for ( i = 0 ; i < numMaxLivesFilters ; i++ )
@@ -279,7 +279,7 @@ Xian - with g_enforcemaxlives enabled, this adds a client GUID to a list
 that prevents them from quitting a disconnecting
 =================
 */
-void AddMaxLivesGUID( char *str ) {
+void AddMaxLivesGUID( const char *str ) {
 	if ( numMaxLivesFilters == MAX_IPFILTERS ) {
 		G_Printf( "MaxLives GUID filter list is full\n" );
 		return;

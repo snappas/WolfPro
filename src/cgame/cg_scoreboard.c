@@ -226,7 +226,7 @@ int WM_DrawObjectives( int x, int y, int width, float fade ) {
 	scoreInfo[0] = 0;
 	
 	s = CG_ConfigString(CS_SERVERINFO);
-	Q_strcat(scoreInfo, sizeof(scoreInfo), va("^3Server: ^7%s  ", Q_CleanStr(Info_ValueForKey(s, "sv_hostname"))));
+	Q_strcat(scoreInfo, sizeof(scoreInfo), va("^3Server: ^7%s  ", Q_CleanStr((char*)Info_ValueForKey(s, "sv_hostname"))));
 	Q_strcat(scoreInfo, sizeof(scoreInfo), va("^3Time: ^7%s", CG_GetClock()));
 
 	// if intermission move it up a little

@@ -175,22 +175,15 @@ void    MSG_ReadData( msg_t *sb, void *buffer, int size );
 int MSG_ReadEntitynum( msg_t *msg );
 int MSG_HashKey(const char *string, int maxlen);
 
-void MSG_WriteDeltaUsercmd( msg_t *msg, struct usercmd_s *from, struct usercmd_s *to );
-void MSG_ReadDeltaUsercmd( msg_t *msg, struct usercmd_s *from, struct usercmd_s *to );
-
 void MSG_WriteDeltaUsercmdKey( msg_t *msg, int key, const usercmd_t *from, usercmd_t *to );
 void MSG_ReadDeltaUsercmdKey( msg_t *msg, int key, const usercmd_t *from, usercmd_t *to );
 
-void MSG_WriteDeltaEntity( msg_t *msg, struct entityState_s *from, struct entityState_s *to
-						   , qboolean force );
-void MSG_ReadDeltaEntity( msg_t *msg, entityState_t *from, entityState_t *to,
-						  int number );
+void MSG_WriteDeltaEntity( msg_t *msg, const entityState_t *from, const entityState_t *to, qboolean force );
+void MSG_ReadDeltaEntity( msg_t *msg, const entityState_t *from, entityState_t *to, int number );
 
-void MSG_WriteDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct playerState_s *to );
-void MSG_ReadDeltaPlayerstate( msg_t *msg, struct playerState_s *from, struct playerState_s *to );
+void MSG_WriteDeltaPlayerstate(msg_t* msg, const playerState_t* from, const playerState_t* to);
+void MSG_ReadDeltaPlayerstate(msg_t* msg, const playerState_t* from, playerState_t* to);
 
-
-void MSG_ReportChangeVectors_f( void );
 
 
 
@@ -209,7 +202,7 @@ NET
 
 #define MAX_PACKET_USERCMDS     32      // max number of usercmd_t in a packet
 
-#define	MAX_SNAPSHOT_ENTITIES	256
+#define	MAX_SNAPSHOT_ENTITIES	2048
 
 #define PORT_ANY            -1
 
@@ -525,6 +518,7 @@ void    Cmd_AddCommand( const char *cmd_name, xcommand_t function );
 // as a clc_clientCommand instead of executed locally
 
 void    Cmd_RemoveCommand( const char *cmd_name );
+void Cmd_RemoveCgameCommands( void );
 
 void Cmd_CommandCompletion( void ( *callback )( const char *s ) );
 // callback with each valid string
@@ -664,6 +658,7 @@ issues.
 #define NUM_ID_PAKS     9
 
 #define MAX_FILE_HANDLES    64
+#define	FS_INVALID_HANDLE	0
 
 qboolean FS_Initialized();
 
@@ -942,11 +937,16 @@ extern fileHandle_t com_journalDataFile;
 typedef enum {
 	TAG_FREE,
 	TAG_GENERAL,
+	TAG_PACK,
+	TAG_SEARCH_PATH,
+	TAG_SEARCH_PACK,
+	TAG_SEARCH_DIR,
 	TAG_BOTLIB,
 	TAG_RENDERER,
 	TAG_CLIENTS,
 	TAG_SMALL,
-	TAG_STATIC
+	TAG_STATIC,
+	TAG_COUNT
 } memtag_t;
 
 /*
@@ -973,35 +973,33 @@ temp file loading
 #endif
 
 #ifdef ZONE_DEBUG
-#define Z_TagMalloc( size, tag )          Z_TagMallocDebug( size, tag, # size, __FILE__, __LINE__ )
-#define Z_Malloc( size )                  Z_MallocDebug( size, # size, __FILE__, __LINE__ )
-#define S_Malloc( size )                  S_MallocDebug( size, # size, __FILE__, __LINE__ )
-void *Z_TagMallocDebug( int size, int tag, char *label, char *file, int line ); // NOT 0 filled memory
-void *Z_MallocDebug( int size, char *label, char *file, int line );         // returns 0 filled memory
-void *S_MallocDebug( int size, char *label, char *file, int line );         // returns 0 filled memory
+#define Z_TagMalloc(size, tag)			Z_TagMallocDebug(size, tag, #size, __FILE__, __LINE__)
+#define Z_Malloc(size)					Z_MallocDebug(size, #size, __FILE__, __LINE__)
+#define S_Malloc(size)					S_MallocDebug(size, #size, __FILE__, __LINE__)
+void *Z_TagMallocDebug( size_t size, memtag_t tag, const char *label, const char *file, int line );	// NOT 0 filled memory
+void *Z_MallocDebug( size_t size, const char *label, const char *file, int line );			// returns 0 filled memory
+void *S_MallocDebug( size_t size, const char *label, const char *file, int line );			// returns 0 filled memory
 #else
-void *Z_TagMalloc( int size, int tag ); // NOT 0 filled memory
-void *Z_Malloc( int size );         // returns 0 filled memory
-void *S_Malloc( int size );         // NOT 0 filled memory only for small allocations
+void *Z_TagMalloc( size_t size, memtag_t tag );	// NOT 0 filled memory
+void *Z_Malloc( size_t size );			// returns 0 filled memory
+void *S_Malloc( size_t size );			// NOT 0 filled memory only for small allocations
 #endif
 void Z_Free( void *ptr );
-void Z_FreeTags( int tag );
+int Z_FreeTags( memtag_t tag );
+int Z_AvailableMemory( void );
 void Z_LogHeap( void );
 
 void Hunk_Clear( void );
 void Hunk_ClearToMark( void );
 void Hunk_SetMark( void );
 qboolean Hunk_CheckMark( void );
-//void *Hunk_Alloc( int size );
-// void *Hunk_Alloc( int size, ha_pref preference );
 void Hunk_ClearTempMemory( void );
-void *Hunk_AllocateTempMemory( int size );
+void *Hunk_AllocateTempMemory( size_t size );
 void Hunk_FreeTempMemory( void *buf );
-int Hunk_MemoryRemaining( void );
-void Hunk_SmallLog( void );
-void Hunk_Log( void );
+int	Hunk_MemoryRemaining( void );
+void Hunk_Log( void);
 
-void Com_TouchMemory( void );
+unsigned int Com_TouchMemory( void );
 
 // commandLine should not include the executable name (argv[0])
 void Com_Init( char *commandLine );
@@ -1081,7 +1079,7 @@ void S_ClearSoundBuffer( void );
 // server interface
 //
 void SV_Init( void );
-void SV_Shutdown( char *finalmsg );
+void SV_Shutdown( const char *finalmsg );
 void SV_Frame( int msec );
 void SV_PacketEvent( const netadr_t *from, msg_t *msg );
 int SV_FrameMsec( void );

@@ -185,7 +185,7 @@ and whenever the server updates any serverinfo flagged cvars
 */
 void CG_ParseServerinfo( void ) {
 	const char  *info;
-	char    *mapname;
+	const char    *mapname;
 
 	info = CG_ConfigString( CS_SERVERINFO );
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
@@ -610,7 +610,7 @@ void CG_AddToNotify( const char *str ) {
 		trap_Cvar_VariableStringBuffer("cg_notifyPlayerOnly", var, sizeof(var));
 		int notifyPlayerOnly = atoi(var);
 		if (notifyPlayerOnly) {
-			char* playerName = Info_ValueForKey(CG_ConfigString(CS_PLAYERS + cg.snap->ps.clientNum), "n");
+			const char* playerName = Info_ValueForKey(CG_ConfigString(CS_PLAYERS + cg.snap->ps.clientNum), "n");
 			if (strlen(playerName)) {
 				if (strstr(str, playerName) == NULL) {
 					return;

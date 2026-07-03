@@ -957,7 +957,7 @@ void G_matchInfoDump( unsigned int dwDumpType ) {
 		int winner;
 		char cs[MAX_STRING_CHARS];
 		trap_GetConfigstring(CS_MULTI_MAPWINNER, cs, sizeof(cs));
-		char *buf = Info_ValueForKey(cs, "winner");
+		const char *buf = Info_ValueForKey(cs, "winner");
 		winner = atoi(buf);
         G_writeGameInfo(winner);  // write out the game info relating to the match & round
 

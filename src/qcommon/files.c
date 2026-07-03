@@ -1880,7 +1880,7 @@ Creates a new pak_t in the search chain for the contents
 of a zip file.
 =================
 */
-static pack_t *FS_LoadZipFile( char *zipfile, const char *basename ) {
+static pack_t *FS_LoadZipFile( const char *zipfile, const char *basename ) {
 	fileInPack_t    *buildBuffer;
 	pack_t          *pack;
 	unzFile uf;
