@@ -213,7 +213,9 @@ static struct fdata readfile_content(char* jsonfile) {
         buffer = malloc (length+1);
         if (buffer)
         {
-            fread (buffer, 1, length, f);
+            if(fread (buffer, 1, length, f) != length){
+                Com_DPrintf("readfile_content fread short\n");
+            }
         }
         fclose (f);
         buffer[length]= '\0';

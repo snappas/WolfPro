@@ -1155,7 +1155,7 @@ void RemoveBot( const MessageHelper &_data ) {
 
 obResult ChangeTeam( int _client, int _newteam, const MessageHelper *_data ) {
 	gentity_t* bot;
-	char* teamName;
+	const char* teamName;
 
 	bot = &g_entities[_client];
 
