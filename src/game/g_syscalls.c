@@ -55,6 +55,11 @@ void    trap_Error( const char *fmt ) {
 int     trap_Milliseconds( void ) {
 	return syscall( G_MILLISECONDS );
 }
+
+int trap_Microseconds(void) {
+	return syscall(G_MICROSECONDS);
+}
+
 int     trap_Argc( void ) {
 	return syscall( G_ARGC );
 }
@@ -116,6 +121,11 @@ void trap_Cvar_VariableStringBuffer( const char *var_name, char *buffer, int buf
 	syscall( G_CVAR_VARIABLE_STRING_BUFFER, var_name, buffer, bufsize );
 }
 
+float trap_Cvar_VariableValue( const char* var_name ){
+	int temp;
+	temp = syscall( G_CVAR_VARIABLE_VALUE, var_name);
+	return ( *(float*)&temp );
+}
 
 void trap_LocateGameData( gentity_t *gEnts, int numGEntities, int sizeofGEntity_t,
 						  playerState_t *clients, int sizeofGClient ) {

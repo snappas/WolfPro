@@ -1720,17 +1720,18 @@ typedef struct {
 
 static const capsuleDef_t s_capsuleDefs[MAX_PLAYER_CAPSULES] = {
 	{  0,  1,  1.0f,  "Pelvis"      },  /* Bip01 Pelvis     -> Bip01 Spine     0 */
-    {  1,  7,  8.2f,  "Torso"       },  /* Bip01 Spine      -> tag_head     1*/
-    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    2 */
-	{ 59, 60,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot    3 */
-    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   4 */
-	{ 65, 66,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   5  */
-    { 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   6  */
-    { 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    7 */
-    { 10, 11,  4.5f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 8 */
-    { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  9   */
-    { 31, 32,  4.5f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 10 */
-    { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  11  */
+    {  4, 51,  9.0f,  "Back"        },  /* Bip01 Spine3     -> tag_back   1*/
+	{  1,  4, 12.5f,  "Torso"       },  /* Bip01 Spine      -> tag_head     2*/
+    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    3 */
+	{ 59, 60,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot   4 */
+    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   5 */
+	{ 65, 66,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   6  */
+    { 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   7  */
+    { 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    8 */
+    { 10, 11,  6.0f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 9 */
+    { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  10   */
+    { 31, 32,  6.0f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 11 */
+    { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  12  */
 };
 
 
@@ -1923,9 +1924,10 @@ void UpdatePlayerCapsules( gentity_t *ent ) {
 		}else{
 			//debugging cvars
 			float radii[MAX_PLAYER_CAPSULES] = {
-				g_cr0.value,  g_cr1.value,  g_cr2.value,  g_cr3.value,
-				g_cr4.value,  g_cr5.value,  g_cr6.value,  g_cr7.value,
-				g_cr8.value,  g_cr9.value,  g_cr10.value, g_cr11.value
+				trap_Cvar_VariableValue("g_cr0"),  trap_Cvar_VariableValue("g_cr1"),  trap_Cvar_VariableValue("g_cr2"),  trap_Cvar_VariableValue("g_cr3"),
+				trap_Cvar_VariableValue("g_cr4"),  trap_Cvar_VariableValue("g_cr5"),  trap_Cvar_VariableValue("g_cr6"),  trap_Cvar_VariableValue("g_cr7"),
+				trap_Cvar_VariableValue("g_cr8"),  trap_Cvar_VariableValue("g_cr9"),  trap_Cvar_VariableValue("g_cr10"), trap_Cvar_VariableValue("g_cr11"),
+				trap_Cvar_VariableValue("g_cr12")
 			};
 			UpdateCapsulePosition( capsule, startPos, endPos, radii[i] );
 		}
@@ -1945,6 +1947,10 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
     int         i, j;
     gentity_t   *ent;
     gentity_t   *capsule;
+	vec3_t attackerEye, targetEye;
+
+	VectorCopy( skip->r.currentOrigin, attackerEye );
+	attackerEye[2] += skip->client->ps.viewheight;
 
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
@@ -1955,7 +1961,19 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
         if ( !ent->client ) {
             continue;
         }
+		if ( ent->client->ps.pm_type == PM_SPECTATOR ) {
+    		continue;
+		}
+		if ( ent->health <= 0 && !( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+		
+		VectorCopy( ent->r.currentOrigin, targetEye );
+		targetEye[2] += ent->client->ps.viewheight;
 
+		if ( !trap_InPVS( attackerEye, targetEye ) ) {
+			continue;
+		}
         UpdatePlayerCapsules( ent );
 
         for ( j = 0; j < MAX_PLAYER_CAPSULES; j++ ) {
@@ -2010,13 +2028,32 @@ void RemovePlayerCapsules( gentity_t *skip ) {
 void UnlinkPlayerBodies( gentity_t *skip ) {
     int i;
     gentity_t *ent;
+	vec3_t attackerEye, targetEye;
+
+	VectorCopy( skip->r.currentOrigin, attackerEye );
+	attackerEye[2] += skip->client->ps.viewheight;
  
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
         if ( ent == skip || !ent->client ) {
             continue;
         }
-        trap_UnlinkEntity( ent );
+
+		if ( ent->health <= 0 && !( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+
+		VectorCopy( ent->r.currentOrigin, targetEye );
+		targetEye[2] += ent->client->ps.viewheight;
+
+		if ( !trap_InPVS( attackerEye, targetEye ) ) {
+			continue;
+		}
+
+		if(ent->r.linked){
+			trap_UnlinkEntity( ent );
+		}
+        
     }
 }
  
@@ -2024,12 +2061,29 @@ void UnlinkPlayerBodies( gentity_t *skip ) {
 void LinkPlayerBodies( gentity_t *skip ) {
     int i;
     gentity_t *ent;
+	vec3_t attackerEye, targetEye;
+
+	VectorCopy( skip->r.currentOrigin, attackerEye );
+	attackerEye[2] += skip->client->ps.viewheight;
  
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
         if ( ent == skip || !ent->client ) {
             continue;
         }
+       if ( ent->health <= 0 && ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+		if ( ent->client->ps.pm_type == PM_SPECTATOR ) {
+			continue;
+		}
+
+		VectorCopy( ent->r.currentOrigin, targetEye );
+		targetEye[2] += ent->client->ps.viewheight;
+
+		if ( !trap_InPVS( attackerEye, targetEye ) ) {
+			continue;
+		}
         trap_LinkEntity( ent );
     }
 }
@@ -2162,6 +2216,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	if ( traceEnt->takedamage && traceEnt->client ) {
 		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
 		tent->s.eventParm = traceEnt->s.number;
+		tent->s.pos.trTime = level.time;
 		if ( LogAccuracyHit( traceEnt, attacker ) && g_gamestate.integer == GS_PLAYING) {
 			attacker->client->ps.persistant[PERS_ACCURACY_HITS]++;
 			attacker->client->sess.stats.acc_hits++;

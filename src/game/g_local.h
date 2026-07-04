@@ -184,7 +184,7 @@ void G_Script_ScriptEvent( gentity_t *ent, char *eventStr, char *params );
 
 #define CFOFS( x ) ( (int)&( ( (gclient_t *)0 )->x ) )
 
-#define MAX_PLAYER_CAPSULES 12
+#define MAX_PLAYER_CAPSULES 13
 
 struct gentity_s {
 	entityState_t s;                // communicated by server to clients
@@ -1615,7 +1615,7 @@ extern vmCvar_t g_rocketDamageMultiplier;
 //capsule radius debugging cvars
 extern vmCvar_t g_debugHitboxes;
 extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
-extern vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
+extern vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11, g_cr12;
 
 //omnibot stuff
 extern vmCvar_t g_OmniBotPath;
@@ -1630,6 +1630,7 @@ extern vmCvar_t g_ospmode;
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );
+int     trap_Microseconds( void );
 int     trap_Argc( void );
 void    trap_Argv( int n, char *buffer, int bufferLength );
 void    trap_Args( char *buffer, int bufferLength );

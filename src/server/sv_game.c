@@ -321,6 +321,8 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 		return 0;
 	case G_MILLISECONDS:
 		return Sys_Milliseconds();
+	case G_MICROSECONDS:
+		return Sys_Microseconds();
 	case G_CVAR_REGISTER:
 		Cvar_Register( VMA( 1 ), (const char*)VMA( 2 ), (const char*)VMA( 3 ), args[4] );
 		return 0;
@@ -332,6 +334,8 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 		return 0;
 	case G_CVAR_VARIABLE_INTEGER_VALUE:
 		return Cvar_VariableIntegerValue( (const char *)VMA( 1 ) );
+	case G_CVAR_VARIABLE_VALUE:
+		return FloatAsInt(Cvar_VariableValue( (const char *)VMA( 1 ) ));
 	case G_CVAR_VARIABLE_STRING_BUFFER:
 		Cvar_VariableStringBuffer((const char*)VMA( 1 ), (char*)VMA( 2 ), args[3] );
 		return 0;
