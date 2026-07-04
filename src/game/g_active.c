@@ -746,6 +746,7 @@ static void G_PlayerAnimation(gentity_t *ent){
 	li->torsoFrame = lfTorso->frame;
 	li->oldTorsoFrame = lfTorso->oldFrame;
 	li->torsoBacklerp = lfTorso->backlerp;
+	li->modelHandle = ent->client->sess.sessionTeam == TEAM_RED ? level.axisTorsoModel : level.alliesTorsoModel;
 }
 
 void limbo( gentity_t *ent, qboolean makeCorpse ); // JPW NERVE

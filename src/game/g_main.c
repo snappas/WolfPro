@@ -230,7 +230,7 @@ vmCvar_t g_rocketDamageMultiplier;
 //capsule radius debugging
 vmCvar_t g_debugHitboxes;
 vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
-vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
+vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11, g_cr12;
 
 vmCvar_t g_OmniBotPath;
 vmCvar_t g_OmniBotEnable;
@@ -423,7 +423,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_headMinZ, "g_headMinZ", "0", CVAR_ARCHIVE, 0, qfalse },
 	{ &g_headMaxX, "g_headMaxX", "6", CVAR_ARCHIVE, 0, qfalse },
 	{ &g_headMaxY, "g_headMaxY", "6", CVAR_ARCHIVE, 0, qfalse },
-	{ &g_headMaxZ, "g_headMaxZ", "13.75", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_headMaxZ, "g_headMaxZ", "12", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
 	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },
@@ -440,17 +440,18 @@ cvarTable_t gameCvarTable[] = {
 	//capsule radius debugging
 	{ &g_debugHitboxes, "g_debugHitboxes", "0", CVAR_CHEAT, 0, qfalse },
 	{ &g_cr0,  "g_cr0",  "1.0", CVAR_CHEAT, 0, qfalse }, //pelvis
-	{ &g_cr1,  "g_cr1",  "8.2", CVAR_CHEAT, 0, qfalse }, //torso
-	{ &g_cr2,  "g_cr2",  "7.0", CVAR_CHEAT, 0, qfalse }, //L thigh
-	{ &g_cr3,  "g_cr3",  "7.0", CVAR_CHEAT, 0, qfalse }, //L calf
-	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //R thigh
-	{ &g_cr5,  "g_cr5",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
-	{ &g_cr6,  "g_cr6",  "4.0", CVAR_CHEAT, 0, qfalse }, //L foot
-	{ &g_cr7,  "g_cr7",  "4.0", CVAR_CHEAT, 0, qfalse }, //R foot
-	{ &g_cr8,  "g_cr8",  "4.5", CVAR_CHEAT, 0, qfalse }, //L upperarm
-	{ &g_cr9,  "g_cr9",  "3.0", CVAR_CHEAT, 0, qfalse }, //L forearm
-	{ &g_cr10, "g_cr10", "4.5", CVAR_CHEAT, 0, qfalse }, //R upperarm
-	{ &g_cr11, "g_cr11", "3.0", CVAR_CHEAT, 0, qfalse }, //R forearm
+	{ &g_cr1,  "g_cr1",  "9.0", CVAR_CHEAT, 0, qfalse }, //back
+	{ &g_cr2,  "g_cr2",  "12.5", CVAR_CHEAT, 0, qfalse }, //torso
+	{ &g_cr3,  "g_cr3",  "7.0", CVAR_CHEAT, 0, qfalse }, //L thigh
+	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //L calf
+	{ &g_cr5,  "g_cr5",  "7.0", CVAR_CHEAT, 0, qfalse }, //R thigh
+	{ &g_cr6,  "g_cr6",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
+	{ &g_cr7,  "g_cr7",  "4.0", CVAR_CHEAT, 0, qfalse }, //L foot
+	{ &g_cr8,  "g_cr8",  "4.0", CVAR_CHEAT, 0, qfalse }, //R foot
+	{ &g_cr9,  "g_cr9",  "6.0", CVAR_CHEAT, 0, qfalse }, //L upperarm
+	{ &g_cr10, "g_cr10", "3.0", CVAR_CHEAT, 0, qfalse }, //L forearm
+	{ &g_cr11, "g_cr11", "6.0", CVAR_CHEAT, 0, qfalse }, //R upperarm
+	{ &g_cr12, "g_cr12", "3.0", CVAR_CHEAT, 0, qfalse }, //R forearm
 
 	{ &g_OmniBotPath,               "omnibot_path",                 "./wolfpro/omni-bot",   CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotEnable,             "omnibot_enable",               "1",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
