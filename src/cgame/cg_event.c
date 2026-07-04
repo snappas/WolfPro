@@ -1375,7 +1375,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 	event = es->event & ~EV_EVENT_BITS;
 
 	if ( cg_debugEvents.integer ) {
-		CG_Printf( "ent:%3i  event:%3i ", es->number, event );
+		CG_Printf( "ent:%3i  event:%3i time: %d ", es->number, event, cg.time );
 		CG_PrintEntityState(es);
 	}
 

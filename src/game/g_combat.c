@@ -1638,6 +1638,7 @@ void G_Hitsounds( gentity_t *target, gentity_t *attacker, int mod, qboolean head
 			te = G_TempEntity(attacker->s.pos.trBase, EV_GLOBAL_CLIENT_SOUND);
 			te->s.eventParm = G_SoundIndex("sound/hitsounds/hitteam1.wav");
 			te->s.teamNum = attacker->s.clientNum;
+			te->s.pos.trTime = level.time;
 		}
 	}
 	// If enemy
@@ -1661,6 +1662,7 @@ void G_Hitsounds( gentity_t *target, gentity_t *attacker, int mod, qboolean head
 
 				int headStyle = attacker->client->pers.hitSoundHeadStyle;
 				te->s.eventParm = G_SoundIndex(G_GetHitsoundStyle(HITSOUND_HEAD, headStyle));
+				te->s.pos.trTime = level.time;
 			}
 		}
 		else 
@@ -1672,6 +1674,7 @@ void G_Hitsounds( gentity_t *target, gentity_t *attacker, int mod, qboolean head
 
 				int bodyStyle = attacker->client->pers.hitSoundBodyStyle;
 				te->s.eventParm = G_SoundIndex(G_GetHitsoundStyle(HITSOUND_BODY, bodyStyle));
+				te->s.pos.trTime = level.time;
 			}
 		}
 
