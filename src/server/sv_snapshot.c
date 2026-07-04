@@ -384,14 +384,6 @@ static void SV_AddEntitiesVisibleFromPoint( const vec3_t origin, clientSnapshot_
 			continue;
 		}
 
-		if((ent->r.svFlags & SVF_VISDUMMY ) || (ent->r.svFlags & SVF_VISDUMMY_MULTIPLE ) ){
-			for ( int h = 0 ; h < svs.currFrame->count; h++ ) {
-				int sharedEntNum = svs.currFrame->ents[ h ]->number;
-				if( sharedEntNum == ent->s.otherEntityNum){
-					SV_AddIndexToSnapshot( &sv.svEntities[ sharedEntNum ], h, eNums );
-				}
-			}
-		}
 
 		// ignore if not touching a PV leaf
 		// check area
@@ -432,6 +424,32 @@ static void SV_AddEntitiesVisibleFromPoint( const vec3_t origin, clientSnapshot_
 			} else {
 				continue;
 			}
+		}
+
+		if ( ent->r.svFlags & SVF_VISDUMMY ) {
+			for ( int h = 0; h < svs.currFrame->count; h++ ) {
+				if ( svs.currFrame->ents[h]->number == ent->s.otherEntityNum ) {
+					svEntity_t *master = &sv.svEntities[svs.currFrame->ents[h]->number];
+					if ( master->snapshotCounter != sv.snapshotCounter ) {
+						SV_AddIndexToSnapshot( master, h, eNums );
+					}
+					break;
+				}
+			}
+			continue;
+		}
+		if ( ent->r.svFlags & SVF_VISDUMMY_MULTIPLE ) {
+			for ( int h = 0; h < svs.currFrame->count; h++ ) {
+				entityState_t *candidate = svs.currFrame->ents[h];
+				sharedEntity_t *ment = SV_GentityNum( candidate->number );
+				if ( ment->s.otherEntityNum == ent->s.number ) {
+					svEntity_t *master = &sv.svEntities[candidate->number];
+					if ( master->snapshotCounter != sv.snapshotCounter ) {
+						SV_AddIndexToSnapshot( master, h, eNums );
+					}
+				}
+			}
+			continue;
 		}
 
 		// add it
