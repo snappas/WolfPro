@@ -1949,8 +1949,10 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
     gentity_t   *capsule;
 	vec3_t attackerEye, targetEye;
 
-	VectorCopy( skip->r.currentOrigin, attackerEye );
-	attackerEye[2] += skip->client->ps.viewheight;
+	if (skip != NULL) {
+		VectorCopy(skip->r.currentOrigin, attackerEye);
+		attackerEye[2] += skip->client->ps.viewheight;
+	}
 
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
@@ -1971,7 +1973,7 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
 		VectorCopy( ent->r.currentOrigin, targetEye );
 		targetEye[2] += ent->client->ps.viewheight;
 
-		if ( !trap_InPVS( attackerEye, targetEye ) ) {
+		if (skip != NULL && !trap_InPVS( attackerEye, targetEye ) ) {
 			continue;
 		}
         UpdatePlayerCapsules( ent );
@@ -2030,8 +2032,10 @@ void UnlinkPlayerBodies( gentity_t *skip ) {
     gentity_t *ent;
 	vec3_t attackerEye, targetEye;
 
-	VectorCopy( skip->r.currentOrigin, attackerEye );
-	attackerEye[2] += skip->client->ps.viewheight;
+	if(skip != NULL){
+		VectorCopy( skip->r.currentOrigin, attackerEye );
+		attackerEye[2] += skip->client->ps.viewheight;
+	}
  
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
@@ -2046,7 +2050,7 @@ void UnlinkPlayerBodies( gentity_t *skip ) {
 		VectorCopy( ent->r.currentOrigin, targetEye );
 		targetEye[2] += ent->client->ps.viewheight;
 
-		if ( !trap_InPVS( attackerEye, targetEye ) ) {
+		if (skip != NULL && !trap_InPVS( attackerEye, targetEye ) ) {
 			continue;
 		}
 
@@ -2063,8 +2067,10 @@ void LinkPlayerBodies( gentity_t *skip ) {
     gentity_t *ent;
 	vec3_t attackerEye, targetEye;
 
-	VectorCopy( skip->r.currentOrigin, attackerEye );
-	attackerEye[2] += skip->client->ps.viewheight;
+	if(skip != NULL){
+		VectorCopy( skip->r.currentOrigin, attackerEye );
+		attackerEye[2] += skip->client->ps.viewheight;
+	}
  
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
@@ -2081,7 +2087,7 @@ void LinkPlayerBodies( gentity_t *skip ) {
 		VectorCopy( ent->r.currentOrigin, targetEye );
 		targetEye[2] += ent->client->ps.viewheight;
 
-		if ( !trap_InPVS( attackerEye, targetEye ) ) {
+		if (skip != NULL && !trap_InPVS( attackerEye, targetEye ) ) {
 			continue;
 		}
         trap_LinkEntity( ent );
