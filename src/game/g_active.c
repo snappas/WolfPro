@@ -806,7 +806,12 @@ void ClientThink_real( gentity_t *ent ) {
 
 	client->unlag.frameOffset = trap_Milliseconds() - level.frameStartTime;
 	client->unlag.attackTime = ucmd->serverTime;
-	client->unlag.lastUpdateFrame = level.framenum;
+	int effectiveFrame = level.framenum;
+	if ( client->unlag.frameOffset > (1000 / sv_fps.integer) ) {
+		effectiveFrame++;
+	}
+	client->unlag.lastUpdateFrame = effectiveFrame;
+
 
 
 // JPW NERVE -- update counter for capture & hold display
@@ -1737,8 +1742,9 @@ void ClientEndFrame( gentity_t *ent ) {
 	if ( frames > 0 && g_smoothClients.integer ) {
 		// yep, missed one or more, so extrapolate the player's movement
 		G_PredictPlayerMove( ent, (float)frames / sv_fps.integer );
-		// save network bandwidth
-		SnapVector( ent->s.pos.trBase );
+		if ( g_ospmode.integer ) {
+			SnapVector( ent->s.pos.trBase );
+		}
 	}
 
 	// store the client's position for backward reconciliation later
