@@ -1092,17 +1092,13 @@ void ClientThink_real( gentity_t *ent ) {
 		ent->r.eventTime = level.time;
 	}
 
+	qboolean snap = (qboolean)g_ospmode.integer;
+
 	if(CheckAntilagConditions(ent)){
-		if(g_ospmode.integer){
-			BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qfalse );
-		}else{
-			BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qtrue );
-		}
+		BG_PlayerStateToEntityState(&ent->client->ps, &ent->s, level.time, snap);
 	}else{
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qtrue );
+		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, snap );
 	}
-	
-	
 
 	if ( !( ent->client->ps.eFlags & EF_FIRING ) ) {
 		client->fireHeld = qfalse;      // for grapple
@@ -1136,9 +1132,6 @@ void ClientThink_real( gentity_t *ent ) {
 	if ( !ent->client->noclip ) {
 		G_TouchTriggers( ent );
 	}
-
-	// NOTE: now copy the exact origin over otherwise clients can be snapped into solid
-	VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
 
 	// touch other objects
 	ClientImpacts( ent, &pm );
@@ -1697,11 +1690,11 @@ void ClientEndFrame( gentity_t *ent ) {
 	G_SetClientSound( ent );
 
 	// set the latest infor
-
+    qboolean snap = (qboolean)g_ospmode.integer;
 	if(CheckAntilagConditions(ent)){
-		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, qfalse );
+		BG_PlayerStateToEntityState( &ent->client->ps, &ent->s, level.time, snap );
 	}else{
-		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, qfalse );
+		BG_PlayerStateToEntityStateExtraPolate( &ent->client->ps, &ent->s, ent->client->ps.commandTime, snap );
 	}
 	
 	// DHM - Nerve :: If it's been a couple frames since being revived, and props_frame_state
