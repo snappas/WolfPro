@@ -646,16 +646,6 @@ typedef struct {
 	int deathYaw;
 } clientPersistant_t;
 
-typedef struct {
-	vec3_t mins;
-	vec3_t maxs;
-
-	vec3_t origin;
-
-	int time;
-	int servertime;
-} clientMarker_t;
-
 typedef struct animationInfo_s {
 	lerpInfo_t lerpInfo;
 	lerpFrame_t torso;
@@ -663,14 +653,12 @@ typedef struct animationInfo_s {
 	vec3_t lerpOrigin;
 } animationInfo_t;
 
-#define MAX_CLIENT_MARKERS 10
-
 #define LT_SPECIAL_PICKUP_MOD   3       // JPW NERVE # of times (minus one for modulo) LT must drop ammo before scoring a point
 #define MEDIC_SPECIAL_PICKUP_MOD    4   // JPW NERVE same thing for medic
 
 //unlagged - backward reconciliation #1
 // the size of history we'll keep
-#define NUM_CLIENT_HISTORY 17
+#define NUM_CLIENT_HISTORY 64
 
 // everything we need to know to backward reconcile
 typedef struct {
@@ -790,11 +778,6 @@ struct gclient_s {
 	int lastBurnTime;         // JPW NERVE last time index for flamethrower burn
 	int PCSpecialPickedUpCount;         // JPW NERVE used to count # of times somebody's picked up this LTs ammo (or medic health) (for scoring)
 	int saved_persistant[MAX_PERSISTANT];           // DHM - Nerve :: Save ps->persistant here during Limbo
-
-	// g_antilag.c
-	int topMarker;
-	clientMarker_t clientMarkers[MAX_CLIENT_MARKERS];
-	clientMarker_t backupMarker;
 
 	gentity_t       *tempHead;  // Gordon: storing a temporary head for bullet head shot detection
 
@@ -1856,11 +1839,6 @@ typedef enum
 } shards_t;
 
 #define BODY_TEAM( ENT ) ENT->s.modelindex
-
-// g_antilag.c
-void G_StoreClientPosition( gentity_t* ent );
-void G_HistoricalTrace( gentity_t* ent, trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passEntityNum, int contentmask );
-void G_ResetMarkers( gentity_t* ent );
 
 
 // Pause
