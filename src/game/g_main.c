@@ -229,8 +229,9 @@ vmCvar_t g_rocketDamageMultiplier;
 
 //capsule radius debugging
 vmCvar_t g_debugHitboxes;
-vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
-vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11, g_cr12;
+vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4;
+
+vmCvar_t g_capsuleScale;
 
 vmCvar_t g_OmniBotPath;
 vmCvar_t g_OmniBotEnable;
@@ -439,19 +440,14 @@ cvarTable_t gameCvarTable[] = {
 
 	//capsule radius debugging
 	{ &g_debugHitboxes, "g_debugHitboxes", "0", CVAR_CHEAT, 0, qfalse },
-	{ &g_cr0,  "g_cr0",  "1.0", CVAR_CHEAT, 0, qfalse }, //pelvis
-	{ &g_cr1,  "g_cr1",  "9.0", CVAR_CHEAT, 0, qfalse }, //back
-	{ &g_cr2,  "g_cr2",  "12.5", CVAR_CHEAT, 0, qfalse }, //torso
-	{ &g_cr3,  "g_cr3",  "7.0", CVAR_CHEAT, 0, qfalse }, //L thigh
-	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //L calf
-	{ &g_cr5,  "g_cr5",  "7.0", CVAR_CHEAT, 0, qfalse }, //R thigh
-	{ &g_cr6,  "g_cr6",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
-	{ &g_cr7,  "g_cr7",  "4.0", CVAR_CHEAT, 0, qfalse }, //L foot
-	{ &g_cr8,  "g_cr8",  "4.0", CVAR_CHEAT, 0, qfalse }, //R foot
-	{ &g_cr9,  "g_cr9",  "6.0", CVAR_CHEAT, 0, qfalse }, //L upperarm
-	{ &g_cr10, "g_cr10", "3.0", CVAR_CHEAT, 0, qfalse }, //L forearm
-	{ &g_cr11, "g_cr11", "6.0", CVAR_CHEAT, 0, qfalse }, //R upperarm
-	{ &g_cr12, "g_cr12", "3.0", CVAR_CHEAT, 0, qfalse }, //R forearm
+
+	{ &g_cr0,  "g_cr0",  "15.0", CVAR_CHEAT, 0, qfalse }, //torso
+	{ &g_cr1,  "g_cr1",  "7.0", CVAR_CHEAT, 0, qfalse }, //L thigh
+	{ &g_cr2,  "g_cr2",  "7.0", CVAR_CHEAT, 0, qfalse }, //L calf
+	{ &g_cr3,  "g_cr3",  "7.0", CVAR_CHEAT, 0, qfalse }, //R thigh
+	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
+
+	{ &g_capsuleScale, "g_capsuleScale", "1.0", CVAR_ARCHIVE, 0, qtrue },
 
 	{ &g_OmniBotPath,               "omnibot_path",                 "./wolfpro/omni-bot",   CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotEnable,             "omnibot_enable",               "1",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },

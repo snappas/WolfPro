@@ -1719,19 +1719,18 @@ typedef struct {
 } capsuleDef_t;
 
 static const capsuleDef_t s_capsuleDefs[MAX_PLAYER_CAPSULES] = {
-	{  0,  1,  1.0f,  "Pelvis"      },  /* Bip01 Pelvis     -> Bip01 Spine     0 */
-    {  4, 51,  9.0f,  "Back"        },  /* Bip01 Spine3     -> tag_back   1*/
-	{  1,  4, 12.5f,  "Torso"       },  /* Bip01 Spine      -> tag_head     2*/
-    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    3 */
-	{ 59, 60,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot   4 */
-    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   5 */
-	{ 65, 66,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   6  */
-    { 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   7  */
-    { 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    8 */
-    { 10, 11,  6.0f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 9 */
-    { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  10   */
-    { 31, 32,  6.0f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 11 */
-    { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  12  */
+    //{  4, 51,  9.0f,  "Back"        },  /* Bip01 Spine3     -> tag_back   1*/
+	{  1,  4, 15.0f,  "Torso"       },  /* Bip01 Spine      -> tag_head     0*/
+    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    1 */
+	{ 59, 61,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot   2 */
+    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   3 */
+	{ 65, 67,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   4  */
+    //{ 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   7  */
+    //{ 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    8 */
+    // { 10, 11,  6.0f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 5 */
+    // { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  6   */
+    // { 31, 32,  6.0f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 7 */
+    // { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  8  */
 };
 
 
@@ -1747,8 +1746,6 @@ static void UpdateCapsulePosition( gentity_t *capsule, const vec3_t startPos,
 
 	vec3_t  delta, midpoint, angles;
     float   length, half_length;
-	VectorCopy( startPos, capsule->s.origin );
-	VectorCopy( endPos, capsule->s.origin2 );
 
     /* Midpoint becomes the entity origin */
     VectorAdd( startPos, endPos, midpoint );
@@ -1883,8 +1880,15 @@ because traces are processed sequentially on the server.
 void UpdatePlayerCapsules( gentity_t *ent ) {
     int         i;
     vec3_t      startPos, endPos;
+    vec3_t      rotatedStart, rotatedEnd;
     gentity_t   *capsule;
     lerpInfo_t  *li;
+    float       radius;
+    int         encodedRadius;
+
+	vmCvar_t *g_cr[MAX_PLAYER_CAPSULES] = {
+        &g_cr0,  &g_cr1,  &g_cr2,  &g_cr3, &g_cr4
+    };
 
     if ( !ent->client ) {
         return;
@@ -1903,9 +1907,7 @@ void UpdatePlayerCapsules( gentity_t *ent ) {
         if ( !trap_GetBone( s_capsuleDefs[i].endBone, endPos, li ) ) {
             continue;
         }
-        
 
-		vec3_t rotatedStart, rotatedEnd;
 		VectorCopy( ent->r.currentOrigin, rotatedStart );
 		for ( int j = 0; j < 3; j++ ) {
 			VectorMA( rotatedStart, startPos[j], li->legsAxis[j], rotatedStart );
@@ -1919,19 +1921,22 @@ void UpdatePlayerCapsules( gentity_t *ent ) {
 		VectorCopy( rotatedStart, startPos );
 		VectorCopy( rotatedEnd, endPos );
 
-		if(g_debugHitboxes.integer == 0){
-			UpdateCapsulePosition( capsule, startPos, endPos, s_capsuleDefs[i].radius );
-		}else{
-			//debugging cvars
-			float radii[MAX_PLAYER_CAPSULES] = {
-				trap_Cvar_VariableValue("g_cr0"),  trap_Cvar_VariableValue("g_cr1"),  trap_Cvar_VariableValue("g_cr2"),  trap_Cvar_VariableValue("g_cr3"),
-				trap_Cvar_VariableValue("g_cr4"),  trap_Cvar_VariableValue("g_cr5"),  trap_Cvar_VariableValue("g_cr6"),  trap_Cvar_VariableValue("g_cr7"),
-				trap_Cvar_VariableValue("g_cr8"),  trap_Cvar_VariableValue("g_cr9"),  trap_Cvar_VariableValue("g_cr10"), trap_Cvar_VariableValue("g_cr11"),
-				trap_Cvar_VariableValue("g_cr12")
-			};
-			UpdateCapsulePosition( capsule, startPos, endPos, radii[i] );
-		}
+        if ( g_debugHitboxes.integer ) {
+            radius = g_cr[i]->value;
+        } else {
+            radius = s_capsuleDefs[i].radius;
+        }
+        radius *= g_capsuleScale.value;
+
+        UpdateCapsulePosition( capsule, startPos, endPos, radius );
 		
+		// encode bone endpoints for visualization
+		VectorCopy( startPos, capsule->s.origin );
+		VectorCopy( endPos,   capsule->s.origin2 );
+
+		// encode radius for visualization
+        Com_Memcpy( &encodedRadius, &radius, sizeof( int ) );
+        capsule->s.dl_intensity = encodedRadius;
     }
 }
 
