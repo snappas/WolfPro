@@ -1786,8 +1786,6 @@ animModelInfo_t *BG_ModelInfoForModelname( char *modelname );
 qboolean BG_AnimParseAnimConfig( animModelInfo_t *animModelInfo, const char *filename, const char *input );
 void BG_AnimParseAnimScript( animModelInfo_t *modelInfo, animScriptData_t *scriptData, int client, char *filename, char *input );
 int BG_AnimScriptAnimation( playerState_t *ps, aistateEnum_t state, scriptAnimMoveTypes_t movetype, qboolean isContinue );
-int BG_AnimScriptCannedAnimation( playerState_t *ps, aistateEnum_t state );
-int BG_AnimScriptStateChange( playerState_t *ps, aistateEnum_t newState, aistateEnum_t oldState );
 int BG_AnimScriptEvent( playerState_t *ps, scriptAnimEventTypes_t event, qboolean isContinue, qboolean force );
 int BG_IndexForString( char *token, animStringItem_t *strings, qboolean allowFail );
 int BG_PlayAnimName( playerState_t *ps, char *animName, animBodyPart_t bodyPart, qboolean setTimer, qboolean isContinue, qboolean force );
@@ -1800,7 +1798,6 @@ void BG_AnimUpdatePlayerStateConditions( pmove_t *pmove );
 int BG_AnimationIndexForString( char *string, int client );
 animation_t *BG_AnimationForString( char *string, animModelInfo_t *modelInfo );
 animation_t *BG_GetAnimationForIndex( int client, int index );
-int BG_GetAnimScriptEvent( playerState_t *ps, scriptAnimEventTypes_t event );
 
 void BG_SetLerpFrameAnimation(int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf, int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame);
 void BG_RunLerpFrame(int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf, int time, int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame);
