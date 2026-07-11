@@ -210,6 +210,7 @@ vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
 
 vmCvar_t g_preciseHeadHitbox;
+vmCvar_t g_preciseBodyBox;
 vmCvar_t g_headMinX;
 vmCvar_t g_headMinY;
 vmCvar_t g_headMinZ;
@@ -419,6 +420,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_mapScriptDirectory, "g_mapScriptDirectory", "", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &g_preciseHeadHitbox, "g_preciseHeadHitbox", "1", CVAR_ARCHIVE, 0, qfalse },
+	{ &g_preciseBodyBox, "g_preciseBodyBox", "1", 0, 0, qfalse },
 	{ &g_headMinX, "g_headMinX", "-6", CVAR_ARCHIVE, 0, qfalse },
 	{ &g_headMinY, "g_headMinY", "-6", CVAR_ARCHIVE, 0, qfalse },
 	{ &g_headMinZ, "g_headMinZ", "0", CVAR_ARCHIVE, 0, qfalse },
@@ -2951,6 +2953,7 @@ void G_RunFrame( int levelTime ) {
 	if(g_debugBullets.integer == 1){
 		RemoveHeadEntities(NULL);
 		RemovePlayerCapsules(NULL);
+		RemoveBodyEntities(NULL);
 	}
 
 	// if we are waiting for the level to restart, do nothing
@@ -3181,7 +3184,12 @@ void G_RunFrame( int levelTime ) {
 	}
 	if(g_debugBullets.integer == 1){
 		AddHeadEntities(NULL, CONTENTS_CORPSE, 0);
-		AddPlayerCapsules(NULL, CONTENTS_CORPSE, 0);
+		if(g_preciseBodyBox.integer) {
+			AddPlayerCapsules(NULL, CONTENTS_CORPSE, 0);
+        }else{
+            AddBodyEntities(NULL, CONTENTS_CORPSE, 0);
+        }
+
 	}
 	
 

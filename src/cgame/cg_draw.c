@@ -499,6 +499,43 @@ void CG_DrawBBox(centity_t *cent){
 		return;
 	}
 
+	if ( cent->currentState.otherEntityNum2 == HITBOX_BODY_BOX ) {
+        vec3_t mins, maxs, diff;
+        vec3_t v1, v2, v3, v4, v5, v6;
+        clientInfo_t *ci = NULL;
+ 
+        /* Use s.origin/s.origin2 which we set to player origin + mins/maxs */
+        VectorCopy( cent->currentState.origin,  mins );
+        VectorCopy( cent->currentState.origin2, maxs );
+        VectorSubtract( maxs, mins, diff );
+ 
+        /* Draw 12 edges of the bounding box */
+        VectorCopy( mins, v1 ); v1[0] += diff[0];
+        VectorCopy( mins, v2 ); v2[1] += diff[1];
+        VectorCopy( mins, v3 ); v3[2] += diff[2];
+ 
+        CG_RailTrail2( ci, mins, v1 );
+        CG_RailTrail2( ci, mins, v2 );
+        CG_RailTrail2( ci, mins, v3 );
+ 
+        VectorCopy( maxs, v4 ); v4[0] -= diff[0];
+        VectorCopy( maxs, v5 ); v5[1] -= diff[1];
+        VectorCopy( maxs, v6 ); v6[2] -= diff[2];
+ 
+        CG_RailTrail2( ci, maxs, v4 );
+        CG_RailTrail2( ci, maxs, v5 );
+        CG_RailTrail2( ci, maxs, v6 );
+ 
+        CG_RailTrail2( ci, v2, v6 );
+        CG_RailTrail2( ci, v6, v1 );
+        CG_RailTrail2( ci, v1, v5 );
+        CG_RailTrail2( ci, v2, v4 );
+        CG_RailTrail2( ci, v4, v3 );
+        CG_RailTrail2( ci, v3, v5 );
+        return;
+    }
+
+
 	VectorCopy(cent->currentState.origin, start);
 	VectorCopy(cent->currentState.origin2, end);
 

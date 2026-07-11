@@ -1564,6 +1564,19 @@ void UpdateHeadPosition(gentity_t *ent){
 	VectorCopy( b1, head->s.origin );
 }
 
+void UpdateBodyPosition( gentity_t *ent ) {
+    gentity_t *body = ent->bodyBBox;
+	G_SetOrigin( body, ent->r.currentOrigin );
+
+	vec3_t b1, b2;
+	VectorCopy( ent->r.currentOrigin, b1 );
+	VectorCopy( ent->r.currentOrigin, b2 );
+	VectorAdd( b1, ent->r.mins, b1 );
+	VectorAdd( b2, ent->r.maxs, b2 );
+	VectorCopy( b2, body->s.origin2 );
+	VectorCopy( b1, body->s.origin );
+}
+
 void AddHeadEntities(gentity_t* skip, int content, int mask){
 	gentity_t* ent;
 
@@ -1583,27 +1596,44 @@ void AddHeadEntities(gentity_t* skip, int content, int mask){
 	}
 }
 
-void RemoveHeadEntity(gentity_t* ent) {
-	if (ent && ent->client && ent->headBBox)
-	{
-		if (ent->headBBox->r.linked)
-		{
-			ent->isHeadshot = qfalse;
-			trap_UnlinkEntity(ent->headBBox);
-		}
-	}
+void AddBodyEntities( gentity_t *skip, int content, int mask ) {
+    gentity_t *ent;
+ 
+    for (int i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+        if ( ent == skip ) {
+            continue;
+        }
+        if ( ent->bodyBBox ) {
+            UpdateBodyPosition( ent );
+            ent->bodyBBox->r.contents  = content;
+            ent->bodyBBox->clipmask    = mask;
+            trap_LinkEntity( ent->bodyBBox );
+        }
+    }
 }
 
 void FreeHeadEntity(gentity_t* ent){
 	if (ent && ent->client && ent->headBBox)
 	{
-		RemoveHeadEntity(ent);
+		if (ent->headBBox->r.linked) {
+			ent->isHeadshot = qfalse;
+			trap_UnlinkEntity(ent->headBBox);
+		}
 		G_FreeEntity(ent->headBBox);
 		ent->headBBox = NULL;
 	}
 }
 
-
+void FreeBodyEntity( gentity_t *ent ) {
+    if ( ent && ent->client && ent->bodyBBox ) {
+        if ( ent->bodyBBox->r.linked ) {
+            trap_UnlinkEntity( ent->bodyBBox );
+        }
+        G_FreeEntity( ent->bodyBBox );
+        ent->bodyBBox = NULL;
+    }
+}
 
 void RemoveHeadEntities(gentity_t* skip){
 	gentity_t* ent;
@@ -1615,9 +1645,34 @@ void RemoveHeadEntities(gentity_t* skip){
 			continue;
 		}
 
-		RemoveHeadEntity(ent);
+		if (ent && ent->client && ent->headBBox) {
+			if (ent->headBBox->r.linked) {
+				ent->isHeadshot = qfalse;
+				trap_UnlinkEntity(ent->headBBox);
+			}
+		}
 	}
 }
+
+void RemoveBodyEntities( gentity_t *skip ) {
+    gentity_t *ent;
+ 
+    for (int i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+
+        if ( ent == skip ) {
+            continue;
+        }
+
+        if ( ent && ent->client && ent->bodyBBox ) {
+            if ( ent->bodyBBox->r.linked ) {
+                trap_UnlinkEntity( ent->bodyBBox );
+            }
+        }
+    }
+}
+
+ 
 
 /*
 ===========================================================================
@@ -1832,6 +1887,20 @@ void InitHeadHitbox(gentity_t *ent, int clientNum){
 	
 	head->s.otherEntityNum = clientNum;
 	head->r.ownerNum = clientNum;
+}
+
+void InitBodyHitbox( gentity_t *ent, int clientNum ) {
+    ent->bodyBBox = G_Spawn();
+    gentity_t *body = ent->bodyBBox;
+ 
+    body->s.eType           = ET_TEMPHEAD;
+	body->s.otherEntityNum2 = HITBOX_BODY_BOX;
+    body->r.contents        = 0;
+    body->clipmask          = 0;
+    body->classname         = "Body";
+
+    body->s.otherEntityNum  = clientNum;
+    body->r.ownerNum        = clientNum;
 }
 
 
@@ -2124,16 +2193,23 @@ void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 		G_DoTimeShiftFor(ent);
 	}
 
-	UnlinkPlayerBodies(ent);
+    if (g_preciseBodyBox.integer) {
+        // unlink client, use capsules
+        UnlinkPlayerBodies( ent );
+        AddPlayerCapsules( ent, CONTENTS_BODY, MASK_PLAYERSOLID );
+    } else {
+        // client ent is already linked
+    }
 	AddHeadEntities(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
-	AddPlayerCapsules(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
 
 	Bullet_Endpos( ent, spread, &end );
 	Bullet_Fire_Extended( ent, ent, muzzleTrace, end, spread, damage );
 
 	RemoveHeadEntities(ent);
-	RemovePlayerCapsules( ent );
-	LinkPlayerBodies(ent);
+    if (g_preciseBodyBox.integer) {
+        RemovePlayerCapsules( ent );
+        LinkPlayerBodies( ent );
+    }
 
 	if(CheckAntilagConditions(ent)){
 		G_UndoTimeShiftFor(ent);
@@ -2195,9 +2271,6 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	if(traceEnt->s.eType == ET_TEMPHEAD &&
 		traceEnt->s.otherEntityNum2 == HITBOX_HEAD &&
 		g_entities[traceEnt->r.ownerNum].client){
-		if(g_debugBullets.integer > 0){
-			G_Printf("Hit %s\n", traceEnt->classname);
-		}
 		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
 		if(traceEnt->health <= 0){
 			traceEnt = &g_entities[ tr.entityNum ];
@@ -2207,11 +2280,12 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	}else if (traceEnt->s.eType == ET_TEMPHEAD &&
 				traceEnt->s.otherEntityNum2 == HITBOX_BODY &&
 				g_entities[traceEnt->r.ownerNum].client){
-		if(g_debugBullets.integer > 0){
-			G_Printf("Hit %s\n", traceEnt->classname);
-		}
         traceEnt = &g_entities[ traceEnt->r.ownerNum ];
     }
+
+	if (g_debugBullets.integer > 0) {
+		G_Printf("Hit %s\n", traceEnt->classname);
+	}
 
 	EmitterCheck( traceEnt, attacker, &tr );
 

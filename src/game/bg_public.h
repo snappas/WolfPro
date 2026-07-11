@@ -1361,6 +1361,7 @@ qboolean    BG_CanItemBeGrabbed( const entityState_t *ent, const playerState_t *
 typedef enum {
 	HITBOX_HEAD,
 	HITBOX_BODY,
+	HITBOX_BODY_BOX,
 	NUM_HITBOXES
 } hitbox_t;
 

@@ -423,6 +423,7 @@ struct gentity_s {
 	qboolean	moreCalled;
 
 	gentity_t *headBBox;
+	gentity_t *bodyBBox;
 	qboolean isHeadshot;
 
 	gentity_t *bodyCapsules[MAX_PLAYER_CAPSULES];
@@ -1578,6 +1579,7 @@ extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
 
 extern vmCvar_t g_preciseHeadHitbox;
+extern vmCvar_t g_preciseBodyBox;
 extern vmCvar_t g_headMinX;
 extern vmCvar_t g_headMinY;
 extern vmCvar_t g_headMinZ;
@@ -1924,6 +1926,13 @@ void AddHeadEntities(gentity_t* skip, int content, int mask);
 void RemoveHeadEntities(gentity_t* skip);
 void FreeHeadEntity(gentity_t* ent);
 void UpdateHeadPosition(gentity_t *ent);
+
+void InitBodyHitbox( gentity_t *ent, int clientNum );
+void AddBodyEntities( gentity_t *skip, int content, int mask );
+void RemoveBodyEntities( gentity_t *skip );
+void FreeBodyEntity( gentity_t *ent );
+void UpdateBodyPosition( gentity_t *ent );
+
 
 void InitPlayerCapsules(gentity_t *ent, int clientNum);
 void AddPlayerCapsules(gentity_t *skip, int contents, int mask);
