@@ -583,3 +583,13 @@ void GLimp_LogComment( char *comment ) {
 		fprintf( glw_state.log_fp, "%s", comment );
 	}
 }
+
+void *GLimp_RendererSleep( void ) {
+	return NULL;
+}
+
+void GLimp_FrontEndSleep( void ) {
+}
+
+void GLimp_WakeRenderer( void *data ) {
+}

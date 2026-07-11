@@ -19,7 +19,7 @@ binaries-linux:
 
 binaries-linux64:
 	mkdir -p ../build64
-	cd ../build64 && cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_CLIENT=ON -DINSTALL_DEFAULT_BASEDIR=`pwd` .. && ninja
+	cd ../build64 && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_CLIENT=ON -DINSTALL_DEFAULT_BASEDIR=`pwd` .. && ninja
 	cd ../build64 && rm -rf CMakeCache.txt  CMakeFiles build.ninja cmake_install.cmake  librenderer.a
 
 build-pk3:
