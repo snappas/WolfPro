@@ -1,0 +1,200 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag/name (blank = auto-generate from date + commit)'
+        required: false
+        type: string
+
+jobs:
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            msvc_arch: x64
+            fetch_script: fetch-dependencies64.bat
+            deps_dir: deps64
+            build_server: 'ON'
+          - arch: x86
+            msvc_arch: x86
+            fetch_script: fetch-dependencies.bat
+            deps_dir: deps
+            build_server: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.deps_dir }}
+          key: windows-${{ matrix.arch }}-deps-${{ hashFiles(matrix.fetch_script) }}
+
+      - name: Fetch dependencies
+        shell: cmd
+        run: ${{ matrix.fetch_script }} vc14.3
+
+      - name: Configure
+        shell: cmd
+        run: >
+          cmake -B out\build\${{ matrix.arch }} -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DINSTALL_DEFAULT_BASEDIR=${{ github.workspace }}\ci-install\${{ matrix.arch }}
+          -DBUILD_CLIENT=ON -DBUILD_MOD=ON -DBUILD_SERVER=${{ matrix.build_server }}
+
+      - name: Build
+        shell: cmd
+        run: cmake --build out\build\${{ matrix.arch }} --config Release
+
+      - name: Install
+        shell: cmd
+        run: cmake --install out\build\${{ matrix.arch }} --config Release
+
+      - name: Copy runtime DLLs (curl, libjpeg — required next to the exe to run, not statically linked)
+        shell: pwsh
+        run: Copy-Item -Path "${{ matrix.deps_dir }}\bin\*.dll" -Destination "ci-install\${{ matrix.arch }}\"
+
+      - name: Remove per-arch pk3s (release uses the combined Linux-built pk3s instead)
+        shell: pwsh
+        run: Remove-Item -Path "ci-install\${{ matrix.arch }}\wolfpro\*.pk3" -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: ci-install/${{ matrix.arch }}/**
+          if-no-files-found: error
+
+  build-linux-and-server:
+    name: Build Linux + push server image
+    runs-on: ubuntu-latest
+    needs: build-windows
+    outputs:
+      pk3_date: ${{ steps.build.outputs.pk3_date }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          path: artifacts/windows-x64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x86
+          path: artifacts/windows-x86
+
+      - name: Determine Docker tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            echo "docker_tag=master" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker_tag=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Linux, package pk3s, build + push server image
+        id: build
+        env:
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_TAG: ${{ steps.tag.outputs.docker_tag }}
+          WIN_X64_DIR: ${{ github.workspace }}/artifacts/windows-x64
+          WIN_X86_DIR: ${{ github.workspace }}/artifacts/windows-x86
+        run: bash docker/ci-build-linux.sh
+
+      - name: Collect symbols
+        run: |
+          mkdir -p symbols-out
+          find artifacts/windows-x64 artifacts/windows-x86 -iname '*.pdb' -exec cp {} symbols-out/ \;
+
+      - name: Package Linux client
+        run: |
+          mkdir -p linux-client-out
+          find build64 -maxdepth 1 -iname 'wolfmp*' -type f -exec cp {} linux-client-out/ \;
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wolfpro-pk3s
+          path: build64/wolfpro/*.pk3
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-client
+          path: linux-client-out/**
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: symbols
+          path: symbols-out/**
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux-and-server]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Compute release tag
+        id: release
+        env:
+          PK3_DATE: ${{ needs.build-linux-and-server.outputs.pk3_date }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          if [ -n "$RELEASE_TAG_INPUT" ]; then
+            TAG="$RELEASE_TAG_INPUT"
+          elif [ "${{ github.ref_name }}" = "master" ]; then
+            TAG="build-${PK3_DATE}-${SHORT_SHA}"
+          else
+            TAG="dev-${PK3_DATE}-${SHORT_SHA}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([ "${{ github.ref_name }}" = "master" ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      - name: Zip release assets
+        env:
+          PK3_DATE: ${{ needs.build-linux-and-server.outputs.pk3_date }}
+        run: |
+          # windows-x64/x86 artifacts also contain a wolfpro/ subfolder with the
+          # mod DLLs+PDBs (needed by build-linux-and-server, not for players) —
+          # only take root-level exes and runtime DLLs (curl/libjpeg), never
+          # anything from wolfpro/ or any .pdb.
+          mkdir -p release-windows-x64 release-windows-x86
+          find artifacts/windows-x64 -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec cp {} release-windows-x64/ \;
+          find artifacts/windows-x86 -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec cp {} release-windows-x86/ \;
+
+          cd release-windows-x64 && zip -r "../windows-x64-${PK3_DATE}.zip" . && cd ..
+          cd release-windows-x86 && zip -r "../windows-x86-${PK3_DATE}.zip" . && cd ..
+          cd artifacts/linux-client && zip -r "../../linux-client-${PK3_DATE}.zip" . && cd ../..
+          cd artifacts/wolfpro-pk3s && zip -r "../../wolfpro-pk3s-${PK3_DATE}.zip" . && cd ../..
+          cd artifacts/symbols && zip -r "../../symbols-${PK3_DATE}.zip" . && cd ../..
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.tag }}
+          prerelease: ${{ steps.release.outputs.prerelease }}
+          files: |
+            windows-x64-${{ needs.build-linux-and-server.outputs.pk3_date }}.zip
+            windows-x86-${{ needs.build-linux-and-server.outputs.pk3_date }}.zip
+            linux-client-${{ needs.build-linux-and-server.outputs.pk3_date }}.zip
+            wolfpro-pk3s-${{ needs.build-linux-and-server.outputs.pk3_date }}.zip
+            symbols-${{ needs.build-linux-and-server.outputs.pk3_date }}.zip
