@@ -8,6 +8,17 @@
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 add_definitions("-DSOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
 
+# CMAKE_LIBRARY_ARCHITECTURE isn't reliably auto-detected in every container/
+# toolchain combination, which silently breaks find_package() calls (OpenGL,
+# SDL2, etc.) that rely on it to search Debian/Ubuntu's multiarch lib dirs.
+# Hint those dirs explicitly so neither MODULE-mode (find_library, e.g.
+# FindOpenGL/FindVulkan) nor CONFIG-mode (e.g. SDL2's sdl2-config.cmake)
+# searches depend on that detection.
+if(UNIX AND NOT APPLE)
+	list(APPEND CMAKE_LIBRARY_PATH /usr/lib/x86_64-linux-gnu /usr/lib/i386-linux-gnu)
+	list(APPEND CMAKE_PREFIX_PATH /usr/lib/x86_64-linux-gnu /usr/lib/i386-linux-gnu)
+endif()
+
 # set WOLF_DEBUG definition for debug build type
 # and set up properties to check if the build is visual studio or nmake on windows
 string(TOUPPER "${CMAKE_BUILD_TYPE}" buildtype_upper)

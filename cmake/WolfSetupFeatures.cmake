@@ -66,6 +66,13 @@ if(BUILD_CLIENT)
 
 
 	if(UNIX)
+		# CONFIG-mode find_package() doesn't consult CMAKE_LIBRARY_PATH, and its
+		# multiarch search pattern needs CMAKE_LIBRARY_ARCHITECTURE (unreliably
+		# auto-detected) to find /usr/lib/x86_64-linux-gnu/cmake/SDL2 — point
+		# SDL2_DIR at it directly if present, matching the CURL/OpenGL/Vulkan fix.
+		if(NOT SDL2_DIR AND EXISTS "/usr/lib/x86_64-linux-gnu/cmake/SDL2")
+			set(SDL2_DIR "/usr/lib/x86_64-linux-gnu/cmake/SDL2")
+		endif()
 		find_package(SDL2 REQUIRED)
 		target_link_libraries(client_libraries_vk INTERFACE  SDL2::SDL2)
 		target_link_libraries(client_libraries_gl INTERFACE  SDL2::SDL2)

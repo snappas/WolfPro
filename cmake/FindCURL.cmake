@@ -58,7 +58,7 @@ find_path(CURL_INCLUDE_DIR curl/curlver.h
 endif()
 if(UNIX)
 find_library(CURL_LIBRARY
-	NAMES ${CURL_NAMES} libcurl
+	NAMES ${CURL_NAMES} curl
 	PATHS
 	/usr/lib/x86_64-linux-gnu
 	/usr/lib/i386-linux-gnu/
