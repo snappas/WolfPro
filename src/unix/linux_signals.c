@@ -30,13 +30,13 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "../game/q_shared.h"
 #include "../qcommon/qcommon.h"
-#ifndef DEDICATED
-#include "../renderer_common/tr_local.h"
-#endif
 
 static qboolean signalcaught = qfalse;;
 
 void Sys_Exit( int ); // bk010104 - abstraction
+#ifndef DEDICATED
+void GLimp_Shutdown( void ); // shared by both renderer_gl and renderer_vk backends
+#endif
 
 static void signal_handler( int sig ) { // bk010104 - replace this... (NOTE TTimo huh?)
 	if ( signalcaught ) {
