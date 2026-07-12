@@ -33,6 +33,14 @@ jobs:
         with:
           arch: ${{ matrix.msvc_arch }}
 
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@37effcfa045411f8bfbbda26df2fd1b3bf3436fa # v1.6.0
+        with:
+          # 1.3.296.0 is the last Vulkan SDK release that ships x86 (32-bit)
+          # development libraries, needed for the x86 matrix leg's wolfmp_vk_x86.
+          vulkan_version: 1.3.296.0
+          cache: true
+
       - name: Cache dependencies
         uses: actions/cache@v4
         with:
