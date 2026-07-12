@@ -41,7 +41,7 @@ cp "${WIN_X64_DIR}/wolfpro/"*.dll "${RTCW_SRC}/build64/wolfpro/"
 cp "${WIN_X86_DIR}/wolfpro/"*.dll "${RTCW_SRC}/build64/wolfpro/"
 
 echo "== Packaging combined pk3s =="
-make -f "${RTCW_SRC}/src/makefile" build-pk3
+(cd "${RTCW_SRC}/src" && make -f makefile build-pk3)
 
 PK3_DATE=$(date +%Y%m%d)
 mv "${RTCW_SRC}/build64/wolfpro/wolfpro_bin.pk3" "${RTCW_SRC}/build64/wolfpro/wolfpro_bin-${PK3_DATE}.pk3"
