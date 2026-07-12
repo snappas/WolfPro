@@ -177,7 +177,7 @@ rem ***************************************************************************
 	cd "%ROOT_DEP_DIR%\libjpeg-turbo"
 	mkdir build
 	cd build
-	call cmake -G"%cmake_makefiles%" -A Win32  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release ..
+	call cmake -G"%cmake_makefiles%" -A Win32  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release -DWITH_TURBOJPEG=OFF ..
 	call "%PF%\%VC_PATH%\Common7\IDE\devenv.exe" libjpeg-turbo.sln /Build Release
 	call powershell "Get-ChildItem """..\src\*.h""" | copy-item -Destination """..\""
 	call powershell "Get-ChildItem """*.h""" | copy-item -Destination """..\""

@@ -41,6 +41,12 @@ cp "${WIN_X64_DIR}/wolfpro/"*.dll "${RTCW_SRC}/build64/wolfpro/"
 cp "${WIN_X86_DIR}/wolfpro/"*.dll "${RTCW_SRC}/build64/wolfpro/"
 
 echo "== Packaging combined pk3s =="
+# wolfpro_bin.pk3/wolfpro_server.pk3 already exist at this point (CMake's own
+# mod_pk3 target and make all's internal build-pk3 both created Linux-only
+# versions earlier). `zip -r` updates an existing archive rather than
+# recreating it, which risks a stale/corrupted archive across repeated
+# passes — start clean so this pass produces one correct combined pk3.
+rm -f "${RTCW_SRC}/build64/wolfpro/wolfpro_bin.pk3" "${RTCW_SRC}/build64/wolfpro/wolfpro_server.pk3"
 (cd "${RTCW_SRC}/src" && make -f makefile build-pk3)
 
 PK3_DATE=$(date +%Y%m%d)

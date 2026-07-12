@@ -187,9 +187,17 @@ jobs:
           # mod DLLs+PDBs (needed by build-linux-and-server, not for players) —
           # only take root-level exes and runtime DLLs (curl/libjpeg), never
           # anything from wolfpro/ or any .pdb.
-          mkdir -p release-windows-x64 release-windows-x86
+          mkdir -p release-windows-x64/wolfpro release-windows-x86/wolfpro
           find artifacts/windows-x64 -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec cp {} release-windows-x64/ \;
           find artifacts/windows-x86 -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec cp {} release-windows-x86/ \;
+
+          # Bundle a wolfpro/ dir with all 3 pk3s into each player-facing zip
+          # (windows-x64/x86, linux-client) so extracting one is a complete,
+          # ready-to-play install — redundant with wolfpro-pk3s.zip, by design.
+          cp artifacts/wolfpro-pk3s/*.pk3 release-windows-x64/wolfpro/
+          cp artifacts/wolfpro-pk3s/*.pk3 release-windows-x86/wolfpro/
+          mkdir -p artifacts/linux-client/wolfpro
+          cp artifacts/wolfpro-pk3s/*.pk3 artifacts/linux-client/wolfpro/
 
           cd release-windows-x64 && zip -r "../windows-x64-${PK3_DATE}.zip" . && cd ..
           cd release-windows-x86 && zip -r "../windows-x86-${PK3_DATE}.zip" . && cd ..
