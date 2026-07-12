@@ -1564,6 +1564,19 @@ void UpdateHeadPosition(gentity_t *ent){
 	VectorCopy( b1, head->s.origin );
 }
 
+void UpdateBodyPosition( gentity_t *ent ) {
+    gentity_t *body = ent->bodyBBox;
+	G_SetOrigin( body, ent->r.currentOrigin );
+
+	vec3_t b1, b2;
+	VectorCopy( ent->r.currentOrigin, b1 );
+	VectorCopy( ent->r.currentOrigin, b2 );
+	VectorAdd( b1, ent->r.mins, b1 );
+	VectorAdd( b2, ent->r.maxs, b2 );
+	VectorCopy( b2, body->s.origin2 );
+	VectorCopy( b1, body->s.origin );
+}
+
 void AddHeadEntities(gentity_t* skip, int content, int mask){
 	gentity_t* ent;
 
@@ -1583,27 +1596,44 @@ void AddHeadEntities(gentity_t* skip, int content, int mask){
 	}
 }
 
-void RemoveHeadEntity(gentity_t* ent) {
-	if (ent && ent->client && ent->headBBox)
-	{
-		if (ent->headBBox->r.linked)
-		{
-			ent->isHeadshot = qfalse;
-			trap_UnlinkEntity(ent->headBBox);
-		}
-	}
+void AddBodyEntities( gentity_t *skip, int content, int mask ) {
+    gentity_t *ent;
+ 
+    for (int i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+        if ( ent == skip ) {
+            continue;
+        }
+        if ( ent->bodyBBox ) {
+            UpdateBodyPosition( ent );
+            ent->bodyBBox->r.contents  = content;
+            ent->bodyBBox->clipmask    = mask;
+            trap_LinkEntity( ent->bodyBBox );
+        }
+    }
 }
 
 void FreeHeadEntity(gentity_t* ent){
 	if (ent && ent->client && ent->headBBox)
 	{
-		RemoveHeadEntity(ent);
+		if (ent->headBBox->r.linked) {
+			ent->isHeadshot = qfalse;
+			trap_UnlinkEntity(ent->headBBox);
+		}
 		G_FreeEntity(ent->headBBox);
 		ent->headBBox = NULL;
 	}
 }
 
-
+void FreeBodyEntity( gentity_t *ent ) {
+    if ( ent && ent->client && ent->bodyBBox ) {
+        if ( ent->bodyBBox->r.linked ) {
+            trap_UnlinkEntity( ent->bodyBBox );
+        }
+        G_FreeEntity( ent->bodyBBox );
+        ent->bodyBBox = NULL;
+    }
+}
 
 void RemoveHeadEntities(gentity_t* skip){
 	gentity_t* ent;
@@ -1615,9 +1645,34 @@ void RemoveHeadEntities(gentity_t* skip){
 			continue;
 		}
 
-		RemoveHeadEntity(ent);
+		if (ent && ent->client && ent->headBBox) {
+			if (ent->headBBox->r.linked) {
+				ent->isHeadshot = qfalse;
+				trap_UnlinkEntity(ent->headBBox);
+			}
+		}
 	}
 }
+
+void RemoveBodyEntities( gentity_t *skip ) {
+    gentity_t *ent;
+ 
+    for (int i = 0; i < level.numPlayingClients; i++ ) {
+        ent = g_entities + level.sortedClients[i];
+
+        if ( ent == skip ) {
+            continue;
+        }
+
+        if ( ent && ent->client && ent->bodyBBox ) {
+            if ( ent->bodyBBox->r.linked ) {
+                trap_UnlinkEntity( ent->bodyBBox );
+            }
+        }
+    }
+}
+
+ 
 
 /*
 ===========================================================================
@@ -1719,18 +1774,18 @@ typedef struct {
 } capsuleDef_t;
 
 static const capsuleDef_t s_capsuleDefs[MAX_PLAYER_CAPSULES] = {
-	{  0,  1,  1.0f,  "Pelvis"      },  /* Bip01 Pelvis     -> Bip01 Spine     0 */
-    {  1,  7,  8.2f,  "Torso"       },  /* Bip01 Spine      -> tag_head     1*/
-    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    2 */
-	{ 59, 60,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot    3 */
-    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   4 */
-	{ 65, 66,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   5  */
-    { 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   6  */
-    { 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    7 */
-    { 10, 11,  4.5f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 8 */
-    { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  9   */
-    { 31, 32,  4.5f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 10 */
-    { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  11  */
+    //{  4, 51,  9.0f,  "Back"        },  /* Bip01 Spine3     -> tag_back   1*/
+	{  1,  4, 15.0f,  "Torso"       },  /* Bip01 Spine      -> tag_head     0*/
+    { 58, 59,  7.0f,  "L Thigh"     },  /* Bip01 L Thigh    -> Bip01 L calf    1 */
+	{ 59, 61,  7.0f,  "L Leg"       },  /* Bip01 L Thigh    -> Bip01 L Foot   2 */
+    { 64, 65,  7.0f,  "R Thigh"     },  /* Bip01 R Thigh    -> Bip01 R calf   3 */
+	{ 65, 67,  7.0f,  "R Leg"       },  /* Bip01 R Thigh    -> Bip01 R Foot   4  */
+    //{ 60, 61,  4.0f,  "L Foot"      },  /* Bip01 L Foot     -> Bip01 L Toe0   7  */
+    //{ 66, 67,  4.0f,  "R Foot"      },  /* Bip01 R Foot     -> Bip01 R Toe0    8 */
+    // { 10, 11,  6.0f,  "L UpperArm"  },  /* Bip01 L UpperArm -> Bip01 L Forearm 5 */
+    // { 11, 16,  3.0f,  "L Forearm"   },  /* Bip01 L Forearm  -> Bip01 L Hand finger1  6   */
+    // { 31, 32,  6.0f,  "R UpperArm"  },  /* Bip01 R UpperArm -> Bip01 R Forearm 7 */
+    // { 32, 37,  3.0f,  "R Forearm"   },  /* Bip01 R Forearm  -> Bip01 R Hand finger1  8  */
 };
 
 
@@ -1746,8 +1801,6 @@ static void UpdateCapsulePosition( gentity_t *capsule, const vec3_t startPos,
 
 	vec3_t  delta, midpoint, angles;
     float   length, half_length;
-	VectorCopy( startPos, capsule->s.origin );
-	VectorCopy( endPos, capsule->s.origin2 );
 
     /* Midpoint becomes the entity origin */
     VectorAdd( startPos, endPos, midpoint );
@@ -1836,6 +1889,20 @@ void InitHeadHitbox(gentity_t *ent, int clientNum){
 	head->r.ownerNum = clientNum;
 }
 
+void InitBodyHitbox( gentity_t *ent, int clientNum ) {
+    ent->bodyBBox = G_Spawn();
+    gentity_t *body = ent->bodyBBox;
+ 
+    body->s.eType           = ET_TEMPHEAD;
+	body->s.otherEntityNum2 = HITBOX_BODY_BOX;
+    body->r.contents        = 0;
+    body->clipmask          = 0;
+    body->classname         = "Body";
+
+    body->s.otherEntityNum  = clientNum;
+    body->r.ownerNum        = clientNum;
+}
+
 
 /*
 ================
@@ -1882,8 +1949,15 @@ because traces are processed sequentially on the server.
 void UpdatePlayerCapsules( gentity_t *ent ) {
     int         i;
     vec3_t      startPos, endPos;
+    vec3_t      rotatedStart, rotatedEnd;
     gentity_t   *capsule;
     lerpInfo_t  *li;
+    float       radius;
+    int         encodedRadius;
+
+	vmCvar_t *g_cr[MAX_PLAYER_CAPSULES] = {
+        &g_cr0,  &g_cr1,  &g_cr2,  &g_cr3, &g_cr4
+    };
 
     if ( !ent->client ) {
         return;
@@ -1902,9 +1976,7 @@ void UpdatePlayerCapsules( gentity_t *ent ) {
         if ( !trap_GetBone( s_capsuleDefs[i].endBone, endPos, li ) ) {
             continue;
         }
-        
 
-		vec3_t rotatedStart, rotatedEnd;
 		VectorCopy( ent->r.currentOrigin, rotatedStart );
 		for ( int j = 0; j < 3; j++ ) {
 			VectorMA( rotatedStart, startPos[j], li->legsAxis[j], rotatedStart );
@@ -1918,18 +1990,22 @@ void UpdatePlayerCapsules( gentity_t *ent ) {
 		VectorCopy( rotatedStart, startPos );
 		VectorCopy( rotatedEnd, endPos );
 
-		if(g_debugHitboxes.integer == 0){
-			UpdateCapsulePosition( capsule, startPos, endPos, s_capsuleDefs[i].radius );
-		}else{
-			//debugging cvars
-			float radii[MAX_PLAYER_CAPSULES] = {
-				g_cr0.value,  g_cr1.value,  g_cr2.value,  g_cr3.value,
-				g_cr4.value,  g_cr5.value,  g_cr6.value,  g_cr7.value,
-				g_cr8.value,  g_cr9.value,  g_cr10.value, g_cr11.value
-			};
-			UpdateCapsulePosition( capsule, startPos, endPos, radii[i] );
-		}
+        if ( g_debugHitboxes.integer ) {
+            radius = g_cr[i]->value;
+        } else {
+            radius = s_capsuleDefs[i].radius;
+        }
+        radius *= g_capsuleScale.value;
+
+        UpdateCapsulePosition( capsule, startPos, endPos, radius );
 		
+		// encode bone endpoints for visualization
+		VectorCopy( startPos, capsule->s.origin );
+		VectorCopy( endPos,   capsule->s.origin2 );
+
+		// encode radius for visualization
+        Com_Memcpy( &encodedRadius, &radius, sizeof( int ) );
+        capsule->s.dl_intensity = encodedRadius;
     }
 }
 
@@ -1945,6 +2021,12 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
     int         i, j;
     gentity_t   *ent;
     gentity_t   *capsule;
+	vec3_t attackerEye, targetEye;
+
+	if (skip != NULL) {
+		VectorCopy(skip->r.currentOrigin, attackerEye);
+		attackerEye[2] += skip->client->ps.viewheight;
+	}
 
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
@@ -1955,7 +2037,19 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
         if ( !ent->client ) {
             continue;
         }
+		if ( ent->client->ps.pm_type == PM_SPECTATOR ) {
+    		continue;
+		}
+		if ( ent->health <= 0 && !( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+		
+		VectorCopy( ent->r.currentOrigin, targetEye );
+		targetEye[2] += ent->client->ps.viewheight;
 
+		if (skip != NULL && !trap_InPVS( attackerEye, targetEye ) ) {
+			continue;
+		}
         UpdatePlayerCapsules( ent );
 
         for ( j = 0; j < MAX_PLAYER_CAPSULES; j++ ) {
@@ -2010,13 +2104,34 @@ void RemovePlayerCapsules( gentity_t *skip ) {
 void UnlinkPlayerBodies( gentity_t *skip ) {
     int i;
     gentity_t *ent;
+	vec3_t attackerEye, targetEye;
+
+	if(skip != NULL){
+		VectorCopy( skip->r.currentOrigin, attackerEye );
+		attackerEye[2] += skip->client->ps.viewheight;
+	}
  
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
         if ( ent == skip || !ent->client ) {
             continue;
         }
-        trap_UnlinkEntity( ent );
+
+		if ( ent->health <= 0 && !( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+
+		VectorCopy( ent->r.currentOrigin, targetEye );
+		targetEye[2] += ent->client->ps.viewheight;
+
+		if (skip != NULL && !trap_InPVS( attackerEye, targetEye ) ) {
+			continue;
+		}
+
+		if(ent->r.linked){
+			trap_UnlinkEntity( ent );
+		}
+        
     }
 }
  
@@ -2024,12 +2139,31 @@ void UnlinkPlayerBodies( gentity_t *skip ) {
 void LinkPlayerBodies( gentity_t *skip ) {
     int i;
     gentity_t *ent;
+	vec3_t attackerEye, targetEye;
+
+	if(skip != NULL){
+		VectorCopy( skip->r.currentOrigin, attackerEye );
+		attackerEye[2] += skip->client->ps.viewheight;
+	}
  
     for ( i = 0; i < level.numPlayingClients; i++ ) {
         ent = g_entities + level.sortedClients[i];
         if ( ent == skip || !ent->client ) {
             continue;
         }
+       if ( ent->health <= 0 && ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+		if ( ent->client->ps.pm_type == PM_SPECTATOR ) {
+			continue;
+		}
+
+		VectorCopy( ent->r.currentOrigin, targetEye );
+		targetEye[2] += ent->client->ps.viewheight;
+
+		if (skip != NULL && !trap_InPVS( attackerEye, targetEye ) ) {
+			continue;
+		}
         trap_LinkEntity( ent );
     }
 }
@@ -2059,16 +2193,23 @@ void Bullet_Fire( gentity_t *ent, float spread, int damage ) {
 		G_DoTimeShiftFor(ent);
 	}
 
-	UnlinkPlayerBodies(ent);
+    if (g_preciseBodyBox.integer) {
+        // unlink client, use capsules
+        UnlinkPlayerBodies( ent );
+        AddPlayerCapsules( ent, CONTENTS_BODY, MASK_PLAYERSOLID );
+    } else {
+        // client ent is already linked
+    }
 	AddHeadEntities(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
-	AddPlayerCapsules(ent, CONTENTS_BODY, MASK_PLAYERSOLID);
 
 	Bullet_Endpos( ent, spread, &end );
 	Bullet_Fire_Extended( ent, ent, muzzleTrace, end, spread, damage );
 
 	RemoveHeadEntities(ent);
-	RemovePlayerCapsules( ent );
-	LinkPlayerBodies(ent);
+    if (g_preciseBodyBox.integer) {
+        RemovePlayerCapsules( ent );
+        LinkPlayerBodies( ent );
+    }
 
 	if(CheckAntilagConditions(ent)){
 		G_UndoTimeShiftFor(ent);
@@ -2130,9 +2271,6 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	if(traceEnt->s.eType == ET_TEMPHEAD &&
 		traceEnt->s.otherEntityNum2 == HITBOX_HEAD &&
 		g_entities[traceEnt->r.ownerNum].client){
-		if(g_debugBullets.integer > 0){
-			G_Printf("Hit %s\n", traceEnt->classname);
-		}
 		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
 		if(traceEnt->health <= 0){
 			traceEnt = &g_entities[ tr.entityNum ];
@@ -2142,11 +2280,12 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	}else if (traceEnt->s.eType == ET_TEMPHEAD &&
 				traceEnt->s.otherEntityNum2 == HITBOX_BODY &&
 				g_entities[traceEnt->r.ownerNum].client){
-		if(g_debugBullets.integer > 0){
-			G_Printf("Hit %s\n", traceEnt->classname);
-		}
         traceEnt = &g_entities[ traceEnt->r.ownerNum ];
     }
+
+	if (g_debugBullets.integer > 0) {
+		G_Printf("Hit %s\n", traceEnt->classname);
+	}
 
 	EmitterCheck( traceEnt, attacker, &tr );
 
@@ -2162,6 +2301,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	if ( traceEnt->takedamage && traceEnt->client ) {
 		tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
 		tent->s.eventParm = traceEnt->s.number;
+		tent->s.pos.trTime = level.time;
 		if ( LogAccuracyHit( traceEnt, attacker ) && g_gamestate.integer == GS_PLAYING) {
 			attacker->client->ps.persistant[PERS_ACCURACY_HITS]++;
 			attacker->client->sess.stats.acc_hits++;

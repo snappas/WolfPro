@@ -1361,6 +1361,7 @@ qboolean    BG_CanItemBeGrabbed( const entityState_t *ent, const playerState_t *
 typedef enum {
 	HITBOX_HEAD,
 	HITBOX_BODY,
+	HITBOX_BODY_BOX,
 	NUM_HITBOXES
 } hitbox_t;
 
@@ -1786,8 +1787,6 @@ animModelInfo_t *BG_ModelInfoForModelname( char *modelname );
 qboolean BG_AnimParseAnimConfig( animModelInfo_t *animModelInfo, const char *filename, const char *input );
 void BG_AnimParseAnimScript( animModelInfo_t *modelInfo, animScriptData_t *scriptData, int client, char *filename, char *input );
 int BG_AnimScriptAnimation( playerState_t *ps, aistateEnum_t state, scriptAnimMoveTypes_t movetype, qboolean isContinue );
-int BG_AnimScriptCannedAnimation( playerState_t *ps, aistateEnum_t state );
-int BG_AnimScriptStateChange( playerState_t *ps, aistateEnum_t newState, aistateEnum_t oldState );
 int BG_AnimScriptEvent( playerState_t *ps, scriptAnimEventTypes_t event, qboolean isContinue, qboolean force );
 int BG_IndexForString( char *token, animStringItem_t *strings, qboolean allowFail );
 int BG_PlayAnimName( playerState_t *ps, char *animName, animBodyPart_t bodyPart, qboolean setTimer, qboolean isContinue, qboolean force );
@@ -1800,7 +1799,6 @@ void BG_AnimUpdatePlayerStateConditions( pmove_t *pmove );
 int BG_AnimationIndexForString( char *string, int client );
 animation_t *BG_AnimationForString( char *string, animModelInfo_t *modelInfo );
 animation_t *BG_GetAnimationForIndex( int client, int index );
-int BG_GetAnimScriptEvent( playerState_t *ps, scriptAnimEventTypes_t event );
 
 void BG_SetLerpFrameAnimation(int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf, int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame);
 void BG_RunLerpFrame(int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf, int time, int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame);
@@ -1808,7 +1806,7 @@ void BG_PlayerAngles(int entityNum, entityState_t *es, int frameTime, lerpFrame_
 					vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] );
 void BG_PlayerAnglesToAxis(vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAngles, vec3_t legsAxis[3], vec3_t torsoAxis[3], vec3_t headAxis[3] );
 animModelInfo_t *BG_ModelInfoForClient( int client );
-void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], const vec3_t parentOrigin, const vec3_t parentAxis[3], orientation_t *orientation);
+void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], const vec3_t parentOrigin, const vec3_t parentAxis[3], const orientation_t *orientation);
 void BG_LerpCrouchingAnimation(int clientNum, lerpFrame_t *lf, lerpFrame_t *torsoLerpframe, lerpFrame_t *legsLerpFrame, int newAnimation, int oldAnimNum, animation_t *oldanim);
 void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 						 int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame,

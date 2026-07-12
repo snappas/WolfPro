@@ -1804,6 +1804,7 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	CalculateRanks();
 
 	InitHeadHitbox(ent, clientNum);
+	InitBodyHitbox(ent, clientNum);
 	InitPlayerCapsules(ent, clientNum);
 
 	return NULL;
@@ -2324,7 +2325,7 @@ void ClientDisconnect( int clientNum ) {
 
 	FreeHeadEntity(ent);
 	FreePlayerCapsules(ent);
-
+	FreeBodyEntity(ent);
 	trap_UnlinkEntity( ent );
 	ent->s.modelindex = 0;
 	ent->inuse = qfalse;

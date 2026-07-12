@@ -694,19 +694,25 @@ qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter
 		// trace another shot see if we hit the head
 		trap_UnlinkEntity(&g_entities[targ->s.number]);
 
-		// Unlink body capsules so they don't intercept the head trace
-		for (int i = 0; i < MAX_PLAYER_CAPSULES; i++) {
-			if (targ->bodyCapsules[i] && targ->bodyCapsules[i]->r.linked) {
-				trap_UnlinkEntity( targ->bodyCapsules[i] );
+		/* Unlink body capsules so they don't intercept the head trace.
+		Only needed when g_preciseBodyBox is active -- in original mode
+		the capsules are never linked during shots. */
+		if ( g_preciseBodyBox.integer ) {
+			for ( int i = 0; i < MAX_PLAYER_CAPSULES; i++ ) {
+				if ( targ->bodyCapsules[i] && targ->bodyCapsules[i]->r.linked ) {
+					trap_UnlinkEntity( targ->bodyCapsules[i] );
+				}
 			}
 		}
-
-		trap_Trace(&tr, start, NULL, NULL, end, attacker->s.number, MASK_SHOT);
-		trap_LinkEntity(&g_entities[targ->s.number]);
-		// Relink body capsules
-		for (int i = 0; i < MAX_PLAYER_CAPSULES; i++) {
-			if (targ->bodyCapsules[i]) {
-				trap_LinkEntity(targ->bodyCapsules[i]);
+	
+		trap_Trace( &tr, start, NULL, NULL, end, attacker->s.number, MASK_SHOT );
+		trap_LinkEntity( &g_entities[targ->s.number] );
+	
+		if ( g_preciseBodyBox.integer ) {
+			for ( int i = 0; i < MAX_PLAYER_CAPSULES; i++ ) {
+				if ( targ->bodyCapsules[i] ) {
+					trap_LinkEntity( targ->bodyCapsules[i] );
+				}
 			}
 		}
 
@@ -1638,6 +1644,7 @@ void G_Hitsounds( gentity_t *target, gentity_t *attacker, int mod, qboolean head
 			te = G_TempEntity(attacker->s.pos.trBase, EV_GLOBAL_CLIENT_SOUND);
 			te->s.eventParm = G_SoundIndex("sound/hitsounds/hitteam1.wav");
 			te->s.teamNum = attacker->s.clientNum;
+			te->s.pos.trTime = level.time;
 		}
 	}
 	// If enemy
@@ -1661,6 +1668,7 @@ void G_Hitsounds( gentity_t *target, gentity_t *attacker, int mod, qboolean head
 
 				int headStyle = attacker->client->pers.hitSoundHeadStyle;
 				te->s.eventParm = G_SoundIndex(G_GetHitsoundStyle(HITSOUND_HEAD, headStyle));
+				te->s.pos.trTime = level.time;
 			}
 		}
 		else 
@@ -1672,6 +1680,7 @@ void G_Hitsounds( gentity_t *target, gentity_t *attacker, int mod, qboolean head
 
 				int bodyStyle = attacker->client->pers.hitSoundBodyStyle;
 				te->s.eventParm = G_SoundIndex(G_GetHitsoundStyle(HITSOUND_BODY, bodyStyle));
+				te->s.pos.trTime = level.time;
 			}
 		}
 

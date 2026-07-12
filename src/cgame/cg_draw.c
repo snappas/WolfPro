@@ -372,6 +372,61 @@ void CG_Draw3DModel( float x, float y, float w, float h, qhandle_t model, qhandl
 	trap_R_RenderScene( &refdef );
 }
 
+static void CG_DrawCapsuleCircle( vec3_t center, vec3_t axis, float radius, int segments, clientInfo_t *ci ) {
+    int i;
+    vec3_t right, up, ref;
+    vec3_t p1, p2;
+    float angle1, angle2;
+
+    VectorSet( ref, 0, 0, 1 );
+    if ( fabs( DotProduct( axis, ref ) ) > 0.99f ) {
+        VectorSet( ref, 1, 0, 0 );
+    }
+    CrossProduct( axis, ref, right );
+    VectorNormalize( right );
+    CrossProduct( axis, right, up );
+    VectorNormalize( up );
+
+    for ( i = 0; i < segments; i++ ) {
+        angle1 = ( 2.0f * M_PI * i )       / segments;
+        angle2 = ( 2.0f * M_PI * ( i + 1 ) ) / segments;
+
+        p1[0] = center[0] + radius * ( cos( angle1 ) * right[0] + sin( angle1 ) * up[0] );
+        p1[1] = center[1] + radius * ( cos( angle1 ) * right[1] + sin( angle1 ) * up[1] );
+        p1[2] = center[2] + radius * ( cos( angle1 ) * right[2] + sin( angle1 ) * up[2] );
+
+        p2[0] = center[0] + radius * ( cos( angle2 ) * right[0] + sin( angle2 ) * up[0] );
+        p2[1] = center[1] + radius * ( cos( angle2 ) * right[1] + sin( angle2 ) * up[1] );
+        p2[2] = center[2] + radius * ( cos( angle2 ) * right[2] + sin( angle2 ) * up[2] );
+
+        CG_RailTrail2( ci, p1, p2 );
+    }
+}
+
+static void CG_DrawCapsuleEndCap( vec3_t center, vec3_t axis, vec3_t toViewer, float radius, int segments, clientInfo_t *ci ) {
+    int i;
+    vec3_t sideDir, p1, p2;
+    float angle1, angle2;
+
+    CrossProduct( axis, toViewer, sideDir );
+    VectorNormalize( sideDir );
+
+    for ( i = 0; i < segments; i++ ) {
+        angle1 = ( M_PI * i )        / segments;
+        angle2 = ( M_PI * ( i + 1 ) ) / segments;
+
+        p1[0] = center[0] + radius * ( cos( angle1 ) * sideDir[0] + sin( angle1 ) * axis[0] );
+        p1[1] = center[1] + radius * ( cos( angle1 ) * sideDir[1] + sin( angle1 ) * axis[1] );
+        p1[2] = center[2] + radius * ( cos( angle1 ) * sideDir[2] + sin( angle1 ) * axis[2] );
+
+        p2[0] = center[0] + radius * ( cos( angle2 ) * sideDir[0] + sin( angle2 ) * axis[0] );
+        p2[1] = center[1] + radius * ( cos( angle2 ) * sideDir[1] + sin( angle2 ) * axis[1] );
+        p2[2] = center[2] + radius * ( cos( angle2 ) * sideDir[2] + sin( angle2 ) * axis[2] );
+
+        CG_RailTrail2( ci, p1, p2 );
+    }
+}
+
 
 void CG_DrawBBox(centity_t *cent){
 	if(cg.snap && cent->currentState.otherEntityNum == cg.snap->ps.clientNum){
@@ -384,27 +439,106 @@ void CG_DrawBBox(centity_t *cent){
 
 	vec3_t start, end, v1, v2, v3, v4, v5, v6, diff;
 
-	//draw capsule start/end line
-	if(cent->currentState.otherEntityNum2 == HITBOX_BODY){ 
+	if ( cent->currentState.otherEntityNum2 == HITBOX_BODY ) {
+		vec3_t start, end, axis, mid, right, ref;
+		float radius;
+
 		VectorCopy(cent->currentState.origin, start);
 		VectorCopy(cent->currentState.origin2, end);
+
+		// draw capsule axis line
 		CG_RailTrail2( NULL, start, end );
+
+		// encoded radius in ent using dl_intensity
+		memcpy( &radius, &cent->currentState.dl_intensity, sizeof( float ) );
+
+		VectorSubtract( end, start, axis );
+		VectorNormalize( axis );
+
+		VectorSet( ref, 0, 0, 1 );
+		if ( fabs( DotProduct( axis, ref ) ) > 0.99f ) {
+			VectorSet( ref, 1, 0, 0 );
+		}
+		CrossProduct( axis, ref, right );
+		VectorNormalize( right );
+
+		// draw circles oriented to capsule axis on cylindrical part ends
+		CG_DrawCapsuleCircle( start, axis, radius, 12, NULL );
+		CG_DrawCapsuleCircle( end,   axis, radius, 12, NULL );
+
+		VectorAdd( start, end, mid );
+		VectorScale( mid, 0.5f, mid );
+
+		// determine viewer position for silhouettes
+		vec3_t toViewer;
+		VectorSubtract( cg.refdef.vieworg, mid, toViewer );
+		VectorNormalize( toViewer );
+
+		// capsule endcap silhouette semi-circles
+		vec3_t negAxis;
+		VectorNegate( axis, negAxis );
+		CG_DrawCapsuleEndCap( start, negAxis, toViewer, radius, 6, NULL );
+		CG_DrawCapsuleEndCap( end, axis, toViewer, radius, 6, NULL );
+
+		// cylindrical part silhouette lines
+		vec3_t sideDir;
+		vec3_t startLeft, startRight, endLeft, endRight;
+
+		CrossProduct( axis, toViewer, sideDir );
+		VectorNormalize( sideDir );
+
+		VectorMA( start,  radius, sideDir, startLeft );
+		VectorMA( start, -radius, sideDir, startRight );
+
+		VectorMA( end,  radius, sideDir, endLeft );
+		VectorMA( end, -radius, sideDir, endRight );
+
+		CG_RailTrail2( NULL, startLeft,  endLeft );
+		CG_RailTrail2( NULL, startRight, endRight );
+
 		return;
 	}
+
+	if ( cent->currentState.otherEntityNum2 == HITBOX_BODY_BOX ) {
+        vec3_t mins, maxs, diff;
+        vec3_t v1, v2, v3, v4, v5, v6;
+        clientInfo_t *ci = NULL;
+ 
+        /* Use s.origin/s.origin2 which we set to player origin + mins/maxs */
+        VectorCopy( cent->currentState.origin,  mins );
+        VectorCopy( cent->currentState.origin2, maxs );
+        VectorSubtract( maxs, mins, diff );
+ 
+        /* Draw 12 edges of the bounding box */
+        VectorCopy( mins, v1 ); v1[0] += diff[0];
+        VectorCopy( mins, v2 ); v2[1] += diff[1];
+        VectorCopy( mins, v3 ); v3[2] += diff[2];
+ 
+        CG_RailTrail2( ci, mins, v1 );
+        CG_RailTrail2( ci, mins, v2 );
+        CG_RailTrail2( ci, mins, v3 );
+ 
+        VectorCopy( maxs, v4 ); v4[0] -= diff[0];
+        VectorCopy( maxs, v5 ); v5[1] -= diff[1];
+        VectorCopy( maxs, v6 ); v6[2] -= diff[2];
+ 
+        CG_RailTrail2( ci, maxs, v4 );
+        CG_RailTrail2( ci, maxs, v5 );
+        CG_RailTrail2( ci, maxs, v6 );
+ 
+        CG_RailTrail2( ci, v2, v6 );
+        CG_RailTrail2( ci, v6, v1 );
+        CG_RailTrail2( ci, v1, v5 );
+        CG_RailTrail2( ci, v2, v4 );
+        CG_RailTrail2( ci, v4, v3 );
+        CG_RailTrail2( ci, v3, v5 );
+        return;
+    }
+
 
 	VectorCopy(cent->currentState.origin, start);
 	VectorCopy(cent->currentState.origin2, end);
 
-	// refEntity_t ent;
-	// memset( &ent, 0, sizeof( ent ) );
-	// ent.shaderRGBA[0] = 255;
-	// ent.shaderRGBA[3] = 255;
-	// ent.shaderTime = cg.time / 1000.0f;
-	// ent.reType = RT_RAIL_CORE;
-	// ent.customShader = cgs.media.railCoreShader;
-
-	// VectorCopy( cent->currentState.origin, ent.origin );
-	// VectorCopy( cent->currentState.origin2, ent.oldorigin );
 	clientInfo_t *ci = NULL;
 	VectorSubtract( start, end, diff );
 

@@ -1530,9 +1530,19 @@ static void LoadJPG( const char *filename, unsigned char **pic, int *width, int 
 
 	/* Step 4: set parameters for decompression */
 
-	/* In this example, we don't need to change any of the defaults set by
-	 * jpeg_read_header(), so we do nothing here.
-	 */
+	// We set JCS_EXT_RGBA to instruct libjpeg-turbo to always
+	// write the alpha value as 255.
+	// These must be set before jpeg_start_decompress(), since that call
+	// (via jinit_master_decompress -> jpeg_calc_output_dimensions) picks the
+	// color-conversion routine and derives output_components from
+	// out_color_space as they stand at that point.
+	cinfo.out_color_space = JCS_EXT_RGBA;
+	cinfo.output_components = 4;
+
+	// go for speed
+	cinfo.dither_mode = JDITHER_NONE;
+	cinfo.dct_method = JDCT_FASTEST;
+	cinfo.do_fancy_upsampling = FALSE;
 
 	/* Step 5: Start decompressor */
 
@@ -1548,16 +1558,6 @@ static void LoadJPG( const char *filename, unsigned char **pic, int *width, int 
 	 * In this example, we need to make an output work buffer of the right size.
 	 */
 	/* JSAMPLEs per row in output buffer */
-	// We set JCS_EXT_RGBA to instruct libjpeg-turbo to always
-	// write the alpha value as 255.
-	cinfo.out_color_space = JCS_EXT_RGBA;
-	cinfo.output_components = 4;
-
-	// go for speed
-	cinfo.dither_mode = JDITHER_NONE;
-	cinfo.dct_method = JDCT_FASTEST;
-	cinfo.do_fancy_upsampling = FALSE;
-
 	row_stride = cinfo.output_width * 4;
 
 	out = R_GetImageBuffer( cinfo.output_width * cinfo.output_height * cinfo.output_components, BUFFER_IMAGE );

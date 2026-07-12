@@ -117,7 +117,10 @@ rem ***************************************************************************
 	
 	if not exist "libjpeg-turbo" (
 		echo libjpeg-turbo...
-		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/releases)[0].zipball_url;"^
+		rem Pinned: don't auto-track "latest" here, it silently pulls in breaking
+		rem releases (e.g. 3.2.0's SIMD dispatcher rewrite required a matching
+		rem fix in tr_image.c). Bump deliberately and retest JPEG texture loading.
+		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/releases/tags/3.2.0).zipball_url;"^
 						"Write-Host $source;"^
 						"$file=$(Split-Path -Path $source -Leaf);"^
 						"Invoke-WebRequest -Uri $source -Out $file;"^

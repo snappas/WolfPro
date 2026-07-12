@@ -246,6 +246,8 @@ typedef enum {
 
 	G_GETTAG,
 	G_GETBONE,
+	G_CVAR_VARIABLE_VALUE,
+	G_MICROSECONDS,
 
 	BOTLIB_SETUP = 200,             // ( void );
 	BOTLIB_SHUTDOWN,                // ( void );

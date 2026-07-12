@@ -1651,80 +1651,6 @@ int BG_AnimScriptAnimation( playerState_t *ps, aistateEnum_t state, scriptAnimMo
 
 /*
 ================
-BG_AnimScriptCannedAnimation
-
-  uses the current movetype for this client to play a canned animation
-
-  returns the duration in milliseconds that this model should be paused. -1 if no anim found
-================
-*/
-int BG_AnimScriptCannedAnimation( playerState_t *ps, aistateEnum_t state ) {
-	animModelInfo_t     *modelInfo;
-	animScript_t        *script;
-	animScriptItem_t    *scriptItem;
-	animScriptCommand_t *scriptCommand;
-	scriptAnimMoveTypes_t movetype;
-
-	if ( ps->eFlags & EF_DEAD ) {
-		return -1;
-	}
-
-	movetype = globalScriptData->clientConditions[ ps->clientNum ][ ANIM_COND_MOVETYPE ][0];
-	if ( !movetype ) {    // no valid movetype yet for this client
-		return -1;
-	}
-	//
-	modelInfo = BG_ModelInfoForClient( ps->clientNum );
-	script = &modelInfo->scriptCannedAnims[ state ][ movetype ];
-	if ( !script->numItems ) {
-		return -1;
-	}
-	// find the first script item, that passes all the conditions for this event
-	scriptItem = BG_FirstValidItem( ps->clientNum, script );
-	if ( !scriptItem ) {
-		return -1;
-	}
-	// pick a random command
-	scriptCommand = &scriptItem->commands[ rand() % scriptItem->numCommands ];
-	// run it
-	return BG_ExecuteCommand( ps, scriptCommand, qtrue, qfalse, qfalse );
-}
-
-/*
-================
-BG_AnimScriptStateChange
-
-  returns the duration in milliseconds that this model should be paused. -1 if no anim found
-================
-*/
-int BG_AnimScriptStateChange( playerState_t *ps, aistateEnum_t newState, aistateEnum_t oldState ) {
-	animModelInfo_t     *modelInfo;
-	animScript_t        *script;
-	animScriptItem_t    *scriptItem;
-	animScriptCommand_t *scriptCommand;
-
-	if ( ps->eFlags & EF_DEAD ) {
-		return -1;
-	}
-
-	modelInfo = BG_ModelInfoForClient( ps->clientNum );
-	script = &modelInfo->scriptStateChange[ oldState ][ newState ];
-	if ( !script->numItems ) {
-		return -1;
-	}
-	// find the first script item, that passes all the conditions for this event
-	scriptItem = BG_FirstValidItem( ps->clientNum, script );
-	if ( !scriptItem ) {
-		return -1;
-	}
-	// pick a random command
-	scriptCommand = &scriptItem->commands[ rand() % scriptItem->numCommands ];
-	// run it
-	return BG_ExecuteCommand( ps, scriptCommand, qtrue, qfalse, qfalse );
-}
-
-/*
-================
 BG_AnimScriptEvent
 
   returns the duration in milliseconds that this model should be paused. -1 if no event found
@@ -1907,39 +1833,6 @@ int BG_GetAnimScriptAnimation( int client, aistateEnum_t state, scriptAnimMoveTy
 	return scriptCommand->animIndex[0];
 }
 
-/*
-================
-BG_GetAnimScriptEvent
-
-  returns the animation index for this event
-================
-*/
-int BG_GetAnimScriptEvent( playerState_t *ps, scriptAnimEventTypes_t event ) {
-	animModelInfo_t     *modelInfo;
-	animScript_t        *script;
-	animScriptItem_t    *scriptItem;
-	animScriptCommand_t *scriptCommand;
-
-	if ( event != ANIM_ET_DEATH && ps->eFlags & EF_DEAD ) {
-		return -1;
-	}
-
-	modelInfo = BG_ModelInfoForClient( ps->clientNum );
-	script = &modelInfo->scriptEvents[ event ];
-	if ( !script->numItems ) {
-		return -1;
-	}
-	// find the first script item, that passes all the conditions for this event
-	scriptItem = BG_FirstValidItem( ps->clientNum, script );
-	if ( !scriptItem ) {
-		return -1;
-	}
-	// pick a random command
-	scriptCommand = &scriptItem->commands[ rand() % scriptItem->numCommands ];
-
-	// return the animation
-	return scriptCommand->animIndex[0];
-}
 
 /*
 ===============
@@ -2560,7 +2453,7 @@ void BG_PlayerAnglesToAxis(vec3_t legsAngles, vec3_t torsoAngles, vec3_t headAng
 
 }
 
-void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], const vec3_t parentOrigin, const vec3_t parentAxis[3], orientation_t *orientation){
+void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], const vec3_t parentOrigin, const vec3_t parentAxis[3], const orientation_t *orientation){
 	vec3_t tempAxis[3];
 	// FIXME: allow origin offsets along tag?
 	VectorCopy( parentOrigin, entityOrigin );

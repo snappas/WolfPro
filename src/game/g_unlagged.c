@@ -88,8 +88,14 @@ void G_StoreHistory( gentity_t *ent ) {
 	// store all the collision-detection info and the time
 	VectorCopy( ent->r.mins, ent->client->unlag.history[head].mins );
 	VectorCopy( ent->r.maxs, ent->client->unlag.history[head].maxs );
-	VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
-	SnapVector( ent->client->unlag.history[head].currentOrigin );
+	if ( g_ospmode.integer ) {
+		VectorCopy( ent->s.pos.trBase, ent->client->unlag.history[head].currentOrigin );
+		//s.pos.trBase already snapped
+		SnapVector( ent->client->unlag.history[head].currentOrigin );
+	} else {
+		VectorCopy( ent->r.currentOrigin, ent->client->unlag.history[head].currentOrigin );
+		//precise origin
+	}
 	ent->client->unlag.history[head].leveltime = level.time;
 	CopyAnimationInfo(&ent->client->unlag.history[head].animationInfo, &ent->client->unlag.history[head].torsoAnimHistory, &ent->client->unlag.history[head].legsAnimHistory, &ent->client->animationInfo);
 }

@@ -184,7 +184,7 @@ void G_Script_ScriptEvent( gentity_t *ent, char *eventStr, char *params );
 
 #define CFOFS( x ) ( (int)&( ( (gclient_t *)0 )->x ) )
 
-#define MAX_PLAYER_CAPSULES 12
+#define MAX_PLAYER_CAPSULES 5
 
 struct gentity_s {
 	entityState_t s;                // communicated by server to clients
@@ -423,6 +423,7 @@ struct gentity_s {
 	qboolean	moreCalled;
 
 	gentity_t *headBBox;
+	gentity_t *bodyBBox;
 	qboolean isHeadshot;
 
 	gentity_t *bodyCapsules[MAX_PLAYER_CAPSULES];
@@ -646,16 +647,6 @@ typedef struct {
 	int deathYaw;
 } clientPersistant_t;
 
-typedef struct {
-	vec3_t mins;
-	vec3_t maxs;
-
-	vec3_t origin;
-
-	int time;
-	int servertime;
-} clientMarker_t;
-
 typedef struct animationInfo_s {
 	lerpInfo_t lerpInfo;
 	lerpFrame_t torso;
@@ -663,14 +654,12 @@ typedef struct animationInfo_s {
 	vec3_t lerpOrigin;
 } animationInfo_t;
 
-#define MAX_CLIENT_MARKERS 10
-
 #define LT_SPECIAL_PICKUP_MOD   3       // JPW NERVE # of times (minus one for modulo) LT must drop ammo before scoring a point
 #define MEDIC_SPECIAL_PICKUP_MOD    4   // JPW NERVE same thing for medic
 
 //unlagged - backward reconciliation #1
 // the size of history we'll keep
-#define NUM_CLIENT_HISTORY 17
+#define NUM_CLIENT_HISTORY 64
 
 // everything we need to know to backward reconcile
 typedef struct {
@@ -790,11 +779,6 @@ struct gclient_s {
 	int lastBurnTime;         // JPW NERVE last time index for flamethrower burn
 	int PCSpecialPickedUpCount;         // JPW NERVE used to count # of times somebody's picked up this LTs ammo (or medic health) (for scoring)
 	int saved_persistant[MAX_PERSISTANT];           // DHM - Nerve :: Save ps->persistant here during Limbo
-
-	// g_antilag.c
-	int topMarker;
-	clientMarker_t clientMarkers[MAX_CLIENT_MARKERS];
-	clientMarker_t backupMarker;
 
 	gentity_t       *tempHead;  // Gordon: storing a temporary head for bullet head shot detection
 
@@ -1595,6 +1579,7 @@ extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
 
 extern vmCvar_t g_preciseHeadHitbox;
+extern vmCvar_t g_preciseBodyBox;
 extern vmCvar_t g_headMinX;
 extern vmCvar_t g_headMinY;
 extern vmCvar_t g_headMinZ;
@@ -1614,8 +1599,9 @@ extern vmCvar_t g_rocketDamageMultiplier;
 
 //capsule radius debugging cvars
 extern vmCvar_t g_debugHitboxes;
-extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4, g_cr5;
-extern vmCvar_t g_cr6, g_cr7, g_cr8, g_cr9, g_cr10, g_cr11;
+extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4;
+
+extern vmCvar_t g_capsuleScale;
 
 //omnibot stuff
 extern vmCvar_t g_OmniBotPath;
@@ -1630,6 +1616,7 @@ extern vmCvar_t g_ospmode;
 void    trap_Printf( const char *fmt );
 void    trap_Error( const char *fmt );
 int     trap_Milliseconds( void );
+int     trap_Microseconds( void );
 int     trap_Argc( void );
 void    trap_Argv( int n, char *buffer, int bufferLength );
 void    trap_Args( char *buffer, int bufferLength );
@@ -1856,11 +1843,6 @@ typedef enum
 
 #define BODY_TEAM( ENT ) ENT->s.modelindex
 
-// g_antilag.c
-void G_StoreClientPosition( gentity_t* ent );
-void G_HistoricalTrace( gentity_t* ent, trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passEntityNum, int contentmask );
-void G_ResetMarkers( gentity_t* ent );
-
 
 // Pause
 #define PAUSE_NONE		0x00	// Match is not paused..
@@ -1944,6 +1926,13 @@ void AddHeadEntities(gentity_t* skip, int content, int mask);
 void RemoveHeadEntities(gentity_t* skip);
 void FreeHeadEntity(gentity_t* ent);
 void UpdateHeadPosition(gentity_t *ent);
+
+void InitBodyHitbox( gentity_t *ent, int clientNum );
+void AddBodyEntities( gentity_t *skip, int content, int mask );
+void RemoveBodyEntities( gentity_t *skip );
+void FreeBodyEntity( gentity_t *ent );
+void UpdateBodyPosition( gentity_t *ent );
+
 
 void InitPlayerCapsules(gentity_t *ent, int clientNum);
 void AddPlayerCapsules(gentity_t *skip, int contents, int mask);
