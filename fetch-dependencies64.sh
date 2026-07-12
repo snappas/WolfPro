@@ -34,38 +34,6 @@ mkdir -p deps64
 cd deps64
 DEPS_ROOT=`pwd`
 
-OPENSSL_DIR=`pwd`/openssl
-if [ ! -d "$OPENSSL_DIR" ]; then
-VER=$(curl --silent -qI https://github.com/openssl/openssl/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');
-wget https://api.github.com/repos/openssl/openssl/tarball/$VER
-tar xvfz $VER
-rm $VER
-mv openssl* openssl
-cd $OPENSSL_DIR
-mkdir build
-./Configure --prefix=${OPENSSL_DIR}/build '-Wl,-rpath,$(LIBRPATH)' no-tests no-docs 
-make -j
-make install
-fi
-cd $DEPS_ROOT
-
-CURL_DIR=`pwd`/curl
-if [ ! -d "$CURL_DIR" ]; then
-VER=$(curl --silent -qI https://github.com/curl/curl/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');
-wget https://api.github.com/repos/curl/curl/tarball/$VER
-tar xvfz $VER
-rm $VER
-mv curl-curl* curl
-cd $CURL_DIR
-mkdir build
-autoreconf -fi
-PKG_CONFIG="pkg-config --static" ./configure --disable-shared --enable-static --without-libpsl --without-zlib --with-openssl=${OPENSSL_DIR}/build --prefix=${CURL_DIR}/build
-make -j LDFLAGS="-static -all-static"
-make install
-fi
-cd $DEPS_ROOT
-
-
 
 JANSSON_DIR=`pwd`/jansson
 if [ ! -d "$JANSSON_DIR" ]; then
