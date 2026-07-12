@@ -107,7 +107,9 @@ rem ***************************************************************************
 
 	if not exist "curl" (
 		echo curl...
-		call powershell "Invoke-WebRequest -Uri https://curl.se/windows/dl-8.15.0_1/curl-8.15.0_1-win32-mingw.zip -Out curl.zip"
+		rem curl.se stopped publishing win32-mingw builds (x64/ARM64 only now);
+		rem using a mirrored prebuilt copy instead.
+		call powershell "Invoke-WebRequest -Uri https://raw.githubusercontent.com/snappas/curl-32bit/main/curl-8.15.0_5-win32-mingw.zip -Out curl.zip"
 		call powershell "Expand-Archive -Path curl.zip -DestinationPath curl"
 		call powershell "Get-ChildItem """curl\*\*""" | move-item -Destination """curl\""
 		call powershell "rm curl.zip"
