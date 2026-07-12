@@ -168,7 +168,13 @@ rem ***************************************************************************
 	)
 	cd "%ROOT_DEP_DIR%\curl"
 	cd bin
-	lib /def:libcurl.def /OUT:libcurl.lib /MACHINE:X86
+	rem the mirrored win32-mingw build ships libcurl.dll/.def with no arch
+	rem suffix (curl.se's own x64 build already ships libcurl-x64.dll/.def) -
+	rem rename + relabel so x86 and x64 can coexist in the same install dir.
+	ren libcurl.dll libcurl-x86.dll
+	echo LIBRARY libcurl-x86 > libcurl-x86.def
+	type libcurl.def >> libcurl-x86.def
+	lib /def:libcurl-x86.def /OUT:libcurl-x86.lib /MACHINE:X86
 	
 :buildLibJPEG
 	if defined SKIP_JPEG (
@@ -177,7 +183,7 @@ rem ***************************************************************************
 	cd "%ROOT_DEP_DIR%\libjpeg-turbo"
 	mkdir build
 	cd build
-	call cmake -G"%cmake_makefiles%" -A Win32  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release -DWITH_TURBOJPEG=OFF ..
+	call cmake -G"%cmake_makefiles%" -A Win32  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release -DWITH_TURBOJPEG=OFF -DENABLE_SHARED=OFF ..
 	call "%PF%\%VC_PATH%\Common7\IDE\devenv.exe" libjpeg-turbo.sln /Build Release
 	call powershell "Get-ChildItem """..\src\*.h""" | copy-item -Destination """..\""
 	call powershell "Get-ChildItem """*.h""" | copy-item -Destination """..\""

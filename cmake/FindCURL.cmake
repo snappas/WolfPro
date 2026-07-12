@@ -7,7 +7,7 @@ if(WOLF_64BITS)
 endif()
 if(WOLF_32BITS)
 	set(DEPS deps)
-	set(CURL_NAMES curl)
+	set(CURL_NAMES libcurl-x86 curl-x86)
 endif()
 
 

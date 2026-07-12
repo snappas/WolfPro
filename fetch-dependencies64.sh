@@ -30,7 +30,7 @@ mv *libjpeg-turbo* libjpeg-turbo
 cd $LIBJPEG_DIR
 mkdir build
 cd build
-cmake -G"Unix Makefiles" -DWITH_TURBOJPEG=OFF ..
+cmake -G"Unix Makefiles" -DWITH_TURBOJPEG=OFF -DENABLE_SHARED=OFF ..
 make -j
 cp ../*.h .
 cp ../src/*.h .
