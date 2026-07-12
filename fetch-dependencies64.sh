@@ -33,6 +33,7 @@ cd build
 cmake -G"Unix Makefiles" ..
 make -j
 cp ../*.h .
+cp ../src/*.h .
 fi
 cd $DEPS_ROOT
 
