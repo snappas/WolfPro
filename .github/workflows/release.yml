@@ -57,7 +57,7 @@ jobs:
           cmake -B out\build\${{ matrix.arch }} -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DINSTALL_DEFAULT_BASEDIR=${{ github.workspace }}\ci-install\${{ matrix.arch }}
-          -DBUILD_CLIENT=ON -DBUILD_MOD=ON -DBUILD_SERVER=${{ matrix.build_server }}
+          -DBUILD_CLIENT=ON -DBUILD_MOD=ON -DBUILD_MOD_PK3=OFF -DBUILD_SERVER=${{ matrix.build_server }}
 
       - name: Build
         shell: cmd
