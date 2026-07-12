@@ -31,8 +31,8 @@ docker build \
 
 docker run \
   --user "$(id -u):$(id -g)" \
-  -v "${RTCW_SRC}:/home/compile/code" \
-  --workdir /home/compile/code/src \
+  -v "${RTCW_SRC}:/workspace" \
+  --workdir /workspace/src \
   "${DOCKER_USER}/rtcw:${DOCKER_TAG}" \
   make all
 
