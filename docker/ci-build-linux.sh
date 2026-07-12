@@ -30,6 +30,7 @@ docker build \
   -f "${SCRIPT_DIR}/dockerfiles/rtcw-compile64" "${SCRIPT_DIR}/dockerfiles"
 
 docker run \
+  --user "$(id -u):$(id -g)" \
   -v "${RTCW_SRC}:/home/compile/code" \
   --workdir /home/compile/code/src \
   "${DOCKER_USER}/rtcw:${DOCKER_TAG}" \
