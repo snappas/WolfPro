@@ -22,7 +22,10 @@ cd $DEPS_ROOT
 
 LIBJPEG_DIR=`pwd`/libjpeg-turbo
 if [ ! -d "$LIBJPEG_DIR" ]; then
-VER=$(curl --silent -qI https://github.com/libjpeg-turbo/libjpeg-turbo/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');
+# Pinned: don't auto-track "latest" here, it silently pulls in breaking
+# releases (e.g. 3.2.0's SIMD dispatcher rewrite required a matching fix
+# in tr_image.c). Bump deliberately and retest JPEG texture loading.
+VER=3.2.0
 wget https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/tarball/$VER
 tar xvfz $VER
 rm $VER
