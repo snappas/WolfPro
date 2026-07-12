@@ -8,8 +8,6 @@
 #------------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.10.3 FATAL_ERROR)
 
-set(CMAKE_ASM_NASM_OBJECT_FORMAT elf)
-
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.21")
     cmake_policy(SET CMP0121 NEW)
 endif()
@@ -66,7 +64,7 @@ else()
 endif()
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
-project(RTCW-MP C CXX ASM_NASM ASM)
+project(RTCW-MP C CXX)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 	message(STATUS "64 bits target architecture detected")

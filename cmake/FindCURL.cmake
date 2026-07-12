@@ -7,14 +7,14 @@ if(WOLF_64BITS)
 endif()
 if(WOLF_32BITS)
 	set(DEPS deps)
-	set(CURL_NAMES curl)
+	set(CURL_NAMES libcurl-x86 curl-x86)
 endif()
 
 
 
 
 if(CMAKE_CROSSCOMPILING)
-find_path(CURL_INCLUDE_DIR curl
+find_path(CURL_INCLUDE_DIR curl/curlver.h
 	${PROJECT_SOURCE_DIR}/${DEPS}/curl-win/curl/include/
 	${PROJECT_SOURCE_DIR}/${DEPS}/curl/build/include/
 	/usr/include
@@ -41,7 +41,7 @@ find_library(CURL_LIBRARY
 )
 else()
 if(UNIX)
-find_path(CURL_INCLUDE_DIR curl
+find_path(CURL_INCLUDE_DIR curl/curlver.h
 	/usr/include/x86_64-linux-gnu
 	/usr/include
 	/usr/local/include
@@ -50,7 +50,7 @@ find_path(CURL_INCLUDE_DIR curl
 	DOC "The directory where curlver.h resides"
 )
 else()
-find_path(CURL_INCLUDE_DIR curl
+find_path(CURL_INCLUDE_DIR curl/curlver.h
 	${PROJECT_SOURCE_DIR}/${DEPS}/curl-win/curl/include/
 	${PROJECT_SOURCE_DIR}/${DEPS}/curl/include
 	DOC "The directory where curlver.h resides"
@@ -58,7 +58,7 @@ find_path(CURL_INCLUDE_DIR curl
 endif()
 if(UNIX)
 find_library(CURL_LIBRARY
-	NAMES ${CURL_NAMES} libcurl
+	NAMES ${CURL_NAMES} curl
 	PATHS
 	/usr/lib/x86_64-linux-gnu
 	/usr/lib/i386-linux-gnu/

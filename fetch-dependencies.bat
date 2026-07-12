@@ -7,6 +7,10 @@ rem * and build openssl and curl with openssl support
 rem ***************************************************************************
 
 :begin
+  if not "%~1" == "" (
+    set vc_version=%~1
+    goto calcProgramFiles
+  )
   echo Compiler:
   echo.
   echo vc14.2    - Use Visual Studio 2019
@@ -14,6 +18,7 @@ rem ***************************************************************************
   echo.
   echo Enter Compiler:
   set /p vc_version=
+:calcProgramFiles
   rem Calculate the program files directory
   if defined PROGRAMFILES (
     set "PF=%PROGRAMFILES%"
@@ -102,7 +107,9 @@ rem ***************************************************************************
 
 	if not exist "curl" (
 		echo curl...
-		call powershell "Invoke-WebRequest -Uri https://curl.se/windows/dl-8.15.0_1/curl-8.15.0_1-win32-mingw.zip -Out curl.zip"
+		rem curl.se stopped publishing win32-mingw builds (x64/ARM64 only now);
+		rem using a mirrored prebuilt copy instead.
+		call powershell "Invoke-WebRequest -Uri https://raw.githubusercontent.com/snappas/curl-32bit/main/curl-8.15.0_5-win32-mingw.zip -Out curl.zip"
 		call powershell "Expand-Archive -Path curl.zip -DestinationPath curl"
 		call powershell "Get-ChildItem """curl\*\*""" | move-item -Destination """curl\""
 		call powershell "rm curl.zip"
@@ -161,7 +168,13 @@ rem ***************************************************************************
 	)
 	cd "%ROOT_DEP_DIR%\curl"
 	cd bin
-	lib /def:libcurl.def /OUT:libcurl.lib /MACHINE:X86
+	rem the mirrored win32-mingw build ships libcurl.dll/.def with no arch
+	rem suffix (curl.se's own x64 build already ships libcurl-x64.dll/.def) -
+	rem rename + relabel so x86 and x64 can coexist in the same install dir.
+	ren libcurl.dll libcurl-x86.dll
+	echo LIBRARY libcurl-x86 > libcurl-x86.def
+	type libcurl.def >> libcurl-x86.def
+	lib /def:libcurl-x86.def /OUT:libcurl-x86.lib /MACHINE:X86
 	
 :buildLibJPEG
 	if defined SKIP_JPEG (
@@ -170,7 +183,7 @@ rem ***************************************************************************
 	cd "%ROOT_DEP_DIR%\libjpeg-turbo"
 	mkdir build
 	cd build
-	call cmake -G"%cmake_makefiles%" -A Win32  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release ..
+	call cmake -G"%cmake_makefiles%" -A Win32  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release -DWITH_TURBOJPEG=OFF -DENABLE_SHARED=OFF ..
 	call "%PF%\%VC_PATH%\Common7\IDE\devenv.exe" libjpeg-turbo.sln /Build Release
 	call powershell "Get-ChildItem """..\src\*.h""" | copy-item -Destination """..\""
 	call powershell "Get-ChildItem """*.h""" | copy-item -Destination """..\""
@@ -196,4 +209,6 @@ rem ***************************************************************************
 	call powershell "Get-ChildItem """libjpeg-turbo\build\Release\*.lib""" | copy-item -Destination """bin\""
 	call powershell "Get-ChildItem """jansson\build\lib\Release\*.lib""" | copy-item -Destination """bin\""
 	echo Copy the DLL files from deps/bin to your RtcwPro install location where wolfMP.exe is
-	pause
+	if "%~1" == "" (
+		pause
+	)

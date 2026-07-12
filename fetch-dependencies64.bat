@@ -7,6 +7,10 @@ rem * and build openssl and curl with openssl support
 rem ***************************************************************************
 
 :begin
+  if not "%~1" == "" (
+    set vc_version=%~1
+    goto calcProgramFiles
+  )
   echo Compiler:
   echo.
   echo vc14.2    - Use Visual Studio 2019
@@ -14,6 +18,7 @@ rem ***************************************************************************
   echo.
   echo Enter Compiler:
   set /p vc_version=
+:calcProgramFiles
   rem Calculate the program files directory
   if defined PROGRAMFILES (
     set "PF=%PROGRAMFILES%"
@@ -173,7 +178,7 @@ rem ***************************************************************************
 	cd build
 	rem call cmake -G"%cmake_makefiles%" -A x64  -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release %JPEG_SRC%
 	rem call "%PF%\%VC_PATH%\Common7\IDE\devenv.exe" libjpeg-turbo.sln /Build Release
-	call cmake -G"NMake Makefiles" -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release %JPEG_SRC%
+	call cmake -G"NMake Makefiles" -DCMAKE_POLICY_VERSION_MINIMUM="3.5" -DCMAKE_BUILD_TYPE=Release -DWITH_TURBOJPEG=OFF -DENABLE_SHARED=OFF %JPEG_SRC%
 	nmake
 	call powershell "Get-ChildItem """..\src\*.h""" | copy-item -Destination """..\""
 	call powershell "Get-ChildItem """*.h""" | copy-item -Destination """..\""
@@ -200,4 +205,6 @@ rem ***************************************************************************
 	call powershell "Get-ChildItem """libjpeg-turbo\build\*.dll""" | copy-item -Destination """bin\""
 	call powershell "Get-ChildItem """libjpeg-turbo\build\*.lib""" | copy-item -Destination """bin\""
 	echo Copy the DLL files from deps/bin to your RtcwPro install location where wolfMP.exe is
-	pause
+	if "%~1" == "" (
+		pause
+	)
