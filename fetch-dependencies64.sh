@@ -140,60 +140,6 @@ x86_64-w64-mingw32-dlltool -d libjpeg-62.def -l libjpeg-62.lib
 fi
 cd $DEPS_ROOT
 
-XWIN_DIR=`pwd`/xwin
-if [ ! -d "$XWIN_DIR" ]; then
-VER=$(curl --silent -qI https://github.com/Jake-Shadle/xwin/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');
-xwin_prefix="xwin-$VER-x86_64-unknown-linux-musl"
-wget https://github.com/Jake-Shadle/xwin/releases/download/$VER/$xwin_prefix.tar.gz
-tar xvfz $xwin_prefix.tar.gz
-rm $xwin_prefix.tar.gz
-mv *xwin* xwin
-
-cd $XWIN_DIR
-while : ; do
-	./xwin --arch x86_64 --accept-license download
-	./xwin --arch x86_64 --accept-license unpack
-	./xwin --arch x86_64 --accept-license splat --output .
-	ret=$?
-	[[ $ret -ne 0 ]] || break
-done
-fi
-cd $DEPS_ROOT
-
-CURLWIN_DIR=`pwd`/curl-win
-if [ ! -d "$CURLWIN_DIR" ]; then
-#git clone https://github.com/curl/curl-for-win/
-#cd $CURLWIN_DIR
-#CURLWIN_REV=`git log -n1 --format="%H"`
-#export CW_CONFIG=main-win
-#export CW_REVISION="${CURLWIN_REV}"
-#. ./_versions.sh
-#docker trust inspect --pretty "${DOCKER_IMAGE}"
-#docker pull "${DOCKER_IMAGE}"
-#docker images --digests
-#if [ -z "${DND_ENV}" ]; then
-#	BUILD_ENV=$(pwd)
-#else
-#	BUILD_ENV=${DND_ENV}
-#fi
-#docker run --volume "${BUILD_ENV}:${BUILD_ENV}" --workdir "${BUILD_ENV}" \
-#            --env-file <(env | grep -a -E '^(CW_|GITHUB_|DO_NOT_TRACK)') \
-#            "${DOCKER_IMAGE}" \
-#            sh -c ./_ci-linux-debian.sh
-mkdir curl-win
-cd curl-win
-wget https://curl.se/windows/latest.cgi?p=win64-mingw.zip
-mv *win64-mingw.zip curl.zip
-unzip curl.zip
-rm curl.zip
-mv curl*win64-mingw curl
-cd curl/bin
-gendef libcurl-x64.dll
-i686-w64-mingw32-dlltool -d libcurl-x64.def -l libcurl-x64.lib
-fi
-
-
-
 OMNIBOT_DIR=`pwd`/omni-bot
 if [ ! -d "$OMNIBOT_DIR" ]; then
 VER=$(curl --silent -qI https://github.com/jswigart/omni-bot/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');

@@ -9,8 +9,6 @@ dependencies:
 dependencies64:
 	cd .. && bash fetch-dependencies64.sh
 	mkdir -p ../build64
-	cp ../deps64/libjpeg-turbo/build-win/libjpeg-62.dll ../build64
-	cp ../deps64/curl-win/curl/bin/libcurl-x64.dll ../build64
 
 binaries-linux:
 	mkdir -p ../build
