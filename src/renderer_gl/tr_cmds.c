@@ -154,7 +154,9 @@ void R_IssueRenderCommands( qboolean runPerformanceCounters ) {
 	if ( !r_skipBackEnd->integer ) {
 		// let it start on the new batch
 		if ( !glConfig.smpActive ) {
+			PROF_BEGIN( "RB_ExecuteRenderCommands" );
 			RB_ExecuteRenderCommands( cmdList->cmds );
+			PROF_END();
 		} else {
 			GLimp_WakeRenderer( cmdList );
 		}

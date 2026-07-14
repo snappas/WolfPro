@@ -2520,6 +2520,8 @@ Returns last event time
 int Com_EventLoop( void ) {
 	sysEvent_t ev;
 
+	PROF_BEGIN( "Com_EventLoop" );
+
 #ifndef DEDICATED
 	byte		bufData[ MAX_MSGLEN_BUF ];
 	msg_t		buf;
@@ -2545,6 +2547,7 @@ int Com_EventLoop( void ) {
 				}
 			}
 #endif // !DEDICATED
+			PROF_END();
 			return ev.evTime;
 		}
 
@@ -3443,6 +3446,10 @@ void Com_Init( char *commandLine ) {
 
 	Threads_Init();
 
+	PROF_Init();
+	PROF_InitThread( "Main" );
+	PROF_RegisterCommands();
+
 	com_fullyInitialized = qtrue;
 	Com_Printf( "--- Common Initialization Complete ---\n" );
 
@@ -3772,6 +3779,11 @@ void Com_Frame( void ) {
 
 	// waiting for incoming packets
 	//if ( noDelay == qfalse )
+	// each NET_Sleep call recorded individually (not one span for the whole
+	// loop) -- the per-call granularity has real diagnostic value (it's
+	// already surfaced a real bug once), so the Timeline needs to be able
+	// to render many small same-depth siblings correctly rather than this
+	// code working around a rendering limitation
 	do {
 		if ( com_sv_running->integer ) {
 			timeValSV = SV_SendQueuedPackets();
@@ -3788,12 +3800,15 @@ void Com_Frame( void ) {
 		if ( timeVal > sleepMsec )
 			Com_EventLoop();
 #endif
+		PROF_BEGIN( "NET_Sleep" );
 		NET_Sleep( sleepMsec * 1000 - 500 );
+		PROF_END();
 	} while( Com_TimeVal( minMsec ) );
 
 	lastTime = com_frameTime;
 	com_frameTime = Com_EventLoop();
 	realMsec = com_frameTime - lastTime;
+	PROF_SET_FRAME_VALUE( "Frame delta (ms)", (float)realMsec );
 
 	Cbuf_Execute();
 
@@ -3807,7 +3822,9 @@ void Com_Frame( void ) {
 		timeBeforeServer = Sys_Milliseconds();
 	}
 
+	PROF_BEGIN( "SV_Frame" );
 	SV_Frame( msec );
+	PROF_END();
 
 	// if "dedicated" has been modified, start up
 	// or shut down the client system.
@@ -3847,7 +3864,9 @@ void Com_Frame( void ) {
 			timeBeforeClient = Sys_Milliseconds();
 		}
 
+		PROF_BEGIN( "CL_Frame" );
 		CL_Frame( msec );
+		PROF_END();
 
 		if ( com_speeds->integer ) {
 			timeAfter = Sys_Milliseconds();

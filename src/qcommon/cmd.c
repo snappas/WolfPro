@@ -188,6 +188,8 @@ void Cbuf_Execute( void ) {
 	char line[MAX_CMD_LINE];
 	int quotes;
 
+	PROF_BEGIN( "Cbuf_Execute" );
+
 	while ( cmd_text.cursize )
 	{
 		if ( cmd_wait ) {
@@ -242,6 +244,7 @@ void Cbuf_Execute( void ) {
 
 		Cmd_ExecuteString( line );
 	}
+	PROF_END();
 }
 
 /*

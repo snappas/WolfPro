@@ -52,6 +52,8 @@ void Sys_DebugBreak(void){
 
 void Sys_Sleep( int msec )
 {
+	PROF_BEGIN( "Sys_Sleep" );
+
 	if ( msec < 0 ) {
 		// special case: wait for event or network packet
 		DWORD dwResult;
@@ -61,10 +63,13 @@ void Sys_Sleep( int msec )
 		}
 		while ( dwResult == WAIT_TIMEOUT && NET_Sleep( 10 * 1000 ) );
 		//WaitMessage();
+		PROF_END();
 		return;
 	}
 
 	Sleep(msec);
+
+	PROF_END();
 }
 
 /*
@@ -109,6 +114,8 @@ void Sys_MicroSleep( int us )
 	if (us <= 50)
 		return;
 
+	PROF_BEGIN( "Sys_MicroSleep" );
+
 	us -= 50;
 
 	LARGE_INTEGER frequency;
@@ -137,6 +144,8 @@ void Sys_MicroSleep( int us )
 			YieldProcessor();
 		}
 	}
+
+	PROF_END();
 }
 
 

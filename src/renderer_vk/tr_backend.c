@@ -28,6 +28,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "tr_local.h"
 #include "../client/cl_imgui.h"
+#include "../client/cl_profiler.h"
 
 backEndData_t   *backEndData;
 backEndState_t backEnd;
@@ -1195,6 +1196,7 @@ const void  *RB_EndFrame( const void *data ) {
 	GUI_DrawMainMenu();
 	DrawGUI_Performance();
 	DrawGUI_ShaderTrace();
+	CL_ProfilerFrame();
 	ri.CL_ImGUI_Update();
 	DrawGUI_RHI();
 	ri.CL_CG_ImGUI_Update();

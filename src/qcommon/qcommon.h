@@ -1393,5 +1393,123 @@ extern model_t *cl_models[2048];
 extern int sv_numModels;
 extern model_t* sv_models[2048];
 
+//============================================================================
+// instrumentation profiler
+//============================================================================
+
+#define PROF_MAX_THREADS		16
+#define PROF_MAX_EVENTS			65536		// must be a power of two
+#define PROF_MAX_FRAMES			512			// must be a power of two
+#define PROF_MAX_DEPTH			64
+#define PROF_MAX_NAME			64
+#define PROF_MAX_FRAME_VALUES	16
+#define PROF_MAX_FUNCTIONS		256
+
+typedef struct profEvent_s {
+	int64_t begin;
+	int64_t end;
+	const char *name;
+	int32_t index;
+	int32_t depth;
+	int32_t frameIndex;
+	// set explicitly by Prof_Moment vs Prof_BeginDuration -- NOT inferred
+	// from (end <= begin), since Sys_Microseconds() truncates to whole
+	// microseconds and a genuinely fast Begin/End pair (e.g. PeekMessage or
+	// Cbuf_Execute with nothing queued) can measure well under 1us and land
+	// on the exact same timestamp, which would otherwise misclassify it as
+	// a moment.
+	qboolean isMoment;
+} profEvent_t;
+
+typedef struct profThread_s {
+	qboolean used;
+	qboolean isMainThread;
+	char name[PROF_MAX_NAME];
+	profEvent_t events[PROF_MAX_EVENTS];
+	uint32_t eventWriteIndex;
+	int32_t durationIndexStack[PROF_MAX_DEPTH];
+	int32_t depth;
+} profThread_t;
+
+typedef struct profFrameValue_s {
+	const char *name;
+	float value;
+} profFrameValue_t;
+
+typedef struct profFrame_s {
+	int64_t begin;
+	int64_t end;
+	int32_t valueCount;
+	profFrameValue_t values[PROF_MAX_FRAME_VALUES];
+} profFrame_t;
+
+typedef struct profFunctionStat_s {
+	const char *name;
+	int32_t depth; // call-stack depth at first occurrence (stable in practice: every currently-instrumented function has one fixed call site)
+	int32_t callCount;
+	int64_t totalUS;
+	int64_t minUS;
+	int64_t maxUS;
+	// only populated when Prof_AnalyzeFunctions is called with a valid
+	// selectedFrameIndex (>= 0); both stay 0 otherwise
+	int32_t frameCallCount;
+	int64_t frameTotalUS;
+} profFunctionStat_t;
+
+#if defined( ENABLE_PROFILER )
+
+void Prof_Init( void );
+void Prof_RegisterCommands( void );
+void Prof_NewFrame( void );
+void Prof_InitThread( const char *name );
+void Prof_ShutdownThread( void );
+void Prof_BeginDuration( const char *name, int32_t index );
+void Prof_EndDuration( void );
+void Prof_Moment( const char *name );
+void Prof_SetFrameValue( const char *name, float value );
+
+qboolean Prof_IsPaused( void );
+void Prof_SetPaused( qboolean paused );
+int32_t Prof_GetThreadCount( void );
+profThread_t *Prof_GetThread( int32_t index );
+int32_t Prof_GetFrameCount( void );
+profFrame_t *Prof_GetFrame( int32_t index ); // 0 = oldest currently retained frame
+// hasSelectedFrame qfalse: selectedFrameBeginUs/EndUs ignored, frameCallCount/frameTotalUS
+// stay 0. qtrue: accumulates them for events whose OWN begin timestamp falls in the
+// half-open window [selectedFrameBeginUs, selectedFrameEndUs) -- deliberately
+// time-range-based, not profEvent_t::frameIndex-based: frameIndex is a raw ring-buffer
+// slot (0..PROF_MAX_FRAMES-1) that gets reused by many different real frames over the
+// (much longer) retained event history, so equality against it would match several
+// unrelated frames instead of just the selected one. Begin-containment (not overlap of
+// both ends) is deliberate too: adjacent frames share an exact boundary timestamp, so an
+// overlap test can double-match an event whose timestamp ties that shared boundary.
+int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboolean hasSelectedFrame, int64_t selectedFrameBeginUs, int64_t selectedFrameEndUs );
+
+#define PROF_Init() Prof_Init()
+#define PROF_RegisterCommands() Prof_RegisterCommands()
+#define PROF_NewFrame() Prof_NewFrame()
+#define PROF_InitThread( name ) Prof_InitThread( name )
+#define PROF_ShutdownThread() Prof_ShutdownThread()
+#define PROF_BEGIN( name ) Prof_BeginDuration( ( name ), 0 )
+#define PROF_BEGIN_I( name, index ) Prof_BeginDuration( ( name ), ( index ) )
+#define PROF_END() Prof_EndDuration()
+#define PROF_MOMENT( name ) Prof_Moment( name )
+#define PROF_SET_FRAME_VALUE( name, value ) Prof_SetFrameValue( ( name ), ( value ) )
+
+#else
+
+#define PROF_Init()
+#define PROF_RegisterCommands()
+#define PROF_NewFrame()
+#define PROF_InitThread( name )
+#define PROF_ShutdownThread()
+#define PROF_BEGIN( name )
+#define PROF_BEGIN_I( name, index )
+#define PROF_END()
+#define PROF_MOMENT( name )
+#define PROF_SET_FRAME_VALUE( name, value )
+
+#endif // ENABLE_PROFILER
+
 #endif // _QCOMMON_H_
 

@@ -114,6 +114,7 @@ message(STATUS ${CLIENT_SRC_GL})
 LIST(REMOVE_ITEM CLIENT_SRC_GL
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/client/cl_imgui.c"
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/client/cl_imgui_helpers.c"
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/client/cl_profiler.c"
 )
 
 message(STATUS ${CLIENT_SRC_GL})
@@ -238,5 +239,12 @@ FILE(GLOB RENDERER_CIMGUI_FILES
 	"src/cimgui/imgui/*.cpp"
 	"src/cimgui/imgui/*.h"
 
+)
+
+FILE(GLOB RENDERER_CIMPLOT_FILES
+	"src/cimplot/*.cpp"
+	"src/cimplot/*.h"
+	"src/cimplot/implot/*.cpp"
+	"src/cimplot/implot/*.h"
 )
 

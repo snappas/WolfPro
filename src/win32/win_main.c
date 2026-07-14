@@ -1024,6 +1024,7 @@ sysEvent_t Sys_GetEvent( void ) {
 	}
 
 	// pump the message loop
+	PROF_BEGIN( "PeekMessage" );
 	while ( PeekMessage( &msg, NULL, 0, 0, PM_NOREMOVE ) ) {
 		if ( !GetMessage( &msg, NULL, 0, 0 ) ) {
 			Com_Quit(0);
@@ -1035,8 +1036,10 @@ sysEvent_t Sys_GetEvent( void ) {
 		TranslateMessage( &msg );
 		DispatchMessage( &msg );
 	}
+	PROF_END();
 
 	// check for console commands
+	PROF_BEGIN( "Sys_ConsoleInput" );
 	s = Sys_ConsoleInput();
 	if ( s ) {
 		char    *b;
@@ -1047,6 +1050,7 @@ sysEvent_t Sys_GetEvent( void ) {
 		Q_strncpyz( b, s, len - 1 );
 		Sys_QueEvent( 0, SE_CONSOLE, 0, 0, len, b );
 	}
+	PROF_END();
 
 	// return if we have data
 	if ( eventHead > eventTail ) {
@@ -1209,6 +1213,18 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	// main game loop
 	while ( 1 ) {
+		PROF_MOMENT( "Frame Start" );
+		// must happen before "Frame"/"IN_Frame" begin recording, not inside
+		// Com_Frame() (where it used to live) -- Prof_NewFrame() is what
+		// actually defines a frame's [begin,end) window, and "Frame"/
+		// "IN_Frame" both start before Com_Frame() is even entered; calling
+		// it later meant their own begin timestamp always preceded the
+		// window's begin, so any time-range filter (e.g. the Functions
+		// tab's per-selected-frame column) saw them straddle two windows
+		// and double-counted them
+		PROF_NewFrame();
+		PROF_BEGIN( "Frame" );
+
 		// if not running as a game client, sleep a bit
 		if ( g_wv.isMinimized || ( com_dedicated && com_dedicated->integer ) ) {
 			Sleep( 5 );
@@ -1223,7 +1239,10 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		startTime = Sys_Milliseconds();
 
 		// make sure mouse and joystick are only called once a frame
+		PROF_BEGIN( "IN_Frame" );
 		IN_Frame();
+		PROF_END();
+		PROF_MOMENT( "Input Sample" );
 
 		// run the game
 		Com_Frame();
@@ -1231,6 +1250,8 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		endTime = Sys_Milliseconds();
 		totalMsec += endTime - startTime;
 		countMsec++;
+
+		PROF_END();
 	}
 
 	// never gets here

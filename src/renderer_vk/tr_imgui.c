@@ -5,7 +5,7 @@
 #include "shaders/imgui_ps.h"
 #include "shaders/imgui_vs.h"
 
-#define MAX_IMGUI_VERTS (1<<16)
+#define MAX_IMGUI_VERTS (1<<18)
 #define MAX_IMGUI_INDICES (MAX_IMGUI_VERTS * 3)
 
 
@@ -140,6 +140,8 @@ void RB_ImGUI_Draw(rhiTexture renderTarget){
         return;
     }
 
+    PROF_BEGIN( "RB_ImGUI_Draw" );
+
     rhiBuffer currentVB = imGUIvertexBuffers[backEnd.currentFrameIndex];
     rhiBuffer currentIB = imGUIindexBuffers[backEnd.currentFrameIndex];
     ImDrawVert* vertices = (ImDrawVert*)RHI_MapBuffer(currentVB);
@@ -214,7 +216,8 @@ void RB_ImGUI_Draw(rhiTexture renderTarget){
 
     }
     RB_EndRenderPass();
-    
+
+    PROF_END();
 }
 
 void RE_DrawMainMenuBarInfo(void)
