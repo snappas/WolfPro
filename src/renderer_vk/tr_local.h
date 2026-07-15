@@ -891,10 +891,37 @@ typedef struct SceneView {
 
 typedef struct renderPass {
 	char name[64];
+	const char *namePtr; // the original string-literal pointer passed to RB_Begin*Pass -- stable for the program's lifetime, unlike name[64] which gets overwritten every ~RHI_FRAMES_IN_FLIGHT frames. Only ENABLE_PROFILER's GPU-bridging code should read this (see tr_backend.c); name[64]/nameHash remain the source of truth for everything else (CRC hashing, "Frame breakdown" panel display).
 	uint32_t nameHash;
 	uint32_t durationUs;
 	rhiDurationQuery query;
+	int64_t cpuIssueBeginUs; // Sys_Microseconds() when RB_Begin*Pass recorded this pass's commands (fallback positioning source, and the umbrella "GPU Frame" box's span when no other passes ran)
+	int64_t cpuIssueEndUs;   // Sys_Microseconds() when RB_End*Pass closed it
 } renderPass;
+
+#define MAX_GPU_SUBSCOPES 16
+
+// GPU-timed debug-label sub-scopes NESTED inside an already-open render/
+// compute pass (e.g. "Opaque"/"Dynamic Lights"/"Transparent" inside "3D") --
+// deliberately a SEPARATE array from renderPass/renderPasses[], not reusing
+// RB_Begin/EndRenderPass's or RB_Begin/EndComputePass's bookkeeping. Those
+// close "whichever entry was pushed most recently" (renderPassCount-1),
+// which is only correct if scopes never interleave -- a sub-scope that
+// begins and ends entirely within an already-open outer pass would corrupt
+// both the sub-scope's own timing AND the outer pass's, since the outer
+// pass's End would end up closing the sub-scope's query a second time
+// instead of its own. RB_BeginTimedLabel/RB_EndTimedLabel (tr_backend.c)
+// sidestep this by handing the caller a local handle (index + query) that
+// it holds and passes back explicitly -- ordinary C call-stack scoping,
+// no array-index guessing, so real nesting is not the problem it would be
+// for the other mechanism.
+typedef struct gpuSubScope {
+	char name[64];
+	const char *namePtr;
+	rhiDurationQuery query;
+	int64_t cpuIssueBeginUs; // matches renderPass's own fields -- always present, only ever assigned under ENABLE_PROFILER
+	int64_t cpuIssueEndUs;
+} gpuSubScope;
 
 // all state modified by the back end is seperated
 // from the front end state
@@ -954,6 +981,8 @@ typedef struct {
 	rhiDurationQuery frameDuration[RHI_FRAMES_IN_FLIGHT];
 	renderPass renderPasses[RHI_FRAMES_IN_FLIGHT][MAX_RENDERPASSES];
 	uint32_t renderPassCount[RHI_FRAMES_IN_FLIGHT];
+	gpuSubScope gpuSubScopes[RHI_FRAMES_IN_FLIGHT][MAX_GPU_SUBSCOPES];
+	uint32_t gpuSubScopeCount[RHI_FRAMES_IN_FLIGHT];
 	uint32_t pipelineChangeCount;
 	qbool clearColor;
 

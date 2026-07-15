@@ -131,8 +131,15 @@ static qboolean s_imPlotContextCreated = qfalse;
 static void DrawGraphsTab( void ) {
 	static float frameDeltaMs[PROF_MAX_FRAMES];
 	int32_t frameCount = Prof_GetFrameCount();
+	// the newest retained frame is always still in progress -- its end
+	// timestamp is only a placeholder (see Prof_NewFrame()) until the
+	// FOLLOWING frame starts and closes it, so its measured duration would
+	// always read as exactly 0 if it were included below, permanently
+	// pinning min (and putting a spurious zero-height bar at the right
+	// edge of the plot) regardless of actual frame times
+	int32_t closedFrameCount = frameCount > 0 ? frameCount - 1 : 0;
 	int32_t i;
-	float minVal = 999999.0f, maxVal = 0.0f, sum = 0.0f;
+	float minVal = 999999.0f, maxVal = 0.0f, sum = 0.0f, sumSq = 0.0f;
 
 	if ( !s_imPlotContextCreated ) {
 		ImPlot_CreateContext();
@@ -152,32 +159,41 @@ static void DrawGraphsTab( void ) {
 	igCheckbox( "Auto-scroll", &s_graphsAutoScroll );
 	igSliderFloat( "Spike threshold (ms)", &s_graphsSpikeThresholdMs, 1.0f, 200.0f, "%.1f", 0 );
 
-	for ( i = 0; i < frameCount; i++ ) {
+	for ( i = 0; i < closedFrameCount; i++ ) {
 		profFrame_t *f = Prof_GetFrame( i );
-		int32_t v;
-		float ms = 0.0f;
+		float ms;
 
 		if ( !f ) {
 			continue;
 		}
-		for ( v = 0; v < f->valueCount; v++ ) {
-			if ( !strcmp( f->values[v].name, "Frame delta (ms)" ) ) {
-				ms = f->values[v].value;
-				break;
-			}
-		}
+		// derived from the frame's own begin/end (Sys_Microseconds(),
+		// recorded by Prof_NewFrame()) rather than the "Frame delta (ms)"
+		// frame value below -- that value comes from com_frameTime, an
+		// int millisecond counter, so it quantizes to whole milliseconds
+		// (3/4/5ms) instead of showing the true sub-millisecond delta
+		ms = (float)( f->end - f->begin ) / 1000.0f;
 		frameDeltaMs[i] = ms;
 		if ( ms < minVal ) minVal = ms;
 		if ( ms > maxVal ) maxVal = ms;
 		sum += ms;
+		sumSq += ms * ms;
 
 		if ( s_graphsAutoPauseOnSpike && ms > s_graphsSpikeThresholdMs && !Prof_IsPaused() ) {
 			Prof_SetPaused( qtrue );
 		}
 	}
 
-	igText( "Frames: %d  min: %.2fms  max: %.2fms  avg: %.2fms",
-		frameCount, minVal, maxVal, frameCount > 0 ? sum / frameCount : 0.0f );
+	{
+		float avgVal = closedFrameCount > 0 ? sum / closedFrameCount : 0.0f;
+		// E[x^2] - E[x]^2; clamped at 0 since float rounding can otherwise
+		// drive a near-zero variance (e.g. a perfectly steady frame time)
+		// slightly negative, which sqrtf() would turn into NaN
+		float variance = closedFrameCount > 0 ? ( sumSq / closedFrameCount ) - ( avgVal * avgVal ) : 0.0f;
+		float stddevVal = sqrtf( variance > 0.0f ? variance : 0.0f );
+
+		igText( "Frames: %d  min: %.2fms  max: %.2fms  avg: %.2fms  stddev: %.2fms",
+			closedFrameCount, minVal, maxVal, avgVal, stddevVal );
+	}
 
 	// fill whatever vertical space is actually left in the tab instead of a
 	// fixed height, so the plot fits inside the profiler's bottom-1/3-height
@@ -202,9 +218,9 @@ static void DrawGraphsTab( void ) {
 		// hover/click mapping still works since ImPlot_GetPlotMousePos
 		// already returns coordinates in (possibly zoomed/panned) plot space.
 		if ( s_graphsAutoScroll ) {
-			ImPlot_SetupAxisLimits( ImAxis_X1, 0.0, (double)( frameCount > 0 ? frameCount : 1 ), ImPlotCond_Always );
+			ImPlot_SetupAxisLimits( ImAxis_X1, 0.0, (double)( closedFrameCount > 0 ? closedFrameCount : 1 ), ImPlotCond_Always );
 		}
-		ImPlot_PlotBars_FloatPtrInt( "ms", frameDeltaMs, frameCount, 0.67, 0, *spec );
+		ImPlot_PlotBars_FloatPtrInt( "ms", frameDeltaMs, closedFrameCount, 0.67, 0, *spec );
 		ImPlotSpec_destroy( spec );
 
 		if ( ImPlot_IsPlotHovered() ) {
@@ -214,7 +230,7 @@ static void DrawGraphsTab( void ) {
 			ImPlot_GetPlotMousePos_Safe( &mouse, IMPLOT_AUTO, IMPLOT_AUTO );
 			hoveredIndex = (int32_t)floor( mouse.x );
 
-			if ( hoveredIndex >= 0 && hoveredIndex < frameCount ) {
+			if ( hoveredIndex >= 0 && hoveredIndex < closedFrameCount ) {
 				profFrame_t *frame = Prof_GetFrame( hoveredIndex );
 
 				mouse.x = floor( mouse.x );
@@ -243,7 +259,7 @@ static void DrawGraphsTab( void ) {
 					int32_t v;
 
 					igBeginTooltip();
-					igText( "Frame: %d / %d", hoveredIndex, frameCount );
+					igText( "Frame: %d / %d", hoveredIndex, closedFrameCount );
 					igText( "Full frame  : %6lld us", (long long)( frame->end - frame->begin ) );
 					for ( v = 0; v < frame->valueCount; v++ ) {
 						igText( "%-12s: %6.2f", frame->values[v].name, frame->values[v].value );
@@ -763,11 +779,7 @@ static void DrawTimelineTab( void ) {
 
 			if ( igIsMouseHoveringRect( (ImVec2){ x0, y0 }, (ImVec2){ x1, y1 }, true ) ) {
 				igBeginTooltip();
-				// depth/lane/index surfaced as a diagnostic while chasing a
-				// live report of specific duration boxes going missing --
-				// remove once that's root-caused and confirmed fixed
 				igText( "%s: %.3f ms", ev->name, (float)( ev->end - ev->begin ) / 1000.0f );
-				igText( "depth=%d lane=%d index=%d", ev->depth, lane, ev->index );
 				igEndTooltip();
 			}
 		}
@@ -939,7 +951,7 @@ static void DrawFunctionsTab( void ) {
 		s_functionsSortByStackLevel = qtrue;
 	}
 	statCount = Prof_AnalyzeFunctions( stats, PROF_MAX_FUNCTIONS, showSelectedFrame ? qtrue : qfalse,
-		showSelectedFrame ? selectedFrame->begin : 0, showSelectedFrame ? selectedFrame->end : 0 );
+		showSelectedFrame ? selectedFrame->begin : 0, showSelectedFrame ? selectedFrame->end : 0, qfalse );
 
 	if ( showSelectedFrame ) {
 		igText( "Selected frame: %d", s_selectedFrameIndex );
@@ -953,7 +965,18 @@ static void DrawFunctionsTab( void ) {
 	// stack-level default before the user ever sees it. Column widths
 	// aren't meaningfully customized here anyway, so there's nothing
 	// else worth persisting for this particular table.
-	if ( igBeginTable( "Functions", columnCount, ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_NoSavedSettings, (ImVec2){ 0, 0 }, 0.0f ) ) {
+	//
+	// SortTristate: without it, imgui_tables.cpp unconditionally treats
+	// SpecsCount==0 as "needs a default sort" (see TableUpdateLayout's
+	// IsSortSpecsDirty force-set, and TableSortSpecsSanitize's fallback to
+	// column 0) -- so every frame the stack-level branch below clears all
+	// columns' sort direction to None, Dear ImGui immediately re-picks
+	// column 0 ("Name") ascending as if it were a fresh user click, which
+	// the check after igTableHeadersRow() can't tell apart from a real one
+	// and flips s_functionsSortByStackLevel back off one frame later.
+	// SortTristate makes SpecsCount==0 a legitimate resting state instead
+	// of something Dear ImGui "fixes" on our behalf.
+	if ( igBeginTable( "Functions", columnCount, ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate | ImGuiTableFlags_NoSavedSettings, (ImVec2){ 0, 0 }, 0.0f ) ) {
 		// Inlined instead of using the shared TableHeader() helper: while in
 		// stack-level mode, every active sort spec must be force-cleared
 		// BEFORE igTableHeadersRow() processes this frame's header clicks --
@@ -1034,6 +1057,43 @@ static void DrawFunctionsTab( void ) {
 			}
 		}
 		igEndTable();
+	}
+
+	{
+		static profFunctionStat_t gpuStats[PROF_MAX_FUNCTIONS];
+		int32_t gpuStatCount = Prof_AnalyzeFunctions( gpuStats, PROF_MAX_FUNCTIONS, showSelectedFrame ? qtrue : qfalse,
+			showSelectedFrame ? selectedFrame->begin : 0, showSelectedFrame ? selectedFrame->end : 0, qtrue );
+
+		// hidden entirely until the GPU thread has actually been
+		// registered (ENABLE_PROFILER off, or the renderer hasn't reached
+		// its first RB_EndFrame bridge call yet) -- an empty "GPU" table
+		// with a header row and nothing under it would be confusing noise
+		if ( gpuStatCount > 0 ) {
+			igNewLine();
+			igText( "GPU" );
+			if ( igBeginTable( "FunctionsGPU", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_NoSavedSettings, (ImVec2){ 0, 0 }, 0.0f ) ) {
+				int32_t gi;
+
+				TableHeader( 5, "Name", "Calls", "Total (us)", "Avg (us)", "Max (us)" );
+				for ( gi = 0; gi < gpuStatCount; gi++ ) {
+					profFunctionStat_t *s = &gpuStats[gi];
+					int64_t avgUS = s->callCount > 0 ? s->totalUS / s->callCount : 0;
+
+					igTableNextRow( 0, 0.0f );
+					igTableSetColumnIndex( 0 );
+					igText( "%s", s->name );
+					igTableSetColumnIndex( 1 );
+					igText( "%d", s->callCount );
+					igTableSetColumnIndex( 2 );
+					igText( "%lld", (long long)s->totalUS );
+					igTableSetColumnIndex( 3 );
+					igText( "%lld", (long long)avgUS );
+					igTableSetColumnIndex( 4 );
+					igText( "%lld", (long long)s->maxUS );
+				}
+				igEndTable();
+			}
+		}
 	}
 }
 

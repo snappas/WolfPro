@@ -48,6 +48,32 @@ void Prof_InitThread( const char *name ) {
 	prof_currentThread = t;
 }
 
+// Same "not thread-safe against concurrent calls" caveat as Prof_InitThread
+// above -- prof.threadCount/prof.threads[] are unprotected shared state.
+// Safe today because the only call site (the GPU bridging code) lazily
+// registers once from the single render thread this engine already runs
+// everything on.
+int32_t Prof_InitVirtualThread( const char *name ) {
+	profThread_t *t;
+	int32_t index;
+
+	if ( prof.threadCount >= PROF_MAX_THREADS ) {
+		Com_Printf( "Prof_InitVirtualThread: PROF_MAX_THREADS exceeded, '%s' not registered\n", name );
+		return -1;
+	}
+
+	t = (profThread_t *)Z_Malloc( sizeof( profThread_t ) );
+	Com_Memset( t, 0, sizeof( *t ) );
+	t->used = qtrue;
+	t->isMainThread = qfalse;
+	t->isGPUThread = qtrue;
+	Q_strncpyz( t->name, name, sizeof( t->name ) );
+
+	index = prof.threadCount;
+	prof.threads[prof.threadCount++] = t;
+	return index; // deliberately does NOT touch prof_currentThread
+}
+
 void Prof_ShutdownThread( void ) {
 	prof_currentThread = NULL;
 }
@@ -102,6 +128,31 @@ void Prof_EndDuration( void ) {
 	if ( slot >= 0 ) {
 		t->events[(uint32_t)slot].end = Sys_Microseconds();
 	}
+}
+
+void Prof_RecordCompletedDuration( int32_t threadIndex, const char *name, int64_t beginUs, int64_t endUs, int32_t depth ) {
+	profThread_t *t;
+	profEvent_t *ev;
+	uint32_t slot;
+
+	if ( prof.paused || threadIndex < 0 || threadIndex >= prof.threadCount ) {
+		return;
+	}
+	t = prof.threads[threadIndex];
+	if ( !t ) {
+		return;
+	}
+
+	slot = t->eventWriteIndex & ( PROF_MAX_EVENTS - 1 );
+	ev = &t->events[slot];
+	ev->begin = beginUs;
+	ev->end = endUs;
+	ev->name = name;
+	ev->index = 0;
+	ev->depth = depth;
+	ev->frameIndex = prof.currentFrameIndex;
+	ev->isMoment = qfalse;
+	t->eventWriteIndex++;
 }
 
 void Prof_Moment( const char *name ) {
@@ -172,6 +223,15 @@ qboolean Prof_IsPaused( void ) {
 }
 
 void Prof_SetPaused( qboolean paused ) {
+	// close out whatever frame is in progress at the instant we pause,
+	// using the pause instant as its end -- otherwise it stays open for
+	// the entire pause duration, and the first Prof_NewFrame() call after
+	// resuming closes it using the POST-RESUME timestamp, attributing the
+	// whole pause duration to that one frame as a spurious huge duration
+	if ( paused && !prof.paused && prof.currentFrameIndex >= 0 ) {
+		prof.frames[prof.currentFrameIndex].end = Sys_Microseconds();
+		prof.currentFrameIndex = -1;
+	}
 	prof.paused = paused;
 }
 
@@ -203,14 +263,19 @@ profFrame_t *Prof_GetFrame( int32_t index ) {
 	return &prof.frames[slot];
 }
 
-int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboolean hasSelectedFrame, int64_t selectedFrameBeginUs, int64_t selectedFrameEndUs ) {
+int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboolean hasSelectedFrame, int64_t selectedFrameBeginUs, int64_t selectedFrameEndUs, qboolean gpuOnly ) {
 	int32_t statCount = 0;
 	int32_t threadIndex;
 
 	for ( threadIndex = 0; threadIndex < prof.threadCount; threadIndex++ ) {
 		profThread_t *t = prof.threads[threadIndex];
-		uint32_t count = t->eventWriteIndex < PROF_MAX_EVENTS ? t->eventWriteIndex : PROF_MAX_EVENTS;
+		uint32_t count;
 		uint32_t i;
+
+		if ( t->isGPUThread != gpuOnly ) {
+			continue;
+		}
+		count = t->eventWriteIndex < PROF_MAX_EVENTS ? t->eventWriteIndex : PROF_MAX_EVENTS;
 
 		for ( i = 0; i < count; i++ ) {
 			profEvent_t *ev = &t->events[i];

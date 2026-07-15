@@ -3651,25 +3651,6 @@ static void Com_FrameSleep( qbool demoPlayback )
 
 /*
 =================
-Com_TimeVal
-=================
-*/
-static int Com_TimeVal( int minMsec )
-{
-	int timeVal;
-
-	timeVal = Com_Milliseconds() - com_frameTime;
-
-	if ( timeVal >= minMsec )
-		timeVal = 0;
-	else
-		timeVal = minMsec - timeVal;
-
-	return timeVal;
-}
-
-/*
-=================
 Com_FrameInit
 =================
 */
@@ -3686,12 +3667,15 @@ Com_Frame
 
 void Com_Frame( void ) {
 
-#ifndef DEDICATED
-	static int bias = 0;
-#endif
-	int	msec, realMsec, minMsec;
-	int	sleepMsec;
-	int	timeVal;
+	// persistent absolute deadline, microsecond resolution -- each frame's
+	// target simply advances by one frame period rather than being
+	// recomputed from a per-frame millisecond delta (the old "bias"
+	// correction below), so small per-frame timing error doesn't compound
+	// into the sawtooth drift that approach was prone to. Only resynced to
+	// the wall clock after a real stall (more than 3 frame periods behind).
+	static int64_t targetTimeUS = INT64_MIN;
+	int64_t frameUS, nowUS, remainingUS;
+	int	msec, realMsec;
 	int	timeValSV;
 
 	int timeBeforeFirstEvents;
@@ -3706,8 +3690,6 @@ void Com_Frame( void ) {
 #endif
 		return;         // an ERR_DROP was thrown
 	}
-
-	minMsec = 0; // silent compiler warning
 
 	// bk001204 - init to zero.
 	//  also:  might be clobbered by `longjmp' or `vfork'
@@ -3746,35 +3728,30 @@ void Com_Frame( void ) {
 	
 	// we may want to spin here if things are going too fast
 	if ( com_dedicated->integer ) {
-		minMsec = SV_FrameMsec();
-#ifndef DEDICATED
-		bias = 0;
-#endif
+		frameUS = 1000LL * SV_FrameMsec();
 	} else {
 #ifndef DEDICATED
 		if ( 0 ) { // noDelay ) {
-			minMsec = 0;
-			bias = 0;
+			frameUS = 0;
 		} else {
 			// if ( !gw_active && com_maxfpsUnfocused->integer > 0 )
-			// 	minMsec = 1000 / com_maxfpsUnfocused->integer;
+			// 	frameUS = 1000000LL / com_maxfpsUnfocused->integer;
 			// else
 			if ( com_maxfps->integer > 0 )
-				minMsec = 1000 / com_maxfps->integer;
+				frameUS = 1000000LL / com_maxfps->integer;
 			else
-				minMsec = 1;
-
-			timeVal = com_frameTime - lastTime;
-			bias += timeVal - minMsec;
-
-			if ( bias > minMsec )
-				bias = minMsec;
-
-			// Adjust minMsec if previous frame took too long to render so
-			// that framerate is stable at the requested value.
-			minMsec -= bias;
+				frameUS = 1000LL;
 		}
+#else
+		frameUS = 1000LL;
 #endif
+	}
+
+	nowUS = Sys_Microseconds();
+	if ( nowUS > targetTimeUS + 3 * frameUS ) {
+		targetTimeUS = nowUS + frameUS;
+	} else {
+		targetTimeUS += frameUS;
 	}
 
 	// waiting for incoming packets
@@ -3785,30 +3762,32 @@ void Com_Frame( void ) {
 	// to render many small same-depth siblings correctly rather than this
 	// code working around a rendering limitation
 	do {
+		int64_t sleepUS;
+
+		remainingUS = targetTimeUS - Sys_Microseconds();
 		if ( com_sv_running->integer ) {
 			timeValSV = SV_SendQueuedPackets();
-			timeVal = Com_TimeVal( minMsec );
-			if ( timeValSV < timeVal )
-				timeVal = timeValSV;
-		} else {
-			timeVal = Com_TimeVal( minMsec );
+			if ( (int64_t)timeValSV * 1000LL < remainingUS )
+				remainingUS = (int64_t)timeValSV * 1000LL;
 		}
-		sleepMsec = timeVal;
+		if ( remainingUS < 0 )
+			remainingUS = 0;
+
+		sleepUS = remainingUS;
 #ifndef DEDICATED
-		if ( !gw_minimized && timeVal > com_yieldCPU->integer )
-			sleepMsec = com_yieldCPU->integer;
-		if ( timeVal > sleepMsec )
+		if ( !gw_minimized && remainingUS > (int64_t)com_yieldCPU->integer * 1000LL )
+			sleepUS = (int64_t)com_yieldCPU->integer * 1000LL;
+		if ( remainingUS > sleepUS )
 			Com_EventLoop();
 #endif
 		PROF_BEGIN( "NET_Sleep" );
-		NET_Sleep( sleepMsec * 1000 - 500 );
+		NET_Sleep( (int)( sleepUS - 500 ) );
 		PROF_END();
-	} while( Com_TimeVal( minMsec ) );
+	} while( targetTimeUS - Sys_Microseconds() > 0 );
 
 	lastTime = com_frameTime;
 	com_frameTime = Com_EventLoop();
 	realMsec = com_frameTime - lastTime;
-	PROF_SET_FRAME_VALUE( "Frame delta (ms)", (float)realMsec );
 
 	Cbuf_Execute();
 

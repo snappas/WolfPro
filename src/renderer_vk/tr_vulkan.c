@@ -536,10 +536,37 @@ static void CreateDevice(void)
         ++queueCount;
     }
 
-    const char* extensions[] =
+    const char* neededDeviceExtensions[] =
     {
         "VK_KHR_swapchain"
     };
+    const char* extensions[ARRAY_LEN(neededDeviceExtensions) + 1]; // +1 for the optional calibrated-timestamps extension below
+    uint32_t extensionCount = 0;
+    int neededIdx;
+
+    for(neededIdx = 0; neededIdx < ARRAY_LEN(neededDeviceExtensions); ++neededIdx)
+    {
+        extensions[extensionCount++] = neededDeviceExtensions[neededIdx];
+    }
+
+#if defined( ENABLE_PROFILER )
+    {
+        uint32_t availableCount = 0;
+        VK(vkEnumerateDeviceExtensionProperties(vk.physicalDevice, NULL, &availableCount, NULL));
+        VkExtensionProperties *available = (VkExtensionProperties*)ri.Hunk_AllocateTempMemory(availableCount * sizeof(VkExtensionProperties));
+        VK(vkEnumerateDeviceExtensionProperties(vk.physicalDevice, NULL, &availableCount, available));
+        vk.ext.EXT_calibrated_timestamps = IsExtensionAvailable("VK_EXT_calibrated_timestamps", availableCount, available);
+        if(vk.ext.EXT_calibrated_timestamps)
+        {
+            extensions[extensionCount++] = "VK_EXT_calibrated_timestamps";
+        }
+        else
+        {
+            ri.Printf(PRINT_WARNING, "Desired Vulkan extension 'VK_EXT_calibrated_timestamps' was not found -- GPU pass timing in the Timeline tab will use approximate positioning\n");
+        }
+        ri.Hunk_FreeTempMemory(available);
+    }
+#endif
 
     VkPhysicalDeviceVulkan12Features vk12f = {};
     vk12f.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
@@ -574,7 +601,7 @@ static void CreateDevice(void)
     createInfo.pQueueCreateInfos = queueCreateInfo;
     createInfo.queueCreateInfoCount = queueCount;
     createInfo.ppEnabledExtensionNames = extensions;
-    createInfo.enabledExtensionCount = ARRAY_LEN(extensions);
+    createInfo.enabledExtensionCount = extensionCount;
     createInfo.pEnabledFeatures = NULL;
     createInfo.pNext = &features2;
 

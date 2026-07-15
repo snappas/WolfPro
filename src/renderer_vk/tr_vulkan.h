@@ -299,6 +299,7 @@ typedef struct Vulkan
 		qbool EXT_validation_features;
 		qbool EXT_debug_utils;
 		VkDebugUtilsMessengerEXT debugMessenger; // EXT_debug_utils
+		qbool EXT_calibrated_timestamps; // only ever requested/set when ENABLE_PROFILER is defined
 	} ext;
 
 	qboolean renderingActive;

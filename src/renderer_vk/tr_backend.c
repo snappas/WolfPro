@@ -888,6 +888,47 @@ const void *RB_StretchPicGradient( const void *data ) {
 }
 
 
+// handle returned by RB_BeginTimedLabel and passed back to RB_EndTimedLabel
+// by the caller -- ordinary local-variable scoping, not an array-index
+// lookup, so scopes nested inside an already-open render/compute pass
+// (or inside each other) close correctly regardless of what else begins
+// and ends in between. See gpuSubScope's own comment in tr_local.h for why
+// this is a separate mechanism from RB_Begin/EndRenderPass's own bookkeeping.
+typedef struct gpuTimedLabelHandle {
+	int32_t index; // index into backEnd.gpuSubScopes[currentFrameIndex], or -1 if MAX_GPU_SUBSCOPES was exceeded (still timed/labeled, just not tracked for the profiler)
+	rhiDurationQuery query;
+} gpuTimedLabelHandle;
+
+static gpuTimedLabelHandle RB_BeginTimedLabel(const char *name){
+	gpuTimedLabelHandle h;
+
+	RHI_CmdBeginDebugLabel(name);
+	h.query = RHI_CmdBeginDurationQuery();
+	h.index = -1;
+	if(backEnd.gpuSubScopeCount[backEnd.currentFrameIndex] < MAX_GPU_SUBSCOPES){
+		uint32_t i = backEnd.gpuSubScopeCount[backEnd.currentFrameIndex]++;
+		gpuSubScope *s = &backEnd.gpuSubScopes[backEnd.currentFrameIndex][i];
+		Q_strncpyz(s->name, name, sizeof(s->name));
+		s->namePtr = name;
+		s->query = h.query;
+#if defined( ENABLE_PROFILER )
+		s->cpuIssueBeginUs = Sys_Microseconds();
+#endif
+		h.index = (int32_t)i;
+	}
+	return h;
+}
+
+static void RB_EndTimedLabel(gpuTimedLabelHandle h){
+	RHI_CmdEndDurationQuery(h.query);
+	RHI_CmdEndDebugLabel();
+#if defined( ENABLE_PROFILER )
+	if(h.index >= 0){
+		backEnd.gpuSubScopes[backEnd.currentFrameIndex][h.index].cpuIssueEndUs = Sys_Microseconds();
+	}
+#endif
+}
+
 /*
 =============
 RB_DrawSurfs
@@ -917,26 +958,32 @@ const void  *RB_DrawSurfs( const void *data ) {
 	// clear the z buffer, set the modelview, etc
 	RB_BeginDrawingView();
 
-	RHI_CmdBeginDebugLabel("Opaque");
-	backEnd.pipelineLayoutDirty = qtrue;
-	RB_RenderDrawSurfList( cmd->drawSurfs, 0, numOpaqueSurfs );
-	RHI_CmdEndDebugLabel();
-	
-	RHI_CmdBeginDebugLabel("Dynamic Lights");
-	backEnd.pipelineLayoutDirty = qtrue;
-	for(int l = 0; l < backEnd.refdef.num_dlights; l++){
-		dlight_t *dl = &backEnd.refdef.dlights[l];
-		if(R_CullPointAndRadius(dl->origin, dl->radius) == CULL_OUT){
-			continue;
-		}
-		RB_RenderLitSurfList(cmd->drawSurfs, 0, numOpaqueSurfs, dl);
+	{
+		gpuTimedLabelHandle scope = RB_BeginTimedLabel("Opaque");
+		backEnd.pipelineLayoutDirty = qtrue;
+		RB_RenderDrawSurfList( cmd->drawSurfs, 0, numOpaqueSurfs );
+		RB_EndTimedLabel(scope);
 	}
-	RHI_CmdEndDebugLabel();
 
-	RHI_CmdBeginDebugLabel("Transparent");
-	backEnd.pipelineLayoutDirty = qtrue;
-	RB_RenderDrawSurfList( cmd->drawSurfs, numOpaqueSurfs, cmd->numDrawSurfs );
-	RHI_CmdEndDebugLabel();
+	{
+		gpuTimedLabelHandle scope = RB_BeginTimedLabel("Dynamic Lights");
+		backEnd.pipelineLayoutDirty = qtrue;
+		for(int l = 0; l < backEnd.refdef.num_dlights; l++){
+			dlight_t *dl = &backEnd.refdef.dlights[l];
+			if(R_CullPointAndRadius(dl->origin, dl->radius) == CULL_OUT){
+				continue;
+			}
+			RB_RenderLitSurfList(cmd->drawSurfs, 0, numOpaqueSurfs, dl);
+		}
+		RB_EndTimedLabel(scope);
+	}
+
+	{
+		gpuTimedLabelHandle scope = RB_BeginTimedLabel("Transparent");
+		backEnd.pipelineLayoutDirty = qtrue;
+		RB_RenderDrawSurfList( cmd->drawSurfs, numOpaqueSurfs, cmd->numDrawSurfs );
+		RB_EndTimedLabel(scope);
+	}
 
 	return (const void *)( cmd + 1 );
 }
@@ -951,6 +998,7 @@ RB_BeginFrame
 const void  *RB_BeginFrame( const void *data ) {
 	backEnd.currentFrameIndex = (backEnd.currentFrameIndex + 1) % RHI_FRAMES_IN_FLIGHT;
 	backEnd.renderPassCount[backEnd.currentFrameIndex] = 0;
+	backEnd.gpuSubScopeCount[backEnd.currentFrameIndex] = 0;
 	backEnd.clearColor = qtrue;
 
 	backEnd.sceneViewCount = 0;
@@ -976,7 +1024,13 @@ const void  *RB_BeginFrame( const void *data ) {
 	if ( r_clear->integer ) {
 		//@TODO
 	}
+	// genuine CPU-blocking wait -- the CPU stalls here until the GPU
+	// finishes the previous use of this frame-in-flight slot's resources
+	// (~RHI_FRAMES_IN_FLIGHT frames ago). A spike here is a direct signal
+	// the GPU is the bottleneck for this frame, not the CPU.
+	PROF_BEGIN( "GPU Sync Wait" );
 	RHI_WaitOnSemaphore(backEnd.renderComplete, backEnd.renderCompleteCounter);
+	PROF_END();
 	RHI_AcquireNextImage(&backEnd.swapChainImageIndex, backEnd.imageAcquiredBinary);
 	RHI_BindCommandBuffer(backEnd.commandBuffers[backEnd.currentFrameIndex]);
 	RHI_BeginCommandBuffer();
@@ -1106,6 +1160,90 @@ void DrawGUI_ShaderTrace(void){
 }
 
 
+#if defined( ENABLE_PROFILER )
+
+static qboolean PassToCpuUs( rhiDurationQuery query, int64_t cpuIssueBeginUs, int64_t *outBeginUs, int64_t *outEndUs ) {
+	uint64_t beginTicks, endTicks;
+
+	if ( !RHI_GetDurationTimestamps( query, &beginTicks, &endTicks ) ) {
+		return qfalse; // this pass didn't run this frame (e.g. a conditional pass was skipped)
+	}
+	if ( RHI_GPUTicksToCpuUs( beginTicks, outBeginUs ) && RHI_GPUTicksToCpuUs( endTicks, outEndUs ) ) {
+		return qtrue; // calibrated -- true hardware correlation
+	}
+	// fallback: real GPU-measured duration, approximate position (the CPU
+	// time this pass's commands were recorded, not when the GPU actually
+	// ran them)
+	{
+		double timestampPeriodUs = RHI_GetTimestampPeriodUs();
+		int64_t durationUs = (int64_t)( (double)( endTicks - beginTicks ) * timestampPeriodUs );
+
+		*outBeginUs = cpuIssueBeginUs;
+		*outEndUs = cpuIssueBeginUs + durationUs;
+	}
+	return qtrue;
+}
+
+static void Prof_BridgeGPUPasses( void ) {
+	static int32_t s_gpuThreadIndex = -2; // -2 = not yet attempted, -1 = attempted and failed (PROF_MAX_THREADS exhausted), >=0 = real index
+	int f;
+	int64_t firstBeginUs = 0, lastEndUs = 0;
+	qboolean any = qfalse;
+	int i;
+
+	if ( s_gpuThreadIndex == -2 ) {
+		s_gpuThreadIndex = Prof_InitVirtualThread( "GPU" );
+	}
+	if ( s_gpuThreadIndex < 0 ) {
+		return;
+	}
+
+	RHI_UpdateGPUCalibration();
+
+	f = (backEnd.currentFrameIndex - 1 + RHI_FRAMES_IN_FLIGHT) % RHI_FRAMES_IN_FLIGHT;
+
+	// named passes first, depth 1 -- also gives us the umbrella box's own
+	// span below (min begin / max end across whatever actually ran this
+	// frame), with no separate whole-frame CPU-issue timestamp needed
+	for ( i = 0; i < backEnd.renderPassCount[f]; i++ ) {
+		renderPass *pass = &backEnd.renderPasses[f][i];
+		int64_t beginUs, endUs;
+
+		if ( !PassToCpuUs( pass->query, pass->cpuIssueBeginUs, &beginUs, &endUs ) ) {
+			continue;
+		}
+		Prof_RecordCompletedDuration( s_gpuThreadIndex, pass->namePtr, beginUs, endUs, 1 );
+		if ( !any || beginUs < firstBeginUs ) firstBeginUs = beginUs;
+		if ( !any || endUs > lastEndUs ) lastEndUs = endUs;
+		any = qtrue;
+	}
+
+	// sub-scopes (e.g. "Opaque"/"Dynamic Lights"/"Transparent", nested
+	// inside the "3D" pass), depth 2 -- a separate array from renderPass[]
+	// (see gpuSubScope's comment in tr_local.h), so this doesn't affect the
+	// named-pass loop above or the umbrella span computed from it: these
+	// sub-scopes' timestamps are always contained within their parent
+	// pass's own span, so including or excluding them from firstBeginUs/
+	// lastEndUs makes no difference -- excluded here for simplicity.
+	for ( i = 0; i < backEnd.gpuSubScopeCount[f]; i++ ) {
+		gpuSubScope *scope = &backEnd.gpuSubScopes[f][i];
+		int64_t beginUs, endUs;
+
+		if ( !PassToCpuUs( scope->query, scope->cpuIssueBeginUs, &beginUs, &endUs ) ) {
+			continue;
+		}
+		Prof_RecordCompletedDuration( s_gpuThreadIndex, scope->namePtr, beginUs, endUs, 2 );
+	}
+
+	// whole-GPU-frame umbrella box, depth 0 -- mirrors the CPU "Frame" box
+	if ( any ) {
+		Prof_RecordCompletedDuration( s_gpuThreadIndex, "GPU Frame", firstBeginUs, lastEndUs, 0 );
+	}
+}
+
+#endif // ENABLE_PROFILER
+
+
 void DrawGUI_Performance(void){
 	int f = (backEnd.currentFrameIndex - 1 + RHI_FRAMES_IN_FLIGHT) % RHI_FRAMES_IN_FLIGHT;
 	for(int i = 0; i < backEnd.renderPassCount[f]; i++){
@@ -1197,6 +1335,9 @@ const void  *RB_EndFrame( const void *data ) {
 	DrawGUI_Performance();
 	DrawGUI_ShaderTrace();
 	CL_ProfilerFrame();
+#if defined( ENABLE_PROFILER )
+	Prof_BridgeGPUPasses();
+#endif
 	ri.CL_ImGUI_Update();
 	DrawGUI_RHI();
 	ri.CL_CG_ImGUI_Update();
@@ -1223,6 +1364,11 @@ const void  *RB_EndFrame( const void *data ) {
 	RHI_SubmitGraphicsDesc_Signal(&graphicsDesc, backEnd.renderComplete, backEnd.renderCompleteCounter);
 	RHI_SubmitGraphicsDesc_Wait(&graphicsDesc, backEnd.imageAcquiredBinary);
 	RHI_SubmitGraphicsDesc_Wait_Timeline(&graphicsDesc, RHI_GetUploadSemaphore(), RHI_GetUploadSemaphoreValue());
+	// CPU dispatch time only -- the GPU executes this frame's recorded
+	// commands asynchronously afterward, so "Submit" and the "Present"
+	// moment (rhi.c) that follows right after are both just hand-off
+	// points, not when the GPU actually does the work
+	PROF_MOMENT( "Submit" );
 	RHI_SubmitGraphics(&graphicsDesc);
 	RHI_SubmitPresent(backEnd.renderCompleteBinary, backEnd.swapChainImageIndex);
 	
@@ -1579,12 +1725,16 @@ void RB_BeginRenderPass(const char* name, const RHI_RenderPass* rp){
 	}
 	RHI_CmdBeginDebugLabel(name);
 	RHI_BeginRendering(rp);
-	
+
 	if(backEnd.renderPassCount[backEnd.currentFrameIndex] < MAX_RENDERPASSES){
 		uint32_t i = backEnd.renderPassCount[backEnd.currentFrameIndex]++;
 		renderPass *currentPass = &backEnd.renderPasses[backEnd.currentFrameIndex][i];
 		currentPass->query = RHI_CmdBeginDurationQuery();
+#if defined( ENABLE_PROFILER )
+		currentPass->cpuIssueBeginUs = Sys_Microseconds();
+#endif
 		Q_strncpyz(currentPass->name, name, sizeof(currentPass->name));
+		currentPass->namePtr = name;
 		uint32_t nameHash = 0;
 		CRC32_Begin(&nameHash);
 		CRC32_ProcessBlock(&nameHash, name, strlen(name));
@@ -1597,12 +1747,15 @@ void RB_BeginRenderPass(const char* name, const RHI_RenderPass* rp){
 }
 
 void RB_EndRenderPass(void){
-	
+
 	if(RHI_IsRenderingActive()){
 		assert(backEnd.renderPassCount[backEnd.currentFrameIndex] > 0);
 		uint32_t i = backEnd.renderPassCount[backEnd.currentFrameIndex] - 1;
 		renderPass *currentPass = &backEnd.renderPasses[backEnd.currentFrameIndex][i];
 		RHI_CmdEndDurationQuery(currentPass->query);
+#if defined( ENABLE_PROFILER )
+		currentPass->cpuIssueEndUs = Sys_Microseconds();
+#endif
 		RHI_EndRendering();
 		RHI_CmdEndDebugLabel();
 	}
@@ -1654,12 +1807,16 @@ void RB_FinishFullscreen3D(qbool prevFullscreen3D){
 
 void RB_BeginComputePass(const char* name){
 	RHI_CmdBeginDebugLabel(name);
-	
+
 	if(backEnd.renderPassCount[backEnd.currentFrameIndex] < MAX_RENDERPASSES){
 		uint32_t i = backEnd.renderPassCount[backEnd.currentFrameIndex]++;
 		renderPass *currentPass = &backEnd.renderPasses[backEnd.currentFrameIndex][i];
 		currentPass->query = RHI_CmdBeginDurationQuery();
+#if defined( ENABLE_PROFILER )
+		currentPass->cpuIssueBeginUs = Sys_Microseconds();
+#endif
 		Q_strncpyz(currentPass->name, name, sizeof(currentPass->name));
+		currentPass->namePtr = name;
 		uint32_t nameHash = 0;
 		CRC32_Begin(&nameHash);
 		CRC32_ProcessBlock(&nameHash, name, strlen(name));
@@ -1673,5 +1830,8 @@ void RB_EndComputePass(void){
 	uint32_t i = backEnd.renderPassCount[backEnd.currentFrameIndex] - 1;
 	renderPass *currentPass = &backEnd.renderPasses[backEnd.currentFrameIndex][i];
 	RHI_CmdEndDurationQuery(currentPass->query);
+#if defined( ENABLE_PROFILER )
+	currentPass->cpuIssueEndUs = Sys_Microseconds();
+#endif
 	RHI_CmdEndDebugLabel();
 }
