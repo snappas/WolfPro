@@ -1398,7 +1398,13 @@ extern model_t* sv_models[2048];
 //============================================================================
 
 #define PROF_MAX_THREADS		16
-#define PROF_MAX_EVENTS			65536		// must be a power of two
+// 65536 was tight enough that the CPU thread's ring buffer (which records
+// far more events per frame than the GPU thread's, especially now that
+// Com_Frame's predictive pacing runs its NET_Sleep/Com_EventLoop wait loop
+// twice per frame instead of once) could evict frames still within the
+// Graphs tab's PROF_MAX_FRAMES retained window, before the GPU thread's own
+// ring wrapped -- showing GPU-only data for the oldest displayed frames.
+#define PROF_MAX_EVENTS			262144		// must be a power of two
 #define PROF_MAX_FRAMES			512			// must be a power of two
 #define PROF_MAX_DEPTH			64
 #define PROF_MAX_NAME			64
@@ -1419,6 +1425,13 @@ typedef struct profEvent_s {
 	// on the exact same timestamp, which would otherwise misclassify it as
 	// a moment.
 	qboolean isMoment;
+	// caller-supplied 0xRRGGBBAAu, 0 (default) meaning "no explicit color --
+	// let the viewer pick one" (e.g. cl_profiler.c's deterministic
+	// per-call-site palette for durations, plain gray for markers). Stored
+	// in this natural byte order rather than ImGui's packed 0xAABBGGRR so
+	// prof.c/qcommon.h stay UI-agnostic; the one current consumer
+	// (cl_profiler.c) converts to ImGui's format at draw time.
+	uint32_t color;
 } profEvent_t;
 
 typedef struct profThread_s {
@@ -1479,9 +1492,9 @@ int32_t Prof_InitVirtualThread( const char *name );
 // while paused or if threadIndex is out of range, matching every other
 // event writer in this file.
 void Prof_RecordCompletedDuration( int32_t threadIndex, const char *name, int64_t beginUs, int64_t endUs, int32_t depth );
-void Prof_BeginDuration( const char *name, int32_t index );
+void Prof_BeginDuration( const char *name, int32_t index, uint32_t color );
 void Prof_EndDuration( void );
-void Prof_Moment( const char *name );
+void Prof_Moment( const char *name, uint32_t color );
 void Prof_SetFrameValue( const char *name, float value );
 
 qboolean Prof_IsPaused( void );
@@ -1506,10 +1519,12 @@ int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboole
 #define PROF_NewFrame() Prof_NewFrame()
 #define PROF_InitThread( name ) Prof_InitThread( name )
 #define PROF_ShutdownThread() Prof_ShutdownThread()
-#define PROF_BEGIN( name ) Prof_BeginDuration( ( name ), 0 )
-#define PROF_BEGIN_I( name, index ) Prof_BeginDuration( ( name ), ( index ) )
+#define PROF_BEGIN( name ) Prof_BeginDuration( ( name ), 0, 0 )
+#define PROF_BEGIN_I( name, index ) Prof_BeginDuration( ( name ), ( index ), 0 )
+#define PROF_BEGIN_C( name, color ) Prof_BeginDuration( ( name ), 0, ( color ) )
 #define PROF_END() Prof_EndDuration()
-#define PROF_MOMENT( name ) Prof_Moment( name )
+#define PROF_MOMENT( name ) Prof_Moment( ( name ), 0 )
+#define PROF_MOMENT_C( name, color ) Prof_Moment( ( name ), ( color ) )
 #define PROF_SET_FRAME_VALUE( name, value ) Prof_SetFrameValue( ( name ), ( value ) )
 
 #else
@@ -1521,8 +1536,10 @@ int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboole
 #define PROF_ShutdownThread()
 #define PROF_BEGIN( name )
 #define PROF_BEGIN_I( name, index )
+#define PROF_BEGIN_C( name, color )
 #define PROF_END()
 #define PROF_MOMENT( name )
+#define PROF_MOMENT_C( name, color )
 #define PROF_SET_FRAME_VALUE( name, value )
 
 #endif // ENABLE_PROFILER

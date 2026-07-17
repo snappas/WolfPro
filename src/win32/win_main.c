@@ -1213,7 +1213,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	// main game loop
 	while ( 1 ) {
-		PROF_MOMENT( "Frame Start" );
+		PROF_MOMENT_C( "Frame Start", 0x14C864FFu ); // green
 		// must happen before "Frame"/"IN_Frame" begin recording, not inside
 		// Com_Frame() (where it used to live) -- Prof_NewFrame() is what
 		// actually defines a frame's [begin,end) window, and "Frame"/
@@ -1242,7 +1242,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		PROF_BEGIN( "IN_Frame" );
 		IN_Frame();
 		PROF_END();
-		PROF_MOMENT( "Input Sample" );
+		PROF_MOMENT_C( "Input Sample", 0x00B4DCFFu ); // cyan
 
 		// run the game
 		Com_Frame();

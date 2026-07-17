@@ -83,7 +83,7 @@ void Prof_ShutdownThread( void ) {
 // each thread's Begin/End pair is self-consistent regardless of when
 // prof.paused changes or which thread changes it. No cross-thread
 // coordination needed.
-void Prof_BeginDuration( const char *name, int32_t index ) {
+void Prof_BeginDuration( const char *name, int32_t index, uint32_t color ) {
 	profThread_t *t = prof_currentThread;
 	profEvent_t *ev;
 	uint32_t slot;
@@ -109,6 +109,7 @@ void Prof_BeginDuration( const char *name, int32_t index ) {
 	ev->depth = t->depth;
 	ev->frameIndex = prof.currentFrameIndex;
 	ev->isMoment = qfalse;
+	ev->color = color;
 
 	t->durationIndexStack[t->depth] = (int32_t)slot;
 	t->depth++;
@@ -152,10 +153,11 @@ void Prof_RecordCompletedDuration( int32_t threadIndex, const char *name, int64_
 	ev->depth = depth;
 	ev->frameIndex = prof.currentFrameIndex;
 	ev->isMoment = qfalse;
+	ev->color = 0;
 	t->eventWriteIndex++;
 }
 
-void Prof_Moment( const char *name ) {
+void Prof_Moment( const char *name, uint32_t color ) {
 	profThread_t *t = prof_currentThread;
 	profEvent_t *ev;
 	uint32_t slot;
@@ -175,6 +177,7 @@ void Prof_Moment( const char *name ) {
 	ev->depth = t->depth;
 	ev->frameIndex = prof.currentFrameIndex;
 	ev->isMoment = qtrue;
+	ev->color = color;
 	t->eventWriteIndex++;
 }
 

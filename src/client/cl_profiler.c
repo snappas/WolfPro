@@ -321,6 +321,17 @@ static void Timeline_ClampRange( double recordedMinUs, double recordedMaxUs ) {
 #define PROF_TIMELINE_MAX_DEPTH_LEVELS 12
 #define PROF_TIMELINE_MAX_LANES ( PROF_TIMELINE_MARKER_LANES + PROF_TIMELINE_MAX_DEPTH_LEVELS )
 
+// converts a caller-supplied 0xRRGGBBAAu (the natural order to read/write a
+// color literal in) to ImGui's packed 0xAABBGGRR ImU32 format used by
+// ImDrawList_Add*() throughout this file
+static ImU32 Timeline_PackColor( uint32_t rgba ) {
+	uint32_t r = ( rgba >> 24 ) & 0xFFu;
+	uint32_t g = ( rgba >> 16 ) & 0xFFu;
+	uint32_t b = ( rgba >> 8 ) & 0xFFu;
+	uint32_t a = rgba & 0xFFu;
+	return ( a << 24 ) | ( b << 16 ) | ( g << 8 ) | r;
+}
+
 // fixed home row for each known moment marker, so it renders in the same
 // place every time instead of wherever a collision search happens to land it
 static int32_t Timeline_MarkerPreferredLane( const char *name ) {
@@ -334,6 +345,31 @@ static int32_t Timeline_MarkerPreferredLane( const char *name ) {
 		return 2;
 	}
 	return 3; // unrecognized marker: shared fallback row
+}
+
+// most recent "Frame Start" moment at or before beforeUs, on the same
+// thread as the hovered marker -- events are stored in ring-buffer slot
+// order, not chronological order, so this can't just walk backward from
+// the hovered event's own index; only called from the rare, one-off
+// "Submit" tooltip hover below, so an occasional full scan is cheap enough
+static qboolean Timeline_FindFrameStartBefore( profThread_t *t, uint32_t count, int64_t beforeUs, int64_t *outBeginUs ) {
+	uint32_t i;
+	qboolean found = qfalse;
+	int64_t bestUs = 0;
+
+	for ( i = 0; i < count; i++ ) {
+		profEvent_t *ev = &t->events[i];
+
+		if ( !ev->name || !ev->isMoment || strcmp( ev->name, "Frame Start" ) ) {
+			continue;
+		}
+		if ( ev->begin <= beforeUs && ( !found || ev->begin > bestUs ) ) {
+			bestUs = ev->begin;
+			found = qtrue;
+		}
+	}
+	*outBeginUs = bestUs;
+	return found;
 }
 
 static void DrawTimelineTab( void ) {
@@ -747,10 +783,11 @@ static void DrawTimelineTab( void ) {
 			y0 = rowY + 20.0f + lane * ( boxHeight + 2.0f );
 			y1 = y0 + boxHeight;
 
-			if ( !strcmp( ev->name, "NET_Sleep" ) ) {
-				// frame-pacing sleep/wait time -- muted blue-gray, distinct
-				// from the warm deterministic per-call-site palette below
-				color = 0xFF96785Au; // packed AABBGGRR -> R=0x5A(90) G=0x78(120) B=0x96(150) A=0xFF
+			if ( ev->color != 0 ) {
+				// caller picked an explicit color at the PROF_BEGIN_C() call
+				// site (e.g. common.c coloring "NET_Sleep"/"Spin Wait" the
+				// same muted blue-gray) -- no string comparison needed here
+				color = Timeline_PackColor( ev->color );
 			} else {
 				// deterministic per-call-site color from the event's name pointer,
 				// no ImGui style-table dependency
@@ -830,15 +867,10 @@ static void DrawTimelineTab( void ) {
 			y1 = y0 + boxHeight;
 			lineBottomY = origin.y + canvasHeight; // full-height guide line down through every row below
 
-			// packed as AABBGGRR throughout this file (confirmed via the
-			// existing 0x4000FFFFu translucent-yellow highlight elsewhere
-			// in cl_profiler.c, i.e. IM_COL32(255,255,0,64))
-			if ( !strcmp( ev->name, "Frame Start" ) ) {
-				markerColor = 0xFF64C814u; // green   (R=20,  G=200, B=100)
-			} else if ( !strcmp( ev->name, "Input Sample" ) ) {
-				markerColor = 0xFFDCB400u; // cyan    (R=0,   G=180, B=220)
-			} else if ( !strcmp( ev->name, "Present" ) ) {
-				markerColor = 0xFFC800C8u; // magenta (R=200, G=0,   B=200)
+			// caller picked an explicit color at the PROF_MOMENT_C() call
+			// site; no string comparison needed here
+			if ( ev->color != 0 ) {
+				markerColor = Timeline_PackColor( ev->color );
 			} else {
 				markerColor = 0xFFC0C0C0u; // unrecognized moment: light gray
 			}
@@ -852,8 +884,14 @@ static void DrawTimelineTab( void ) {
 			ImDrawList_AddText_Vec2( drawList, (ImVec2){ x0 + 4.0f, y0 }, markerColor, ev->name, NULL );
 
 			if ( igIsMouseHoveringRect( (ImVec2){ x0 - 3.0f, y0 }, (ImVec2){ x0 + 3.0f, lineBottomY }, true ) ) {
+				int64_t frameStartUs;
+
 				igBeginTooltip();
-				igText( "%s", ev->name );
+				if ( !strcmp( ev->name, "Submit" ) && Timeline_FindFrameStartBefore( t, count, ev->begin, &frameStartUs ) ) {
+					igText( "Submit: FS+%.3fms", (float)( ev->begin - frameStartUs ) / 1000.0f );
+				} else {
+					igText( "%s", ev->name );
+				}
 				igEndTooltip();
 			}
 		}

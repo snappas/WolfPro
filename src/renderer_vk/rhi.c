@@ -946,7 +946,7 @@ void RHI_SubmitPresent(rhiSemaphore waitSemaphore, uint32_t swapChainImageIndex)
     assert(semaphore->signaled == qtrue);
     semaphore->signaled = qfalse;
 
-    PROF_MOMENT( "Present" );
+    PROF_MOMENT_C( "Present", 0xC800C8FFu ); // magenta
     const VkResult r = vkQueuePresentKHR(vk.queues.present, &presentInfo);
     if(r == VK_ERROR_OUT_OF_DATE_KHR){
         RecreateSwapchain();
