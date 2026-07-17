@@ -1649,6 +1649,15 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	int dbgCnt = 0;
 #endif
 
+	// sampled first, before any of this frame's scene-building work below,
+	// so CG_DrawFPS measures the true wall-clock frame period rather than
+	// picking up variance from this frame's own CPU cost. Engines without
+	// the trap_Microseconds extension use the stock trap_Milliseconds()
+	// path instead (see CG_DrawFPS), so nothing needs sampling here for them.
+	if ( cg.hasTrapMicroseconds ) {
+		cg.realFrameStartTimeUS = trap_Microseconds();
+	}
+
 	cg.time = serverTime;
 	cg.demoPlayback = demoPlayback;
 

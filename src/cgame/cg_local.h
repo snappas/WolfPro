@@ -644,6 +644,15 @@ typedef struct {
 typedef struct {
 	int clientFrame;                // incremented each frame
 
+	qboolean hasTrapMicroseconds;    // set once by CG_LoadExtensions
+	int64_t realFrameStartTimeUS;    // trap_Microseconds() sampled at CG_DrawActiveFrame's
+									 // entry, before any scene-building work runs -- lets
+									 // CG_DrawFPS measure the true wall-clock frame period
+									 // instead of this frame's own scene-complexity-dependent
+									 // CPU cost. Only valid when hasTrapMicroseconds is set;
+									 // engines without the extension use the stock
+									 // trap_Milliseconds()-based path in CG_DrawFPS instead.
+
 	int clientNum;
 
 	qboolean demoPlayback;
@@ -2407,6 +2416,11 @@ void        trap_Error( const char *fmt );
 // for anything game related.  Get time from the CG_DrawActiveFrame parameter
 int         trap_Milliseconds( void );
 
+// microsecond-precision equivalent of trap_Milliseconds() -- only present on
+// engines that implement the CG_MICROSECONDS extension (check
+// cg.hasTrapMicroseconds, set by CG_LoadExtensions, before calling this)
+int64_t     trap_Microseconds( void );
+
 // console variable interaction
 void        trap_Cvar_Register( vmCvar_t *vmCvar, const char *varName, const char *defaultValue, int flags );
 void        trap_Cvar_Update( vmCvar_t *vmCvar );
@@ -2691,6 +2705,7 @@ typedef struct {
 	int trap_CNQ3_NDP_StopVideo;
 	int trap_CL_AddGuiMenu;
 	int trap_CL_CMD_BACKUP;
+	int trap_Microseconds;
 } cgExt_t;
 
 void CG_ImGUI_Update(void);

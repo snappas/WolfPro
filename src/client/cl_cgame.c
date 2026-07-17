@@ -531,6 +531,7 @@ static qbool CL_CG_GetValue(char* value, int valueSize, const char* key)
 		{ "trap_IgImage", CG_IMGUI_IMAGE },
 		{ "trap_IgImageEx", CG_IMGUI_IMAGE_EX },
 		{ "trap_CL_CMD_BACKUP", CG_CL_CMD_BACKUP },
+		{ "trap_Microseconds", CG_MICROSECONDS },
 	};
 
 	for (int i = 0; i < ARRAY_LEN(syscalls); ++i) {
@@ -1055,6 +1056,8 @@ intptr_t CL_CgameSystemCalls(intptr_t *args ) {
 		cl.cmdBackup = CMD_BACKUP_EXT;
 		cl.cmdMask = CMD_MASK_EXT;
 		return qtrue;
+	case CG_MICROSECONDS:
+		return Sys_Microseconds();
 	default:
 		Com_Error( ERR_DROP, "Bad cgame system trap: %i", args[0] );
 	}
