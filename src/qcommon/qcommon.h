@@ -1404,12 +1404,24 @@ extern model_t* sv_models[2048];
 // twice per frame instead of once) could evict frames still within the
 // Graphs tab's PROF_MAX_FRAMES retained window, before the GPU thread's own
 // ring wrapped -- showing GPU-only data for the oldest displayed frames.
-#define PROF_MAX_EVENTS			262144		// must be a power of two
+// Bumped again after per-command/per-batch render instrumentation (see
+// PROF_DETAIL_* below) pushed a single busy frame well past 500 events.
+#define PROF_MAX_EVENTS			524288		// must be a power of two
 #define PROF_MAX_FRAMES			512			// must be a power of two
 #define PROF_MAX_DEPTH			64
 #define PROF_MAX_NAME			64
 #define PROF_MAX_FRAME_VALUES	16
 #define PROF_MAX_FUNCTIONS		256
+
+// Bitmask "detail categories" for PROF_BEGIN_D -- a site tagged with one of
+// these only actually records while that category is enabled (see
+// Prof_SetDetailMask/the Profiler window's "Deep Profiling" section), so
+// very high-call-count instrumentation (hundreds of calls/frame) doesn't
+// burn through PROF_MAX_EVENTS by default the way untagged PROF_BEGIN sites
+// (called far less often) do. All start disabled; OR bits together to enable
+// more than one at once.
+#define PROF_RENDER_CMD_DETAIL	( 1u << 0 )	// per-RC_* command breakdown in RB_ExecuteRenderCommands (RB_SetColor, RB_StretchPic, etc.)
+#define PROF_SURF_DETAIL		( 1u << 1 )	// per-batch RB_BeginSurface/RB_EndSurface inside RB_RenderDrawSurfList
 
 typedef struct profEvent_s {
 	int64_t begin;
@@ -1443,6 +1455,13 @@ typedef struct profThread_s {
 	uint32_t eventWriteIndex;
 	int32_t durationIndexStack[PROF_MAX_DEPTH];
 	int32_t depth;
+	// LIFO count of PROF_BEGIN calls rejected because depth was already at
+	// PROF_MAX_DEPTH -- those can't push a durationIndexStack sentinel
+	// (would be out of bounds), so the matching PROF_END must be identified
+	// and no-op'd here instead of falling through to the normal depth-stack
+	// pop, which would otherwise close whatever real scope is actually on
+	// top of the stack
+	int32_t overflowDepth;
 } profThread_t;
 
 typedef struct profFrameValue_s {
@@ -1492,13 +1511,22 @@ int32_t Prof_InitVirtualThread( const char *name );
 // while paused or if threadIndex is out of range, matching every other
 // event writer in this file.
 void Prof_RecordCompletedDuration( int32_t threadIndex, const char *name, int64_t beginUs, int64_t endUs, int32_t depth );
-void Prof_BeginDuration( const char *name, int32_t index, uint32_t color );
+// detailMask 0 (the plain PROF_BEGIN/_I/_C macros): always records, same as
+// before. Nonzero (PROF_BEGIN_D, tagged with a PROF_*_DETAIL flag): only
+// records while that bit is set in the runtime detail mask (see
+// Prof_SetDetailEnabled) -- otherwise behaves exactly like the paused case,
+// balancing the per-thread depth stack without writing an event, so a
+// disabled PROF_BEGIN_D/PROF_END pair costs a stack push/pop, not a ring
+// buffer slot.
+void Prof_BeginDuration( const char *name, int32_t index, uint32_t color, uint32_t detailMask );
 void Prof_EndDuration( void );
 void Prof_Moment( const char *name, uint32_t color );
 void Prof_SetFrameValue( const char *name, float value );
 
 qboolean Prof_IsPaused( void );
 void Prof_SetPaused( qboolean paused );
+uint32_t Prof_GetDetailMask( void ); // bitwise-OR of currently-enabled PROF_*_DETAIL flags
+void Prof_SetDetailEnabled( uint32_t detailFlag, qboolean enabled ); // set/clear one PROF_*_DETAIL bit
 int32_t Prof_GetThreadCount( void );
 profThread_t *Prof_GetThread( int32_t index );
 int32_t Prof_GetFrameCount( void );
@@ -1519,9 +1547,10 @@ int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboole
 #define PROF_NewFrame() Prof_NewFrame()
 #define PROF_InitThread( name ) Prof_InitThread( name )
 #define PROF_ShutdownThread() Prof_ShutdownThread()
-#define PROF_BEGIN( name ) Prof_BeginDuration( ( name ), 0, 0 )
-#define PROF_BEGIN_I( name, index ) Prof_BeginDuration( ( name ), ( index ), 0 )
-#define PROF_BEGIN_C( name, color ) Prof_BeginDuration( ( name ), 0, ( color ) )
+#define PROF_BEGIN( name ) Prof_BeginDuration( ( name ), 0, 0, 0 )
+#define PROF_BEGIN_I( name, index ) Prof_BeginDuration( ( name ), ( index ), 0, 0 )
+#define PROF_BEGIN_C( name, color ) Prof_BeginDuration( ( name ), 0, ( color ), 0 )
+#define PROF_BEGIN_D( name, detail ) Prof_BeginDuration( ( name ), 0, 0, ( detail ) )
 #define PROF_END() Prof_EndDuration()
 #define PROF_MOMENT( name ) Prof_Moment( ( name ), 0 )
 #define PROF_MOMENT_C( name, color ) Prof_Moment( ( name ), ( color ) )
@@ -1537,6 +1566,7 @@ int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboole
 #define PROF_BEGIN( name )
 #define PROF_BEGIN_I( name, index )
 #define PROF_BEGIN_C( name, color )
+#define PROF_BEGIN_D( name, detail )
 #define PROF_END()
 #define PROF_MOMENT( name )
 #define PROF_MOMENT_C( name, color )

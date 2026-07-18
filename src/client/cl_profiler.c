@@ -39,13 +39,42 @@ void CL_ProfilerFrame( void ) {
 	static qboolean timelineWasActive = qfalse;
 	static qboolean functionsWasActive = qfalse;
 	static qboolean pausedLastFrame = qfalse;
+	// qtrue once WE have force-paused recording because the profiler isn't
+	// visible -- distinct from the user's own manual "Paused" state so a
+	// deliberate pause (e.g. to inspect a captured hitch) survives the
+	// window being hidden and reshown rather than always being clobbered
+	static qboolean suspendedForVisibility = qfalse;
+	static qboolean pausedBeforeHidden = qfalse;
 	qboolean timelineActive = qfalse;
 	qboolean functionsActive = qfalse;
 	qboolean pausedNow;
+	qboolean visible;
 	ImGuiViewport *viewport;
 
 	ToggleBooleanWithShortcut( (qbool *)&active, ImGuiKey_P, ImGUI_ShortcutOptions_Global );
 	GUI_AddMainMenuItem( ImGUI_MainMenu_Perf, "Profiler", "Ctrl+Shift+P", (qbool *)&active, qtrue );
+
+	// nothing this function builds ever reaches the screen unless the
+	// window itself is open AND the whole debug-UI overlay is actually being
+	// drawn (togglegui/r_debugUI only gates the final draw submission, see
+	// RB_ImGUI_Draw) -- suspend recording and skip all Timeline/Graphs/
+	// Functions work below in that case, not just the invisible drawing
+	visible = active && ( Cvar_VariableIntegerValue( "r_debugUI" ) != 0 );
+
+	if ( !visible ) {
+		if ( !suspendedForVisibility ) {
+			pausedBeforeHidden = Prof_IsPaused();
+			Prof_SetPaused( qtrue );
+			suspendedForVisibility = qtrue;
+		}
+		timelineWasActive = qfalse;
+		functionsWasActive = qfalse;
+		return;
+	}
+	if ( suspendedForVisibility ) {
+		Prof_SetPaused( pausedBeforeHidden );
+		suspendedForVisibility = qfalse;
+	}
 
 	// resuming invalidates whatever frame was selected for the Functions
 	// tab's per-frame column -- once new frames start overwriting the ring
@@ -56,12 +85,6 @@ void CL_ProfilerFrame( void ) {
 		s_selectedFrameIndex = -1;
 	}
 	pausedLastFrame = pausedNow;
-
-	if ( !active ) {
-		timelineWasActive = qfalse;
-		functionsWasActive = qfalse;
-		return;
-	}
 
 	PROF_BEGIN( "CL_ProfilerFrame" );
 
@@ -88,6 +111,32 @@ void CL_ProfilerFrame( void ) {
 		if ( igIsKeyPressed_Bool( ImGuiKey_Space, false ) ) {
 			Prof_SetPaused( Prof_IsPaused() ? qfalse : qtrue );
 		}
+
+		// deep profiling: high-call-count instrumentation (PROF_BEGIN_D call
+		// sites, e.g. per-RC_* render command or per-surface-batch) records
+		// nothing unless its category is enabled here -- keeps day-to-day
+		// profiling within PROF_MAX_EVENTS by default; flip a category on
+		// only while actively drilling into that subsystem. Table-driven so
+		// adding a new PROF_*_DETAIL category later is a one-line addition.
+		{
+			static const struct { const char *label; uint32_t flag; } detailCategories[] = {
+				{ "Render Commands", PROF_RENDER_CMD_DETAIL },
+				{ "Surfaces", PROF_SURF_DETAIL },
+			};
+			uint32_t detailMask = Prof_GetDetailMask();
+			int32_t i;
+
+			igText( "Deep profiling:" );
+			for ( i = 0; i < (int32_t)ARRAY_LEN( detailCategories ); i++ ) {
+				bool enabled = ( detailMask & detailCategories[i].flag ) != 0;
+
+				igSameLine( 0.0f, -1.0f );
+				if ( igCheckbox( detailCategories[i].label, &enabled ) ) {
+					Prof_SetDetailEnabled( detailCategories[i].flag, enabled ? qtrue : qfalse );
+				}
+			}
+		}
+
 		if ( igBeginTabBar( "ProfilerTabs", 0 ) ) {
 			if ( igBeginTabItem( "Graphs", NULL, 0 ) ) {
 				DrawGraphsTab();
@@ -126,6 +175,7 @@ void CL_ProfilerFrame( void ) {
 static bool s_graphsAutoPauseOnSpike = true;
 static float s_graphsSpikeThresholdMs = 33.0f; // ~30fps
 static bool s_graphsAutoScroll = true;
+static bool s_graphsAutoScaleY = true;
 static qboolean s_imPlotContextCreated = qfalse;
 
 static void DrawGraphsTab( void ) {
@@ -157,6 +207,13 @@ static void DrawGraphsTab( void ) {
 	igCheckbox( "Auto-pause on spike", &s_graphsAutoPauseOnSpike );
 	igSameLine( 0.0f, -1.0f );
 	igCheckbox( "Auto-scroll", &s_graphsAutoScroll );
+	igSameLine( 0.0f, -1.0f );
+	// ImPlotAxisFlags_AutoFit locks manual zoom/pan on the Y axis while it's
+	// set (see ImPlotAxis::IsInputLocked in implot_internal.h) -- with it on,
+	// the Y range always snaps to the visible data every frame instead of
+	// requiring the user to manually drag it back into view after zooming in,
+	// which was the actual complaint this checkbox exists to fix
+	igCheckbox( "Auto-scale Y", &s_graphsAutoScaleY );
 	igSliderFloat( "Spike threshold (ms)", &s_graphsSpikeThresholdMs, 1.0f, 200.0f, "%.1f", 0 );
 
 	for ( i = 0; i < closedFrameCount; i++ ) {
@@ -209,7 +266,7 @@ static void DrawGraphsTab( void ) {
 		if ( ImPlot_BeginPlot( "Frame delta (ms)", (ImVec2){ -1, plotAvail.y }, 0 ) ) {
 		ImPlotSpec *spec = ImPlotSpec_ImPlotSpec();
 
-		ImPlot_SetupAxes( "Frame", "ms", 0, 0 );
+		ImPlot_SetupAxes( "Frame", "ms", 0, s_graphsAutoScaleY ? ImPlotAxisFlags_AutoFit : 0 );
 		// pin the X-axis to the data range every frame (matches cnq3's
 		// SetupAxisLimits(..., ImGuiCond_Always)) so mouse.x always maps 1:1
 		// to a frame index for hover/click, regardless of user pan/zoom.
@@ -993,6 +1050,32 @@ static void DrawFunctionsTab( void ) {
 
 	if ( showSelectedFrame ) {
 		igText( "Selected frame: %d", s_selectedFrameIndex );
+	}
+
+	// arbitrary named per-frame stats attached via PROF_SET_FRAME_VALUE
+	// (e.g. RB_DrawSurfs's Opaque/Transparent surface counts, or the
+	// renderer's PSO/texture/scene/view counts) -- same array the Graphs
+	// tab's hover tooltip reads, just always-visible here instead of
+	// on-hover. Shows the selected frame while one's active (consistent
+	// with the table below), otherwise the most recently retained frame.
+	{
+		profFrame_t *statsFrame = selectedFrame;
+
+		if ( !statsFrame ) {
+			int32_t frameCount = Prof_GetFrameCount();
+			statsFrame = frameCount > 0 ? Prof_GetFrame( frameCount - 1 ) : NULL;
+		}
+
+		if ( statsFrame && statsFrame->valueCount > 0 ) {
+			int32_t v;
+
+			for ( v = 0; v < statsFrame->valueCount; v++ ) {
+				if ( v > 0 ) {
+					igSameLine( 0.0f, -1.0f );
+				}
+				igText( "%s: %.0f", statsFrame->values[v].name, statsFrame->values[v].value );
+			}
+		}
 	}
 
 	// NoSavedSettings: without it, Dear ImGui persists this table's last

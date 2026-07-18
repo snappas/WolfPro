@@ -293,6 +293,13 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastS
 
 	backEnd.pc.c_surfaces += lastSurfIndex - firstSurfIndex;
 
+	// one bracket around the whole loop, not per-surface -- lastSurfIndex -
+	// firstSurfIndex can be in the thousands, and a PROF_BEGIN/END per
+	// iteration would explode the event count far worse than the
+	// RB_StretchPic case. RB_BeginSurface/RB_EndSurface are instrumented
+	// individually below instead, since those are bounded by the number of
+	// distinct shader/fog/entity batches, not raw surface count.
+	PROF_BEGIN( "RB_RenderDrawSurfList: Surfaces" );
 	for ( i = firstSurfIndex, drawSurf = drawSurfs + firstSurfIndex ; i < lastSurfIndex ; i++, drawSurf++ ) {
 		if ( drawSurf->sort == oldSort ) {
 			// fast path, same as previous sort
@@ -309,9 +316,13 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastS
 		if ( shader != oldShader || fogNum != oldFogNum
 			 || ( entityNum != oldEntityNum && !shader->entityMergable ) ) {
 			if ( oldShader != NULL ) {
+				PROF_BEGIN_D( "RB_EndSurface", PROF_SURF_DETAIL );
 				RB_EndSurface();
+				PROF_END();
 			}
+			PROF_BEGIN_D( "RB_BeginSurface", PROF_SURF_DETAIL );
 			RB_BeginSurface( shader, fogNum );
+			PROF_END();
 			oldShader = shader;
 			oldFogNum = fogNum;
 			
@@ -366,10 +377,13 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastS
 		// add the triangles for this surface
 		rb_surfaceTable[ *drawSurf->surface ]( drawSurf->surface );
 	}
+	PROF_END();
 
 	// draw the contents of the last shader batch
 	if ( oldShader != NULL ) {
+		PROF_BEGIN_D( "RB_EndSurface", PROF_SURF_DETAIL );
 		RB_EndSurface();
+		PROF_END();
 	}
 
 	// go back to the world modelview matrix
@@ -955,18 +969,32 @@ const void  *RB_DrawSurfs( const void *data ) {
 		}
 		numOpaqueSurfs++;
 	}
+	// lets the Graphs tab tooltip correlate surface count against duration --
+	// if debug and release are pushing roughly the same count but debug
+	// takes far longer, that points at the per-surface code being slow
+	// (no inlining/bounds-checking), not "more work" this frame
+	PROF_SET_FRAME_VALUE( "Opaque Surfaces", (float)numOpaqueSurfs );
+	PROF_SET_FRAME_VALUE( "Transparent Surfaces", (float)( cmd->numDrawSurfs - numOpaqueSurfs ) );
 	// clear the z buffer, set the modelview, etc
 	RB_BeginDrawingView();
 
 	{
+		// CPU-side timing of the surf-list walk itself (state changes,
+		// pipeline lookups, draw-call building), separate from the
+		// GPU-timed-label scope below (real GPU execution time, unaffected
+		// by whether this is a debug or release build) -- a debug-only
+		// slowdown will show up here, not in the GPU labels
 		gpuTimedLabelHandle scope = RB_BeginTimedLabel("Opaque");
+		PROF_BEGIN( "Opaque" );
 		backEnd.pipelineLayoutDirty = qtrue;
 		RB_RenderDrawSurfList( cmd->drawSurfs, 0, numOpaqueSurfs );
+		PROF_END();
 		RB_EndTimedLabel(scope);
 	}
 
 	{
 		gpuTimedLabelHandle scope = RB_BeginTimedLabel("Dynamic Lights");
+		PROF_BEGIN( "Dynamic Lights" );
 		backEnd.pipelineLayoutDirty = qtrue;
 		for(int l = 0; l < backEnd.refdef.num_dlights; l++){
 			dlight_t *dl = &backEnd.refdef.dlights[l];
@@ -975,13 +1003,16 @@ const void  *RB_DrawSurfs( const void *data ) {
 			}
 			RB_RenderLitSurfList(cmd->drawSurfs, 0, numOpaqueSurfs, dl);
 		}
+		PROF_END();
 		RB_EndTimedLabel(scope);
 	}
 
 	{
 		gpuTimedLabelHandle scope = RB_BeginTimedLabel("Transparent");
+		PROF_BEGIN( "Transparent" );
 		backEnd.pipelineLayoutDirty = qtrue;
 		RB_RenderDrawSurfList( cmd->drawSurfs, numOpaqueSurfs, cmd->numDrawSurfs );
+		PROF_END();
 		RB_EndTimedLabel(scope);
 	}
 
@@ -1057,43 +1088,6 @@ const void  *RB_BeginFrame( const void *data ) {
 }
 
 
-typedef struct renderPassHistory {
-	uint32_t durationUs[64];
-	uint32_t writeIndex;
-	uint32_t count;
-	uint32_t median;
-} renderPassHistory;
-
-static renderPassHistory s_history[MAX_RENDERPASSES];
-static renderPassHistory s_fullFrameHistory;
-
-int QDECL CompareSamples(void const *ptrA, void const *ptrB){
-	const int *a = (const int*)ptrA;
-	const int *b = (const int*)ptrB;
-	return *a - *b;
-}
-
-void AddHistory(renderPassHistory *history, uint32_t currentHash, uint32_t previousHash, uint32_t currentDuration){
-	enum {
-		n = ARRAY_LEN(history->durationUs)
-	};
-	if(currentHash != previousHash){
-		history->count = 1;
-	}else{
-		history->count = min(history->count + 1, n);
-	}
-	history->durationUs[history->writeIndex] = currentDuration;
-	history->writeIndex = (history->writeIndex + 1) % n;
-	
-	uint32_t startIndex = (history->writeIndex - history->count + n) % n;
-	uint32_t samples[n];
-	for(int i = 0; i < history->count; i++){
-		samples[i] = history->durationUs[(startIndex + i) % n];
-	}
-	qsort(samples, history->count, sizeof(uint32_t), CompareSamples);
-
-	history->median = samples[history->count / 2];
-}
 /*
 =============
 RB_EndFrame
@@ -1191,6 +1185,14 @@ static void Prof_BridgeGPUPasses( void ) {
 	qboolean any = qfalse;
 	int i;
 
+	// the eventual write below (Prof_RecordCompletedDuration) already no-ops
+	// while paused, but everything before it doesn't -- per-pass/sub-scope
+	// RHI_GetDurationTimestamps() is a real vkGetQueryPoolResults() driver
+	// call, done here for nothing if the profiler isn't actually recording
+	if ( Prof_IsPaused() ) {
+		return;
+	}
+
 	if ( s_gpuThreadIndex == -2 ) {
 		s_gpuThreadIndex = Prof_InitVirtualThread( "GPU" );
 	}
@@ -1244,77 +1246,32 @@ static void Prof_BridgeGPUPasses( void ) {
 #endif // ENABLE_PROFILER
 
 
-void DrawGUI_Performance(void){
-	int f = (backEnd.currentFrameIndex - 1 + RHI_FRAMES_IN_FLIGHT) % RHI_FRAMES_IN_FLIGHT;
-	for(int i = 0; i < backEnd.renderPassCount[f]; i++){
-		renderPass *currentRenderPass = &backEnd.renderPasses[f][i];
-		renderPass *previousRenderPass = &backEnd.renderPasses[f][i];
-		currentRenderPass->durationUs = RHI_GetDurationUs(currentRenderPass->query);
-		AddHistory(&s_history[i], currentRenderPass->nameHash, previousRenderPass->nameHash, currentRenderPass->durationUs);
+#if defined( ENABLE_PROFILER )
+// replaces the old always-on "Frame breakdown" window: per-pass timing is
+// now covered (better -- min/max, not just a running median) by the GPU
+// virtual thread Prof_BridgeGPUPasses feeds into the Timeline/Functions
+// tabs. This only carries the handful of stats the profiler doesn't track
+// itself (PSO/texture/scene/view counts), surfaced via PROF_SET_FRAME_VALUE
+// so the Functions tab can display them without reaching into renderer
+// internals across the module boundary. Gated behind Prof_IsPaused() like
+// Prof_BridgeGPUPasses -- these are cheap counter reads, not query readback,
+// but there's no reason to even do that when nobody's watching.
+static void Prof_SetRendererFrameStats( void ) {
+	static int previousSceneCount;
+	static int previousViewCount;
+
+	if ( Prof_IsPaused() ) {
+		return;
 	}
-	
-	uint32_t duration = RHI_GetDurationUs(backEnd.frameDuration[(backEnd.currentFrameIndex + 1) % RHI_FRAMES_IN_FLIGHT]);
-	AddHistory(&s_fullFrameHistory, 0, 0, duration);
 
-	static bool breakdownActive = false;
-	ToggleBooleanWithShortcut((qbool*)&breakdownActive, ImGuiKey_F, ImGUI_ShortcutOptions_Global);
-	GUI_AddMainMenuItem(ImGUI_MainMenu_Perf, "Frame breakdown", "Ctrl+Shift+F", (qbool*)&breakdownActive, qtrue);
-	if(breakdownActive){
-		if(igBegin("Frame breakdown", &breakdownActive, 0)){
-			igNewLine();
-			int32_t renderPassDuration = 0;
-			if(igBeginTable("Status",2,ImGuiTableFlags_RowBg,(ImVec2){0,0},0.0f)){
-				TableHeader(2, "Renderpass", "Duration");
-				TableRowInt("Entire Frame", (int)s_fullFrameHistory.median);
-				for(int i = 0; i < backEnd.renderPassCount[f]; i++){
-					renderPass *currentRenderPass = &backEnd.renderPasses[f][i];
-					TableRowInt(currentRenderPass->name, (int)s_history[i].median);
-					renderPassDuration += currentRenderPass->durationUs;
-				}
-				TableRowInt("Overhead", (int)duration - (int)renderPassDuration);
-				igEndTable();
-			}
-
-			igText("PSO changes: %d", (int)backEnd.pipelineChangeCount);
-			igText("Textures loaded: %d", (int)tr.numImages);
-			
-
-			static int previousSceneCount;
-			static int previousViewCount;
-			igText("Scenes: %d", tr.sceneCount - previousSceneCount);
-			igText("Views: %d", tr.viewCount - previousViewCount);
-			previousSceneCount = tr.sceneCount;
-			previousViewCount = tr.viewCount;
-
-
-			int64_t currentTime = Sys_Microseconds();
-			static int64_t previousTime = INT64_MIN;
-			const int64_t us = currentTime - previousTime;
-			previousTime = currentTime;
-			static float previousDurations[64];
-			const int n = ARRAY_LEN(previousDurations);
-			static int durationIndex;
-			int minValue = INT_MAX;
-			int maxValue = INT_MIN;
-			previousDurations[durationIndex] = (float)(us);
-			for(int i = 0; i < n; i++){
-				minValue = min(minValue, previousDurations[i]);
-				maxValue = max(maxValue, previousDurations[i]);
-			}
-
-			igText("Frame delta: %d", us);
-			igText(" min: %d\n max: %d", minValue, maxValue);
-			durationIndex = (durationIndex + 1) % n;
-			
-			igText("FPS: %d", (int)(1000000 / (us)));
-			ImVec2 graphSize = {1000, 500};
-			igPlotLines_FloatPtr("FPS", previousDurations,n,durationIndex,"durations", 4000 , 10000, graphSize, sizeof(float) );
-			
-		}
-		igEnd();
-	}
-	
+	PROF_SET_FRAME_VALUE( "PSO Changes", (float)backEnd.pipelineChangeCount );
+	PROF_SET_FRAME_VALUE( "Textures Loaded", (float)tr.numImages );
+	PROF_SET_FRAME_VALUE( "Scenes", (float)( tr.sceneCount - previousSceneCount ) );
+	PROF_SET_FRAME_VALUE( "Views", (float)( tr.viewCount - previousViewCount ) );
+	previousSceneCount = tr.sceneCount;
+	previousViewCount = tr.viewCount;
 }
+#endif // ENABLE_PROFILER
 
 const void  *RB_EndFrame( const void *data ) {
 	const swapBuffersCommand_t  *cmd;
@@ -1332,11 +1289,11 @@ const void  *RB_EndFrame( const void *data ) {
 	cmd = (const swapBuffersCommand_t *)data;
 
 	GUI_DrawMainMenu();
-	DrawGUI_Performance();
 	DrawGUI_ShaderTrace();
 	CL_ProfilerFrame();
 #if defined( ENABLE_PROFILER )
 	Prof_BridgeGPUPasses();
+	Prof_SetRendererFrameStats();
 #endif
 	ri.CL_ImGUI_Update();
 	DrawGUI_RHI();
@@ -1404,7 +1361,12 @@ void RB_ExecuteRenderCommands( const void *data ) {
 	while ( 1 ) {
 		switch ( *(const int *)data ) {
 		case RC_SET_COLOR:
+			// high call-count sites (hundreds/frame for a busy HUD) -- gated
+			// behind PROF_RENDER_CMD_DETAIL so they don't burn ring buffer
+			// budget unless that detail category is actually enabled
+			PROF_BEGIN_D( "RB_SetColor", PROF_RENDER_CMD_DETAIL );
 			data = RB_SetColor( data );
+			PROF_END();
 			break;
 		case RC_STRETCH_PIC:
 			#if defined(_DEBUG)
@@ -1412,16 +1374,24 @@ void RB_ExecuteRenderCommands( const void *data ) {
 				Sys_DebugBreak();
 			}
 			#endif
+			PROF_BEGIN_D( "RB_StretchPic", PROF_RENDER_CMD_DETAIL );
 			data = RB_StretchPic( data );
+			PROF_END();
 			break;
 		case RC_ROTATED_PIC:
+			PROF_BEGIN_D( "RB_RotatedPic", PROF_RENDER_CMD_DETAIL );
 			data = RB_RotatedPic( data );
+			PROF_END();
 			break;
 		case RC_STRETCH_PIC_GRADIENT:
+			PROF_BEGIN_D( "RB_StretchPicGradient", PROF_RENDER_CMD_DETAIL );
 			data = RB_StretchPicGradient( data );
+			PROF_END();
 			break;
 		case RC_DRAW_SURFS:
+			PROF_BEGIN( "RB_DrawSurfs" );
 			data = RB_DrawSurfs( data );
+			PROF_END();
 			break;
 		case RC_BEGIN_FRAME:
 			#if defined(_DEBUG)
@@ -1430,7 +1400,9 @@ void RB_ExecuteRenderCommands( const void *data ) {
 			}
 			#endif
 			begun = qtrue;
+			PROF_BEGIN( "RB_BeginFrame" );
 			data = RB_BeginFrame( data );
+			PROF_END();
 			//wait for swap chain acquire
 			//start recording command buffer
 			//N frames in flight n command buffers 
@@ -1438,7 +1410,9 @@ void RB_ExecuteRenderCommands( const void *data ) {
 			break;
 		case RC_END_FRAME:
 			begun = qfalse;
+			PROF_BEGIN( "RB_EndFrame" );
 			data = RB_EndFrame( data );
+			PROF_END();
 			//stop recording to command buffer
 			//submit to graphics queue
 			//submit to present queue

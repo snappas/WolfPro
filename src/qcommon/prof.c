@@ -11,6 +11,7 @@
 
 typedef struct profiler_s {
 	qboolean paused;
+	uint32_t enabledDetailMask; // bitwise-OR of currently-enabled PROF_*_DETAIL flags, see Prof_SetDetailEnabled
 	profThread_t *threads[PROF_MAX_THREADS];
 	int32_t threadCount;
 	profFrame_t frames[PROF_MAX_FRAMES];
@@ -83,18 +84,31 @@ void Prof_ShutdownThread( void ) {
 // each thread's Begin/End pair is self-consistent regardless of when
 // prof.paused changes or which thread changes it. No cross-thread
 // coordination needed.
-void Prof_BeginDuration( const char *name, int32_t index, uint32_t color ) {
+void Prof_BeginDuration( const char *name, int32_t index, uint32_t color, uint32_t detailMask ) {
 	profThread_t *t = prof_currentThread;
 	profEvent_t *ev;
 	uint32_t slot;
 
-	if ( !t || t->depth >= PROF_MAX_DEPTH ) {
+	if ( !t ) {
 		return;
 	}
 
-	if ( prof.paused ) {
-		// keep the depth stack balanced even while paused, so the matching
-		// End() doesn't desync -- just record no data for this span
+	if ( t->depth >= PROF_MAX_DEPTH ) {
+		// can't push a durationIndexStack sentinel here (would be out of
+		// bounds) -- track the rejection separately so the matching End()
+		// can identify and no-op it instead of falling through to the
+		// normal pop, which would otherwise close whatever real scope is
+		// actually on top of the stack (see overflowDepth's comment)
+		t->overflowDepth++;
+		return;
+	}
+
+	// same "keep the depth stack balanced without recording" skip as the
+	// overflow case above -- a detail-tagged site whose category isn't
+	// currently enabled costs a stack push/pop, not a ring buffer slot
+	if ( prof.paused || ( detailMask != 0 && !( prof.enabledDetailMask & detailMask ) ) ) {
+		// keep the depth stack balanced even while paused/disabled, so the
+		// matching End() doesn't desync -- just record no data for this span
 		t->durationIndexStack[t->depth] = -1;
 		t->depth++;
 		return;
@@ -120,7 +134,18 @@ void Prof_EndDuration( void ) {
 	profThread_t *t = prof_currentThread;
 	int32_t slot;
 
-	if ( !t || t->depth <= 0 ) {
+	if ( !t ) {
+		return;
+	}
+
+	if ( t->overflowDepth > 0 ) {
+		// matches the most recently rejected (LIFO) overflowed Begin --
+		// nothing was pushed for it, so there's nothing to pop
+		t->overflowDepth--;
+		return;
+	}
+
+	if ( t->depth <= 0 ) {
 		return;
 	}
 
@@ -236,6 +261,18 @@ void Prof_SetPaused( qboolean paused ) {
 		prof.currentFrameIndex = -1;
 	}
 	prof.paused = paused;
+}
+
+uint32_t Prof_GetDetailMask( void ) {
+	return prof.enabledDetailMask;
+}
+
+void Prof_SetDetailEnabled( uint32_t detailFlag, qboolean enabled ) {
+	if ( enabled ) {
+		prof.enabledDetailMask |= detailFlag;
+	} else {
+		prof.enabledDetailMask &= ~detailFlag;
+	}
 }
 
 int32_t Prof_GetThreadCount( void ) {
