@@ -133,6 +133,9 @@ extern vmCvar_t ui_isSpectator;
 
 // Speclock
 extern vmCvar_t ui_blackout;
+
+// Demo browser
+extern vmCvar_t ui_demoDir;
 //
 // ui_qmenu.c
 //

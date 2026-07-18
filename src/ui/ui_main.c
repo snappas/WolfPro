@@ -3442,33 +3442,68 @@ UI_LoadDemos
 ===============
 */
 static void UI_LoadDemos() {
-	char demolist[4096];
+	char demolist[30000];
 	char demoExt[32];
 	char    *demoname;
-	int i, len;
+	char  demoPathName[300];
+	int i, len, j;
+	int		numdirs;
+	int		numfiles;
+	char	dirlist[2048];
+	int		dirlen;
+	char*	dirptr;
+	char	game[60];
 
 	Com_sprintf( demoExt, sizeof( demoExt ), "dm_%d", (int)trap_Cvar_VariableValue( "protocol" ) );
 
-	uiInfo.demoCount = trap_FS_GetFileList( "demos", demoExt, demolist, 4096 );
+	uiInfo.demoCount = trap_FS_GetFileList( "demos", demoExt, demolist, sizeof( demolist ) );
+	if ( uiInfo.demoCount > MAX_DEMOS ) {
+		uiInfo.demoCount = MAX_DEMOS;
+	}
 
 	Com_sprintf( demoExt, sizeof( demoExt ), ".dm_%d", (int)trap_Cvar_VariableValue( "protocol" ) );
 
-	if ( uiInfo.demoCount ) {
-		if ( uiInfo.demoCount > MAX_DEMOS ) {
-			uiInfo.demoCount = MAX_DEMOS;
+	demoname = demolist;
+	for ( i = 0; i < uiInfo.demoCount; i++, demoname += len + 1 ) {
+		len = strlen( demoname );
+		if ( !Q_stricmp( demoname +  len - strlen( demoExt ), demoExt ) ) {
+			demoname[len - strlen( demoExt )] = '\0';
 		}
+		Com_sprintf( demoPathName, sizeof( demoPathName ), "%s", demoname );
+		uiInfo.demoList[i] = String_Alloc( demoPathName );
+	}
+
+	trap_Cvar_VariableStringBuffer( "fs_game", game, sizeof( game ) );
+
+	numdirs = trap_FS_GetFileList( va( "../%s/demos", game ), "/", dirlist, sizeof( dirlist ) );
+
+	dirptr = dirlist;
+
+	// iterate over all sub-directories
+	for ( i = 0; i < numdirs && uiInfo.demoCount < MAX_DEMOS; i++, dirptr += dirlen + 1 ) {
+		dirlen = strlen( dirptr );
+
+		if ( dirlen && dirptr[dirlen - 1] == '/' ) {
+			dirptr[dirlen - 1] = '\0';
+		}
+
+		if ( !strcmp( dirptr, "." ) || !strcmp( dirptr, ".." ) ) {
+			continue;
+		}
+
+		// iterate all demo files in directory
+		numfiles = trap_FS_GetFileList( va( "../%s/demos/%s", game, dirptr ), demoExt, demolist, sizeof( demolist ) );
 		demoname = demolist;
-		for ( i = 0; i < uiInfo.demoCount; i++ ) {
+		for ( j = 0; j < numfiles && uiInfo.demoCount < MAX_DEMOS; j++, demoname += len + 1 ) {
 			len = strlen( demoname );
 			if ( !Q_stricmp( demoname +  len - strlen( demoExt ), demoExt ) ) {
 				demoname[len - strlen( demoExt )] = '\0';
 			}
-			Q_strupr( demoname );
-			uiInfo.demoList[i] = String_Alloc( demoname );
-			demoname += len + 1;
+			Com_sprintf( demoPathName, sizeof( demoPathName ), "%s/%s", dirptr, demoname );
+			uiInfo.demoList[uiInfo.demoCount] = String_Alloc( demoPathName );
+			uiInfo.demoCount++;
 		}
 	}
-
 }
 
 
@@ -7307,6 +7342,10 @@ vmCvar_t ui_glCustom;    // JPW NERVE missing from q3ta
 
 // Speclock
 vmCvar_t ui_blackout;
+
+// Demo browser
+vmCvar_t ui_demoDir;
+
 cvarTable_t cvarTable[] = {
 
 	{ &ui_glCustom, "ui_glCustom", "4", CVAR_ARCHIVE }, // JPW NERVE missing from q3ta
@@ -7435,6 +7474,10 @@ cvarTable_t cvarTable[] = {
 
 	// Speclock
 	{ &ui_blackout, "ui_blackout", "0", CVAR_ROM },
+
+	// Demo browser
+	{ &ui_demoDir, "ui_demoDir", "demos", CVAR_ARCHIVE },
+
 	{ &ui_hudAlpha, "cg_hudAlpha", "1.0", CVAR_ARCHIVE }
 };
 
