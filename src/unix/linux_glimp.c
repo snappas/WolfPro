@@ -867,7 +867,7 @@ int GLW_SetMode( const char *drivername, int mode, qboolean fullscreen ) {
 
 	ri.Printf( PRINT_ALL, "...setting mode %d:", mode );
 
-	if ( !R_GetModeInfo( &glConfig.vidWidth, &glConfig.vidHeight, &glConfig.windowAspect, mode ) ) {
+	if ( !R_GetModeInfo( &glConfig.vidWidth, &glConfig.vidHeight, &glConfig.windowAspect, mode, 0, 0 ) ) {
 		ri.Printf( PRINT_ALL, " invalid mode\n" );
 		return RSERR_INVALID_MODE;
 	}

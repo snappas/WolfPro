@@ -134,6 +134,10 @@ cvar_t  *r_windowedHeight;
 cvar_t  *r_fullscreenWidth;
 cvar_t  *r_fullscreenHeight;
 
+cvar_t  *r_mode;
+cvar_t  *r_customwidth;
+cvar_t  *r_customheight;
+
 cvar_t  *r_overBrightBits;
 cvar_t  *r_mapOverBrightBits;
 
@@ -663,6 +667,87 @@ void R_ScreenShotJPEG_f( void ) {
 
 
 
+#define VIDEOMODE_UNMANAGED (-3)
+
+typedef struct vidmode_s
+{
+	const char *description;
+	int width, height;
+	float pixelAspect;              // pixel width / height
+} vidmode_t;
+
+vidmode_t r_vidModes[] =
+{
+	{ "Mode  0: 320x240",             320,  240,  1 },
+	{ "Mode  1: 400x300",             400,  300,  1 },
+	{ "Mode  2: 512x384",             512,  384,  1 },
+	{ "Mode  3: 640x480",             640,  480,  1 },
+	{ "Mode  4: 800x600",             800,  600,  1 },
+	{ "Mode  5: 960x720",             960,  720,  1 },
+	{ "Mode  6: 1024x768",           1024,  768,  1 },
+	{ "Mode  7: 1152x864",           1152,  864,  1 },
+	{ "Mode  8: 1280x720 (16:9)",    1280,  720,  1 },
+	{ "Mode  9: 1280x768 (16:10)",   1280,  768,  1 },
+	{ "Mode 10: 1280x800 (16:10)",   1280,  800,  1 },
+	{ "Mode 11: 1280x1024",          1280, 1024,  1 },
+	{ "Mode 12: 1360x768 (16:9)",    1360,  768,  1 },
+	{ "Mode 13: 1440x900 (16:10)",   1440,  900,  1 },
+	{ "Mode 14: 1680x1050 (16:10)",  1680, 1050,  1 },
+	{ "Mode 15: 1600x1200",          1600, 1200,  1 },
+	{ "Mode 16: 1920x1080 (FULL HD)",1920, 1080,  1 },
+	{ "Mode 17: 1920x1200",          1920, 1200,  1 },
+	{ "Mode 18: 2048x1536",          2048, 1536,  1 },
+	{ "Mode 19: 2560x1440 (QHD)",    2560, 1440,  1 },
+	{ "Mode 20: 2560x1600 (16:10)",  2560, 1600,  1 },
+	{ "Mode 21: 3840x2160 (UHD)",    3840, 2160,  1 }
+};
+static int s_numVidModes = ( sizeof( r_vidModes ) / sizeof( r_vidModes[0] ) );
+
+// VK's own signature -- unlike GL's, no windowAspect (RE_ConfigureVideoMode never
+// uses it) and an explicit useDesktop out-param instead of a -2-means-desktop
+// convention baked into width/height alone.
+qboolean R_GetModeInfo( int *width, int *height, qboolean *useDesktop, int mode, int dw, int dh ) {
+	vidmode_t *vm;
+
+	*useDesktop = qfalse;
+
+	if ( mode < -2 ) {
+		return qfalse;
+	}
+	if ( mode >= s_numVidModes ) {
+		return qfalse;
+	}
+
+	if ( mode == -2 ) {
+		*width = dw;
+		*height = dh;
+		*useDesktop = qtrue;
+		return qtrue;
+	}
+
+	if ( mode == -1 ) {
+		*width = r_customwidth->integer;
+		*height = r_customheight->integer;
+		return qtrue;
+	}
+
+	vm = &r_vidModes[mode];
+	*width = vm->width;
+	*height = vm->height;
+	return qtrue;
+}
+
+static void R_ModeList_f( void ) {
+	int i;
+
+	ri.Printf( PRINT_ALL, "\n" );
+	for ( i = 0; i < s_numVidModes; i++ )
+	{
+		ri.Printf( PRINT_ALL, "%s\n", r_vidModes[i].description );
+	}
+	ri.Printf( PRINT_ALL, "\n" );
+}
+
 /*
 ================
 GfxInfo_f
@@ -752,6 +837,14 @@ void R_Register( void ) {
 	r_windowedHeight = ri.Cvar_Get( "r_windowedHeight", "720", CVAR_ARCHIVE | CVAR_LATCH );
 	r_fullscreenWidth = ri.Cvar_Get( "r_fullscreenWidth", "1920", CVAR_ARCHIVE | CVAR_LATCH );
 	r_fullscreenHeight = ri.Cvar_Get( "r_fullscreenHeight", "1080", CVAR_ARCHIVE | CVAR_LATCH );
+
+	// r_mode compatibility layer: -3 (VIDEOMODE_UNMANAGED) means "inert, use the
+	// r_fullscreen*/r_windowed* cvars above directly" -- matches this renderer's
+	// default, unmanaged-by-r_mode behavior until a caller explicitly sets r_mode.
+	r_mode = ri.Cvar_Get( "r_mode", "-3", CVAR_ARCHIVE | CVAR_LATCH );
+	r_customwidth = ri.Cvar_Get( "r_customwidth", "1600", CVAR_ARCHIVE | CVAR_LATCH );
+	r_customheight = ri.Cvar_Get( "r_customheight", "1024", CVAR_ARCHIVE | CVAR_LATCH );
+
 	r_simpleMipMaps = ri.Cvar_Get( "r_simpleMipMaps", "1", CVAR_ARCHIVE | CVAR_LATCH );
 	r_vertexLight = ri.Cvar_Get( "r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_uiFullScreen = ri.Cvar_Get( "r_uifullscreen", "0", 0 );
@@ -874,6 +967,7 @@ void R_Register( void ) {
 	ri.Cmd_AddCommand( "shaderlist", R_ShaderList_f );
 	ri.Cmd_AddCommand( "skinlist", R_SkinList_f );
 	ri.Cmd_AddCommand( "modellist", R_Modellist_f );
+	ri.Cmd_AddCommand( "modelist", R_ModeList_f );
 	ri.Cmd_AddCommand( "screenshot", R_ScreenShot_f );
 	ri.Cmd_AddCommand( "screenshotJPEG", R_ScreenShotJPEG_f );
 	ri.Cmd_AddCommand( "gfxinfo", GfxInfo_f );
@@ -1235,6 +1329,23 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 void RE_ConfigureVideoMode( int desktopWidth, int desktopHeight )
 {
 	glInfo.winFullscreen = !!r_fullscreen->integer;
+
+	if ( r_mode->integer != VIDEOMODE_UNMANAGED ) {
+		int modeWidth, modeHeight;
+		qboolean useDesktop;
+
+		if ( R_GetModeInfo( &modeWidth, &modeHeight, &useDesktop, r_mode->integer, desktopWidth, desktopHeight ) ) {
+			if ( useDesktop ) {
+				ri.Cvar_Set( "r_fullscreenDesktop", "1" );
+			} else {
+				ri.Cvar_Set( "r_fullscreenDesktop", "0" );
+				ri.Cvar_Set( "r_fullscreenWidth", va( "%d", modeWidth ) );
+				ri.Cvar_Set( "r_fullscreenHeight", va( "%d", modeHeight ) );
+			}
+			ri.Cvar_Set( "r_windowedWidth", va( "%d", modeWidth ) );
+			ri.Cvar_Set( "r_windowedHeight", va( "%d", modeHeight ) );
+		}
+	}
 
 #if 0
 	glInfo.vidFullscreen = r_fullscreen->integer && r_mode->integer == VIDEOMODE_CHANGE;
