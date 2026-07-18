@@ -72,6 +72,10 @@ else()
 	endif()
 endif()
 
+if(ENABLE_PROFILER)
+	add_definitions(-DENABLE_PROFILER=1)
+endif()
+
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" system_name_lower)
 
 if(system_name_lower MATCHES "(i386)|(i686)|(x86)|(amd64)")
@@ -152,6 +156,25 @@ set_property(TARGET cimgui PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(cimgui PRIVATE src/cimgui)
 
 set_target_properties(cimgui PROPERTIES
+	COMPILE_DEFINITIONS "${WOLF_COMPILE_DEF}"
+	RUNTIME_OUTPUT_DIRECTORY "${WOLF_OUTPUT_DIR}"
+	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${WOLF_OUTPUT_DIR}"
+	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${WOLF_OUTPUT_DIR}"
+)
+
+add_library(cimplot STATIC ${RENDERER_CIMPLOT_FILES})
+set_property(TARGET cimplot PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(cimplot PRIVATE src/cimplot src/cimplot/implot)
+# PUBLIC: cimplot.h itself does `#include "cimgui.h"` (bare, resolved relative to
+# cimplot.h's own directory first), so any consumer that includes cimplot.h - e.g.
+# src/client/cl_profiler.c via "../cimplot/cimplot.h" - needs src/cimgui (and
+# src/cimgui/imgui, for the underlying Dear ImGui headers cimgui.h itself pulls in)
+# on its own include path too. Without PUBLIC here that bare include only resolves
+# inside cimplot.cpp's own translation unit, not in consumers linked via
+# target_link_libraries(... cimplot).
+target_include_directories(cimplot PUBLIC src/cimgui src/cimgui/imgui)
+
+set_target_properties(cimplot PROPERTIES
 	COMPILE_DEFINITIONS "${WOLF_COMPILE_DEF}"
 	RUNTIME_OUTPUT_DIRECTORY "${WOLF_OUTPUT_DIR}"
 	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${WOLF_OUTPUT_DIR}"

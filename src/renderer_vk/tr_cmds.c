@@ -113,7 +113,9 @@ void R_IssueRenderCommands( qboolean runPerformanceCounters ) {
 
 	// actually start the commands going
 	if ( !r_skipBackEnd->integer ) {
+		PROF_BEGIN( "RB_ExecuteRenderCommands" );
 		RB_ExecuteRenderCommands( cmdList->cmds );
+		PROF_END();
 	}
 }
 

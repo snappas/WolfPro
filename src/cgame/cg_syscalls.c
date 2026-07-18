@@ -55,6 +55,10 @@ int     trap_Milliseconds( void ) {
 	return syscall( CG_MILLISECONDS );
 }
 
+int64_t trap_Microseconds( void ) {
+	return syscall( CG_MICROSECONDS );
+}
+
 void    trap_Cvar_Register( vmCvar_t *vmCvar, const char *varName, const char *defaultValue, int flags ) {
 	syscall( CG_CVAR_REGISTER, vmCvar, varName, defaultValue, flags );
 }

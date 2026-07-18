@@ -2520,6 +2520,8 @@ Returns last event time
 int Com_EventLoop( void ) {
 	sysEvent_t ev;
 
+	PROF_BEGIN( "Com_EventLoop" );
+
 #ifndef DEDICATED
 	byte		bufData[ MAX_MSGLEN_BUF ];
 	msg_t		buf;
@@ -2545,6 +2547,7 @@ int Com_EventLoop( void ) {
 				}
 			}
 #endif // !DEDICATED
+			PROF_END();
 			return ev.evTime;
 		}
 
@@ -3443,6 +3446,10 @@ void Com_Init( char *commandLine ) {
 
 	Threads_Init();
 
+	PROF_Init();
+	PROF_InitThread( "Main" );
+	PROF_RegisterCommands();
+
 	com_fullyInitialized = qtrue;
 	Com_Printf( "--- Common Initialization Complete ---\n" );
 
@@ -3644,31 +3651,88 @@ static void Com_FrameSleep( qbool demoPlayback )
 
 /*
 =================
-Com_TimeVal
-=================
-*/
-static int Com_TimeVal( int minMsec )
-{
-	int timeVal;
-
-	timeVal = Com_Milliseconds() - com_frameTime;
-
-	if ( timeVal >= minMsec )
-		timeVal = 0;
-	else
-		timeVal = minMsec - timeVal;
-
-	return timeVal;
-}
-
-/*
-=================
 Com_FrameInit
 =================
 */
 void Com_FrameInit( void )
 {
 	lastTime = com_frameTime = Com_Milliseconds();
+}
+
+// Below this remaining-time threshold, stop asking NET_Sleep() to block
+// at all and poll it with a zero timeout instead -- still the only code
+// path in the engine that reads the UDP socket, just without requesting
+// an OS wait. Measured directly on this platform: a requested wait in
+// this range can come back 2-3x late (e.g. a 500us request actually
+// taking ~1.6ms), matching the already-documented Sys_MicroSleep()
+// behavior elsewhere in this file ("Sleep(1) will generally last
+// 1000-2000us, but in some cases quite a bit more"). That overshoot was
+// showing up as the routine few-hundred-microsecond-to-~1ms frame time
+// spikes visible on otherwise unremarkable frames. 2000us gives headroom
+// above the largest single-call overshoot actually observed (~1.6ms).
+#define COM_FRAME_SLEEP_SPIN_THRESHOLD_US 2000
+
+/*
+=================
+Com_FrameSleepUntil
+
+Sleeps until Sys_Microseconds() reaches deadlineUS, or returns immediately
+if that point has already passed. Every iteration still lets a running
+server flush queued packets and lets NET_Sleep's own select() wake early on
+incoming network traffic -- NET_Sleep is the only code path in the engine
+that actually reads the UDP socket, so this must never be replaced with a
+plain timed sleep.
+=================
+*/
+static void Com_FrameSleepUntil( int64_t deadlineUS ) {
+	do {
+		int64_t remainingUS = deadlineUS - Sys_Microseconds();
+		int64_t sleepUS;
+
+		if ( com_sv_running->integer ) {
+			int timeValSV = SV_SendQueuedPackets();
+			if ( (int64_t)timeValSV * 1000LL < remainingUS )
+				remainingUS = (int64_t)timeValSV * 1000LL;
+		}
+		if ( remainingUS < 0 )
+			remainingUS = 0;
+
+		if ( remainingUS <= COM_FRAME_SLEEP_SPIN_THRESHOLD_US ) {
+			// close enough to the deadline that a real OS wait risks
+			// overshooting it -- spin-poll the rest of the way instead,
+			// trading a short burst of CPU for real precision. Wrapped as
+			// ONE event for the whole spin phase rather than one per
+			// NET_Sleep(0) call -- with no real OS wait between calls,
+			// this can iterate hundreds of times in a couple
+			// milliseconds, and recording each iteration individually is
+			// noise, not diagnostic value, that can exhaust the
+			// profiler's event ring far faster than the coarse-grained
+			// loop below ever did. The coarse-grained "NET_Sleep" events
+			// below are unaffected -- still one event per real wait. Same
+			// muted blue-gray as "NET_Sleep" below -- this is the tail-end
+			// busy-poll phase of the same wait, not a visually distinct thing.
+			PROF_BEGIN_C( "Spin Wait", 0x5A7896FFu );
+			do {
+				if ( com_sv_running->integer ) {
+					SV_SendQueuedPackets();
+				}
+				NET_Sleep( 0 );
+			} while ( deadlineUS - Sys_Microseconds() > 0 );
+			PROF_END();
+			return;
+		}
+
+		sleepUS = remainingUS;
+#ifndef DEDICATED
+		if ( !gw_minimized && remainingUS > (int64_t)com_yieldCPU->integer * 1000LL )
+			sleepUS = (int64_t)com_yieldCPU->integer * 1000LL;
+		if ( remainingUS > sleepUS )
+			Com_EventLoop();
+#endif
+		PROF_BEGIN_C( "NET_Sleep", 0x5A7896FFu ); // muted blue-gray: frame-pacing sleep/wait time
+		NET_Sleep( (int)( sleepUS - 500 ) );
+		PROF_END();
+	} while ( deadlineUS - Sys_Microseconds() > 0 );
 }
 
 /*
@@ -3679,13 +3743,16 @@ Com_Frame
 
 void Com_Frame( void ) {
 
-#ifndef DEDICATED
-	static int bias = 0;
-#endif
-	int	msec, realMsec, minMsec;
-	int	sleepMsec;
-	int	timeVal;
-	int	timeValSV;
+	// persistent absolute deadline, microsecond resolution -- each frame's
+	// target simply advances by one frame period rather than being
+	// recomputed from a per-frame millisecond delta (the old "bias"
+	// correction below), so small per-frame timing error doesn't compound
+	// into the sawtooth drift that approach was prone to. Only resynced to
+	// the wall clock after a real stall (more than 3 frame periods behind).
+	static int64_t targetTimeUS = INT64_MIN;
+	int64_t frameUS, nowUS;
+	qboolean backSleepEnabled = qfalse;
+	int	msec, realMsec;
 
 	int timeBeforeFirstEvents;
 	int timeBeforeServer;
@@ -3699,8 +3766,6 @@ void Com_Frame( void ) {
 #endif
 		return;         // an ERR_DROP was thrown
 	}
-
-	minMsec = 0; // silent compiler warning
 
 	// bk001204 - init to zero.
 	//  also:  might be clobbered by `longjmp' or `vfork'
@@ -3739,57 +3804,63 @@ void Com_Frame( void ) {
 	
 	// we may want to spin here if things are going too fast
 	if ( com_dedicated->integer ) {
-		minMsec = SV_FrameMsec();
-#ifndef DEDICATED
-		bias = 0;
-#endif
+		frameUS = 1000LL * SV_FrameMsec();
 	} else {
 #ifndef DEDICATED
 		if ( 0 ) { // noDelay ) {
-			minMsec = 0;
-			bias = 0;
+			frameUS = 0;
 		} else {
 			// if ( !gw_active && com_maxfpsUnfocused->integer > 0 )
-			// 	minMsec = 1000 / com_maxfpsUnfocused->integer;
+			// 	frameUS = 1000000LL / com_maxfpsUnfocused->integer;
 			// else
 			if ( com_maxfps->integer > 0 )
-				minMsec = 1000 / com_maxfps->integer;
+				frameUS = 1000000LL / com_maxfps->integer;
 			else
-				minMsec = 1;
-
-			timeVal = com_frameTime - lastTime;
-			bias += timeVal - minMsec;
-
-			if ( bias > minMsec )
-				bias = minMsec;
-
-			// Adjust minMsec if previous frame took too long to render so
-			// that framerate is stable at the requested value.
-			minMsec -= bias;
+				frameUS = 1000LL;
 		}
+#else
+		frameUS = 1000LL;
 #endif
+	}
+
+	nowUS = Sys_Microseconds();
+	if ( nowUS > targetTimeUS + 3 * frameUS ) {
+		targetTimeUS = nowUS + frameUS;
+	} else {
+		targetTimeUS += frameUS;
 	}
 
 	// waiting for incoming packets
 	//if ( noDelay == qfalse )
-	do {
-		if ( com_sv_running->integer ) {
-			timeValSV = SV_SendQueuedPackets();
-			timeVal = Com_TimeVal( minMsec );
-			if ( timeValSV < timeVal )
-				timeVal = timeValSV;
-		} else {
-			timeVal = Com_TimeVal( minMsec );
-		}
-		sleepMsec = timeVal;
+	// each NET_Sleep call recorded individually (not one span for the whole
+	// loop) -- the per-call granularity has real diagnostic value (it's
+	// already surfaced a real bug once), so the Timeline needs to be able
+	// to render many small same-depth siblings correctly rather than this
+	// code working around a rendering limitation
 #ifndef DEDICATED
-		if ( !gw_minimized && timeVal > com_yieldCPU->integer )
-			sleepMsec = com_yieldCPU->integer;
-		if ( timeVal > sleepMsec )
-			Com_EventLoop();
+	if ( !com_dedicated->integer && !gw_minimized ) {
+		// no front sleep -- start this frame's work immediately rather
+		// than sizing a front sleep off a work-duration prediction. A
+		// predictive front sleep's safe margin is only the gap between
+		// the prediction and the deadline, so a frame that runs longer
+		// than predicted overruns immediately, forcing a LATER frame to
+		// "pay back" that overrun on the fixed grid. A back-loaded design
+		// tolerates a slow frame far better: its safe margin is the WHOLE
+		// remaining period, and Submit-to-Submit spacing jitter is no
+		// different either way (it's driven by the work's own
+		// frame-to-frame variance, not by where the sleep is placed).
+		// This one non-blocking pass just keeps queued packets serviced
+		// before the frame's real work begins.
+		Com_FrameSleepUntil( Sys_Microseconds() );
+		// under FIFO/VSync the renderer already paces presentation via a
+		// blocking swapchain acquire -- skip the corrective back sleep
+		// below too, so we don't ALSO cap there
+		backSleepEnabled = CL_IsFrameSleepEnabled();
+	} else
 #endif
-		NET_Sleep( sleepMsec * 1000 - 500 );
-	} while( Com_TimeVal( minMsec ) );
+	{
+		Com_FrameSleepUntil( targetTimeUS );
+	}
 
 	lastTime = com_frameTime;
 	com_frameTime = Com_EventLoop();
@@ -3807,7 +3878,9 @@ void Com_Frame( void ) {
 		timeBeforeServer = Sys_Milliseconds();
 	}
 
+	PROF_BEGIN( "SV_Frame" );
 	SV_Frame( msec );
+	PROF_END();
 
 	// if "dedicated" has been modified, start up
 	// or shut down the client system.
@@ -3847,7 +3920,9 @@ void Com_Frame( void ) {
 			timeBeforeClient = Sys_Milliseconds();
 		}
 
+		PROF_BEGIN( "CL_Frame" );
 		CL_Frame( msec );
+		PROF_END();
 
 		if ( com_speeds->integer ) {
 			timeAfter = Sys_Milliseconds();
@@ -3890,6 +3965,20 @@ void Com_Frame( void ) {
 		c_patch_traces = 0;
 		c_pointcontents = 0;
 	}
+
+#ifndef DEDICATED
+	// corrective back sleep: only runs on MAILBOX/IMMEDIATE present modes,
+	// not minimized (see backSleepEnabled above) -- absorbs whatever's
+	// left of this frame's period after the real work finished, locking
+	// the next frame's start to the fixed targetTimeUS grid. Since no
+	// front sleep was taken, this frame's own safe margin against a slow
+	// frame is the WHOLE period, not a predicted buffer: if work overran
+	// targetTimeUS entirely, this computes to <=0 and Com_FrameSleepUntil()
+	// returns immediately, same as any other overrun fallback in this file.
+	if ( backSleepEnabled ) {
+		Com_FrameSleepUntil( targetTimeUS );
+	}
+#endif
 
 	com_frameNumber++;
 }

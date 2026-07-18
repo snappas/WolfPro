@@ -53,7 +53,7 @@ if(IS_VULKAN)
 		os_libraries
 		${CURL_LIBRARIES}
 	)
-	target_link_libraries(${wolfmp_target} cimgui)
+	target_link_libraries(${wolfmp_target} cimgui cimplot)
 else()
 	target_link_libraries(${wolfmp_target}
 	client_libraries_gl

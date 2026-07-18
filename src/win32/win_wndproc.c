@@ -40,6 +40,37 @@ WinVars_t g_wv;
 
 static UINT MSH_MOUSEWHEEL;
 
+#if defined( ENABLE_PROFILER )
+static const char *Prof_GetWindowMessageName( int uMsg ) {
+	switch ( uMsg ) {
+	case WM_INPUT: return "WM_INPUT";
+	case WM_MOUSEWHEEL: return "WM_MOUSEWHEEL";
+	case WM_CREATE: return "WM_CREATE";
+	case WM_DISPLAYCHANGE: return "WM_DISPLAYCHANGE";
+	case WM_DESTROY: return "WM_DESTROY";
+	case WM_CLOSE: return "WM_CLOSE";
+	case WM_ACTIVATE: return "WM_ACTIVATE";
+	case WM_WINDOWPOSCHANGING: return "WM_WINDOWPOSCHANGING";
+	case WM_MOVE: return "WM_MOVE";
+	case WM_LBUTTONDOWN: return "WM_LBUTTONDOWN";
+	case WM_LBUTTONUP: return "WM_LBUTTONUP";
+	case WM_RBUTTONDOWN: return "WM_RBUTTONDOWN";
+	case WM_RBUTTONUP: return "WM_RBUTTONUP";
+	case WM_MBUTTONDOWN: return "WM_MBUTTONDOWN";
+	case WM_MBUTTONUP: return "WM_MBUTTONUP";
+	case WM_MOUSEMOVE: return "WM_MOUSEMOVE";
+	case WM_SYSCOMMAND: return "WM_SYSCOMMAND";
+	case WM_SYSKEYDOWN: return "WM_SYSKEYDOWN";
+	case WM_KEYDOWN: return "WM_KEYDOWN";
+	case WM_SYSKEYUP: return "WM_SYSKEYUP";
+	case WM_KEYUP: return "WM_KEYUP";
+	case WM_CHAR: return "WM_CHAR";
+	case WM_NCHITTEST: return "WM_NCHITTEST";
+	default: return "WM_OTHER";
+	}
+}
+#endif
+
 // Console variables that we need to access from this module
 cvar_t      *vid_xpos;          // X coordinate of window position
 cvar_t      *vid_ypos;          // Y coordinate of window position
@@ -283,7 +314,7 @@ MainWndProc
 main window procedure
 ====================
 */
-LRESULT CALLBACK MainWndProc(
+static LRESULT CALLBACK MainWndProc_Impl(
 	HWND hWnd,
 	UINT uMsg,
 	WPARAM wParam,
@@ -515,4 +546,25 @@ LRESULT CALLBACK MainWndProc(
 	}
 
 	return DefWindowProc( hWnd, uMsg, wParam, lParam );
+}
+
+/*
+====================
+MainWndProc
+
+thin wrapper around MainWndProc_Impl so the profiler can bracket
+every message without touching the switch's many case-block returns
+====================
+*/
+LRESULT CALLBACK MainWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
+#if defined( ENABLE_PROFILER )
+	LRESULT result;
+
+	PROF_BEGIN_I( Prof_GetWindowMessageName( (int)uMsg ), (int32_t)uMsg );
+	result = MainWndProc_Impl( hWnd, uMsg, wParam, lParam );
+	PROF_END();
+	return result;
+#else
+	return MainWndProc_Impl( hWnd, uMsg, wParam, lParam );
+#endif
 }

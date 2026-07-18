@@ -1393,5 +1393,186 @@ extern model_t *cl_models[2048];
 extern int sv_numModels;
 extern model_t* sv_models[2048];
 
+//============================================================================
+// instrumentation profiler
+//============================================================================
+
+#define PROF_MAX_THREADS		16
+// 65536 was tight enough that the CPU thread's ring buffer (which records
+// far more events per frame than the GPU thread's, especially now that
+// Com_Frame's predictive pacing runs its NET_Sleep/Com_EventLoop wait loop
+// twice per frame instead of once) could evict frames still within the
+// Graphs tab's PROF_MAX_FRAMES retained window, before the GPU thread's own
+// ring wrapped -- showing GPU-only data for the oldest displayed frames.
+// Bumped again after per-command/per-batch render instrumentation (see
+// PROF_DETAIL_* below) pushed a single busy frame well past 500 events.
+#define PROF_MAX_EVENTS			524288		// must be a power of two
+#define PROF_MAX_FRAMES			512			// must be a power of two
+#define PROF_MAX_DEPTH			64
+#define PROF_MAX_NAME			64
+#define PROF_MAX_FRAME_VALUES	16
+#define PROF_MAX_FUNCTIONS		256
+
+// Bitmask "detail categories" for PROF_BEGIN_D -- a site tagged with one of
+// these only actually records while that category is enabled (see
+// Prof_SetDetailMask/the Profiler window's "Deep Profiling" section), so
+// very high-call-count instrumentation (hundreds of calls/frame) doesn't
+// burn through PROF_MAX_EVENTS by default the way untagged PROF_BEGIN sites
+// (called far less often) do. All start disabled; OR bits together to enable
+// more than one at once.
+#define PROF_RENDER_CMD_DETAIL	( 1u << 0 )	// per-RC_* command breakdown in RB_ExecuteRenderCommands (RB_SetColor, RB_StretchPic, etc.)
+#define PROF_SURF_DETAIL		( 1u << 1 )	// per-batch RB_BeginSurface/RB_EndSurface inside RB_RenderDrawSurfList
+
+typedef struct profEvent_s {
+	int64_t begin;
+	int64_t end;
+	const char *name;
+	int32_t index;
+	int32_t depth;
+	int32_t frameIndex;
+	// set explicitly by Prof_Moment vs Prof_BeginDuration -- NOT inferred
+	// from (end <= begin), since Sys_Microseconds() truncates to whole
+	// microseconds and a genuinely fast Begin/End pair (e.g. PeekMessage or
+	// Cbuf_Execute with nothing queued) can measure well under 1us and land
+	// on the exact same timestamp, which would otherwise misclassify it as
+	// a moment.
+	qboolean isMoment;
+	// caller-supplied 0xRRGGBBAAu, 0 (default) meaning "no explicit color --
+	// let the viewer pick one" (e.g. cl_profiler.c's deterministic
+	// per-call-site palette for durations, plain gray for markers). Stored
+	// in this natural byte order rather than ImGui's packed 0xAABBGGRR so
+	// prof.c/qcommon.h stay UI-agnostic; the one current consumer
+	// (cl_profiler.c) converts to ImGui's format at draw time.
+	uint32_t color;
+} profEvent_t;
+
+typedef struct profThread_s {
+	qboolean used;
+	qboolean isMainThread;
+	qboolean isGPUThread; // set only by Prof_InitVirtualThread -- distinguishes the synthetic GPU pass lane from real CPU threads for Functions-tab filtering (see Prof_AnalyzeFunctions' gpuOnly param)
+	char name[PROF_MAX_NAME];
+	profEvent_t events[PROF_MAX_EVENTS];
+	uint32_t eventWriteIndex;
+	int32_t durationIndexStack[PROF_MAX_DEPTH];
+	int32_t depth;
+	// LIFO count of PROF_BEGIN calls rejected because depth was already at
+	// PROF_MAX_DEPTH -- those can't push a durationIndexStack sentinel
+	// (would be out of bounds), so the matching PROF_END must be identified
+	// and no-op'd here instead of falling through to the normal depth-stack
+	// pop, which would otherwise close whatever real scope is actually on
+	// top of the stack
+	int32_t overflowDepth;
+} profThread_t;
+
+typedef struct profFrameValue_s {
+	const char *name;
+	float value;
+} profFrameValue_t;
+
+typedef struct profFrame_s {
+	int64_t begin;
+	int64_t end;
+	int32_t valueCount;
+	profFrameValue_t values[PROF_MAX_FRAME_VALUES];
+} profFrame_t;
+
+typedef struct profFunctionStat_s {
+	const char *name;
+	int32_t depth; // call-stack depth at first occurrence (stable in practice: every currently-instrumented function has one fixed call site)
+	int32_t callCount;
+	int64_t totalUS;
+	int64_t minUS;
+	int64_t maxUS;
+	// only populated when Prof_AnalyzeFunctions is called with a valid
+	// selectedFrameIndex (>= 0); both stay 0 otherwise
+	int32_t frameCallCount;
+	int64_t frameTotalUS;
+} profFunctionStat_t;
+
+#if defined( ENABLE_PROFILER )
+
+void Prof_Init( void );
+void Prof_RegisterCommands( void );
+void Prof_NewFrame( void );
+void Prof_InitThread( const char *name );
+void Prof_ShutdownThread( void );
+// registers a thread slot NOT tied to prof_currentThread (the thread-local
+// pointer PROF_BEGIN/PROF_END/PROF_MOMENT implicitly use) -- for injecting
+// events from code that isn't "running as" that logical thread, e.g. GPU
+// pass data fed in from the same OS thread that also runs real CPU
+// PROF_BEGIN/END calls. Calling Prof_InitThread for this purpose would
+// repoint prof_currentThread and corrupt every subsequent CPU call on that
+// thread; this does not touch it. Returns the new thread's index, or -1 if
+// PROF_MAX_THREADS is already exhausted.
+int32_t Prof_InitVirtualThread( const char *name );
+// writes a fully-formed event directly into threadIndex's ring buffer,
+// bypassing the live begin/end depth-stack entirely -- the caller already
+// has both timestamps (e.g. converted from a delayed GPU readback). No-ops
+// while paused or if threadIndex is out of range, matching every other
+// event writer in this file.
+void Prof_RecordCompletedDuration( int32_t threadIndex, const char *name, int64_t beginUs, int64_t endUs, int32_t depth );
+// detailMask 0 (the plain PROF_BEGIN/_I/_C macros): always records, same as
+// before. Nonzero (PROF_BEGIN_D, tagged with a PROF_*_DETAIL flag): only
+// records while that bit is set in the runtime detail mask (see
+// Prof_SetDetailEnabled) -- otherwise behaves exactly like the paused case,
+// balancing the per-thread depth stack without writing an event, so a
+// disabled PROF_BEGIN_D/PROF_END pair costs a stack push/pop, not a ring
+// buffer slot.
+void Prof_BeginDuration( const char *name, int32_t index, uint32_t color, uint32_t detailMask );
+void Prof_EndDuration( void );
+void Prof_Moment( const char *name, uint32_t color );
+void Prof_SetFrameValue( const char *name, float value );
+
+qboolean Prof_IsPaused( void );
+void Prof_SetPaused( qboolean paused );
+uint32_t Prof_GetDetailMask( void ); // bitwise-OR of currently-enabled PROF_*_DETAIL flags
+void Prof_SetDetailEnabled( uint32_t detailFlag, qboolean enabled ); // set/clear one PROF_*_DETAIL bit
+int32_t Prof_GetThreadCount( void );
+profThread_t *Prof_GetThread( int32_t index );
+int32_t Prof_GetFrameCount( void );
+profFrame_t *Prof_GetFrame( int32_t index ); // 0 = oldest currently retained frame
+// hasSelectedFrame qfalse: selectedFrameBeginUs/EndUs ignored, frameCallCount/frameTotalUS
+// stay 0. qtrue: accumulates them for events whose OWN begin timestamp falls in the
+// half-open window [selectedFrameBeginUs, selectedFrameEndUs) -- deliberately
+// time-range-based, not profEvent_t::frameIndex-based: frameIndex is a raw ring-buffer
+// slot (0..PROF_MAX_FRAMES-1) that gets reused by many different real frames over the
+// (much longer) retained event history, so equality against it would match several
+// unrelated frames instead of just the selected one. Begin-containment (not overlap of
+// both ends) is deliberate too: adjacent frames share an exact boundary timestamp, so an
+// overlap test can double-match an event whose timestamp ties that shared boundary.
+int32_t Prof_AnalyzeFunctions( profFunctionStat_t *out, int32_t maxCount, qboolean hasSelectedFrame, int64_t selectedFrameBeginUs, int64_t selectedFrameEndUs, qboolean gpuOnly ); // gpuOnly qfalse: only CPU (non-GPU-virtual) threads scanned; qtrue: only the GPU thread
+
+#define PROF_Init() Prof_Init()
+#define PROF_RegisterCommands() Prof_RegisterCommands()
+#define PROF_NewFrame() Prof_NewFrame()
+#define PROF_InitThread( name ) Prof_InitThread( name )
+#define PROF_ShutdownThread() Prof_ShutdownThread()
+#define PROF_BEGIN( name ) Prof_BeginDuration( ( name ), 0, 0, 0 )
+#define PROF_BEGIN_I( name, index ) Prof_BeginDuration( ( name ), ( index ), 0, 0 )
+#define PROF_BEGIN_C( name, color ) Prof_BeginDuration( ( name ), 0, ( color ), 0 )
+#define PROF_BEGIN_D( name, detail ) Prof_BeginDuration( ( name ), 0, 0, ( detail ) )
+#define PROF_END() Prof_EndDuration()
+#define PROF_MOMENT( name ) Prof_Moment( ( name ), 0 )
+#define PROF_MOMENT_C( name, color ) Prof_Moment( ( name ), ( color ) )
+#define PROF_SET_FRAME_VALUE( name, value ) Prof_SetFrameValue( ( name ), ( value ) )
+
+#else
+
+#define PROF_Init()
+#define PROF_RegisterCommands()
+#define PROF_NewFrame()
+#define PROF_InitThread( name )
+#define PROF_ShutdownThread()
+#define PROF_BEGIN( name )
+#define PROF_BEGIN_I( name, index )
+#define PROF_BEGIN_C( name, color )
+#define PROF_BEGIN_D( name, detail )
+#define PROF_END()
+#define PROF_MOMENT( name )
+#define PROF_MOMENT_C( name, color )
+#define PROF_SET_FRAME_VALUE( name, value )
+
+#endif // ENABLE_PROFILER
+
 #endif // _QCOMMON_H_
 

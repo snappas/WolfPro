@@ -2640,6 +2640,9 @@ void CG_LoadExtensions(void) {
 			cg.cmdBackup = CMD_BACKUP;
 			cg.cmdMask = CMD_MASK;
 		}
+
+		GET_TRAP(trap_Microseconds);
+		cg.hasTrapMicroseconds = rtcwPro_ext.trap_Microseconds ? qtrue : qfalse;
 	}
 }
 

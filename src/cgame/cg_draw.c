@@ -745,36 +745,85 @@ static float CG_DrawSnapshot( float y ) {
 CG_DrawFPS
 ==================
 */
-#define FPS_FRAMES  4
+#define FPS_FRAMES 4
+#define FPS_WINDOW_US 1000000
+#define FPS_MAX_SAMPLES 1024    // generous bound: comfortably covers FPS_WINDOW_US even well past 1000fps
 static float CG_DrawFPS( float y ) {
 	char        *s;
 	int w;
-	static int previousTimes[FPS_FRAMES];
-	static int index;
-	int i, total;
 	int fps;
-	static int previous;
-	int t, frameTime;
+	qboolean haveFps = qfalse;
 
-	// don't use serverTime, because that will be drifting to
-	// correct for internet lag changes, timescales, timedemos, etc
-	t = trap_Milliseconds();
-	frameTime = t - previous;
-	previous = t;
+	if ( cg.hasTrapMicroseconds ) {
+		// precise path (engines with the trap_Microseconds extension only):
+		// count how many real calls actually landed within the trailing
+		// FPS_WINDOW_US of wall-clock time, rather than averaging individual
+		// inter-call deltas -- this is immune to per-frame noise in exactly
+		// when within the frame this sample was taken (scene complexity,
+		// server-frame work that only runs on some frames, etc. all wash
+		// out), since it only cares how many calls occurred, not how evenly
+		// spaced they were. cg.realFrameStartTimeUS is sampled once, at
+		// CG_DrawActiveFrame's entry before any scene-building work runs.
+		static int64_t sampleTimes[FPS_MAX_SAMPLES];
+		static int head;
+		static int count;
+		int tail;
+		int64_t t, windowUS;
 
-	previousTimes[index % FPS_FRAMES] = frameTime;
-	index++;
-	if ( index > FPS_FRAMES ) {
-		// average multiple frames together to smooth changes out a bit
-		total = 0;
-		for ( i = 0 ; i < FPS_FRAMES ; i++ ) {
-			total += previousTimes[i];
+		t = cg.realFrameStartTimeUS;
+
+		sampleTimes[head] = t;
+		head = ( head + 1 ) % FPS_MAX_SAMPLES;
+		if ( count < FPS_MAX_SAMPLES ) {
+			count++;
 		}
-		if ( !total ) {
-			total = 1;
-		}
-		fps = 1000 * FPS_FRAMES / total;
 
+		tail = ( head - count + FPS_MAX_SAMPLES ) % FPS_MAX_SAMPLES;
+		while ( count > 1 && t - sampleTimes[tail] > FPS_WINDOW_US ) {
+			tail = ( tail + 1 ) % FPS_MAX_SAMPLES;
+			count--;
+		}
+
+		if ( count > 1 ) {
+			windowUS = t - sampleTimes[tail];
+			if ( windowUS > 0 ) {
+				fps = (int)( ( (int64_t)( count - 1 ) * 1000000LL + windowUS / 2 ) / windowUS );
+				haveFps = qtrue;
+			}
+		}
+	} else {
+		// engines without the trap_Microseconds extension: untouched stock
+		// id Software algorithm, sampling trap_Milliseconds() directly at
+		// this same call site exactly as it always has -- zero behavior
+		// change for clients we have no way to test against
+		static int previousTimes[FPS_FRAMES];
+		static int index;
+		static int previous;
+		int i, total, t, frameTime;
+
+		// don't use serverTime, because that will be drifting to
+		// correct for internet lag changes, timescales, timedemos, etc
+		t = trap_Milliseconds();
+		frameTime = t - previous;
+		previous = t;
+
+		previousTimes[index % FPS_FRAMES] = frameTime;
+		index++;
+		if ( index > FPS_FRAMES ) {
+			// average multiple frames together to smooth changes out a bit
+			total = 0;
+			for ( i = 0 ; i < FPS_FRAMES ; i++ ) {
+				total += previousTimes[i];
+			}
+			if ( !total ) {
+				total = 1;
+			}
+			fps = 1000 * FPS_FRAMES / total;
+			haveFps = qtrue;
+		}
+	}
+
+	if ( haveFps ) {
 		s = va( "%ifps", fps );
 		w = CG_DrawStrlen( s ) * BIGCHAR_WIDTH;
 

@@ -455,6 +455,12 @@ void RHI_CmdInsertDebugLabel(const char * label);
 rhiDurationQuery RHI_CmdBeginDurationQuery(void);
 void RHI_CmdEndDurationQuery(rhiDurationQuery handle);
 uint32_t RHI_GetDurationUs(rhiDurationQuery query);
+qbool RHI_GetDurationTimestamps(rhiDurationQuery query, uint64_t *beginTicks, uint64_t *endTicks); // raw GPU tick pair, before any timestampPeriod conversion -- qfalse (out-params untouched) if the handle is invalid/not fully recorded
+#if defined( ENABLE_PROFILER )
+void RHI_UpdateGPUCalibration(void); // cheap to call every frame; internally rate-limits itself
+qbool RHI_GPUTicksToCpuUs(uint64_t gpuTicks, int64_t *outCpuUs); // qfalse if no successful calibration has happened yet
+double RHI_GetTimestampPeriodUs(void); // vk.deviceProperties.limits.timestampPeriod, in microseconds -- lets callers outside rhi.c convert a raw GPU tick delta without pulling in tr_vulkan.h
+#endif
 void RHI_DurationQueryReset(void);
 
 //upload manager

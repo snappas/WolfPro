@@ -946,7 +946,8 @@ void RHI_SubmitPresent(rhiSemaphore waitSemaphore, uint32_t swapChainImageIndex)
     assert(semaphore->signaled == qtrue);
     semaphore->signaled = qfalse;
 
-    const VkResult r = vkQueuePresentKHR(vk.queues.present, &presentInfo);  
+    PROF_MOMENT_C( "Present", 0xC800C8FFu ); // magenta
+    const VkResult r = vkQueuePresentKHR(vk.queues.present, &presentInfo);
     if(r == VK_ERROR_OUT_OF_DATE_KHR){
         RecreateSwapchain();
     }else if(r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR){
@@ -1338,7 +1339,7 @@ uint32_t RHI_GetDurationUs(rhiDurationQuery handle){
     //for previous frame
     //return actual duration in us
     uint64_t timestamps[2];
-    
+
     vkGetQueryPoolResults(
         vk.device,
         vk.queryPool[query.frameIndex],
@@ -1350,8 +1351,95 @@ uint32_t RHI_GetDurationUs(rhiDurationQuery handle){
         VK_QUERY_RESULT_64_BIT);
 
     return ((float)(timestamps[1] - timestamps[0]) * vk.deviceProperties.limits.timestampPeriod) / 1000.0f;
-    
+
 }
+
+qbool RHI_GetDurationTimestamps(rhiDurationQuery handle, uint64_t *beginTicks, uint64_t *endTicks){
+    if(handle.h == 0){
+        return qfalse;
+    }
+    DurationQuery query = DecodeDurationQuery(handle);
+    assert(query.durationQueryIndex < MAX_DURATION_QUERIES);
+    if(vk.query[query.frameIndex][query.durationQueryIndex] != 3){
+        return qfalse;
+    }
+
+    uint64_t timestamps[2];
+    vkGetQueryPoolResults(
+        vk.device,
+        vk.queryPool[query.frameIndex],
+        query.durationQueryIndex * 2,
+        2,
+        2 * sizeof(uint64_t),
+        timestamps,
+        sizeof(uint64_t),
+        VK_QUERY_RESULT_64_BIT);
+
+    *beginTicks = timestamps[0];
+    *endTicks = timestamps[1];
+    return qtrue;
+}
+
+#if defined( ENABLE_PROFILER )
+
+static qbool s_gpuCalibrationValid = qfalse;
+static double s_gpuTicksToCpuUsOffset = 0.0; // cpuUs = gpuTicks * timestampPeriodUs + s_gpuTicksToCpuUsOffset
+static int64_t s_lastCalibrationUs = 0;
+#define GPU_CALIBRATION_INTERVAL_US 1000000 // recalibrate roughly once/second to absorb clock drift over a long session
+
+void RHI_UpdateGPUCalibration(void){
+    if(!vk.ext.EXT_calibrated_timestamps){
+        return;
+    }
+
+    int64_t nowUs = Sys_Microseconds();
+    if(s_gpuCalibrationValid && (nowUs - s_lastCalibrationUs) < GPU_CALIBRATION_INTERVAL_US){
+        return;
+    }
+
+    // Only the GPU domain is requested here, not also the CPU/QPC domain --
+    // deliberately simpler than a literal 2-domain calibrated read: pairing
+    // this single GPU-domain sample with an immediately-adjacent
+    // Sys_Microseconds() call gives the same (gpuTick, cpuUs) correspondence
+    // needed for the offset below, without needing to expose
+    // Sys_Microseconds()'s own private QueryPerformanceCounter start/
+    // frequency statics (win_shared.c) just to convert a returned QPC value
+    // onto its process-relative timeline. The two calls being adjacent
+    // (not simultaneous) adds only a few microseconds of jitter, negligible
+    // given this recalibrates every ~1s anyway.
+    VkCalibratedTimestampInfoEXT info = {0};
+    info.sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT;
+    info.timeDomain = VK_TIME_DOMAIN_DEVICE_EXT;
+
+    uint64_t gpuTicks;
+    uint64_t maxDeviation;
+    if(vkGetCalibratedTimestampsEXT(vk.device, 1, &info, &gpuTicks, &maxDeviation) != VK_SUCCESS){
+        return;
+    }
+
+    double timestampPeriodUs = (double)vk.deviceProperties.limits.timestampPeriod / 1000.0;
+    s_gpuTicksToCpuUsOffset = (double)nowUs - (double)gpuTicks * timestampPeriodUs;
+    s_gpuCalibrationValid = qtrue;
+    s_lastCalibrationUs = nowUs;
+}
+
+qbool RHI_GPUTicksToCpuUs(uint64_t gpuTicks, int64_t *outCpuUs){
+    if(!s_gpuCalibrationValid){
+        return qfalse;
+    }
+    double timestampPeriodUs = (double)vk.deviceProperties.limits.timestampPeriod / 1000.0;
+    *outCpuUs = (int64_t)((double)gpuTicks * timestampPeriodUs + s_gpuTicksToCpuUsOffset);
+    return qtrue;
+}
+
+// exposes vk.deviceProperties.limits.timestampPeriod (in microseconds) to
+// callers outside rhi.c/tr_vulkan.c that don't otherwise include tr_vulkan.h
+// (e.g. tr_backend.c's uncalibrated-fallback duration conversion)
+double RHI_GetTimestampPeriodUs(void){
+    return (double)vk.deviceProperties.limits.timestampPeriod / 1000.0;
+}
+
+#endif // ENABLE_PROFILER
 
 void RHI_DurationQueryReset(void){
     vkResetQueryPool(vk.device, vk.queryPool[vk.currentFrameIndex],0, MAX_DURATION_QUERIES);

@@ -245,6 +245,8 @@ typedef enum {
 	CG_IMGUI_IMAGE,
 	CG_IMGUI_IMAGE_EX,
 	CG_CL_CMD_BACKUP,
+	CG_MICROSECONDS,
+// int64_t trap_Microseconds( void );
 } cgameImport_t;
 
 

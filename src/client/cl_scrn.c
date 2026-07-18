@@ -462,6 +462,8 @@ void SCR_UpdateScreen( void ) {
 	}
 	scr_recursiveUpdate = 1;
 
+	PROF_BEGIN( "SCR_UpdateScreen" );
+
 	// if running in stereo, we need to draw the frame twice
 	if ( cls.glconfig.stereoEnabled ) {
 		SCR_DrawScreenField( STEREO_LEFT );
@@ -475,6 +477,8 @@ void SCR_UpdateScreen( void ) {
 	} else {
 		re.EndFrame( NULL, NULL );
 	}
+
+	PROF_END();
 
 	scr_recursiveUpdate = 0;
 }
