@@ -1225,7 +1225,8 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 					 && Q_stricmp( filename + l - 5, ".menu" )  // menu files
 					 && Q_stricmp( filename + l - 5, ".game" )  // menu files
 					 && Q_stricmp( filename + l - strlen( demoExt ), demoExt ) // menu files
-					 && Q_stricmp( filename + l - 4, ".dat" ) ) { // for journal files
+					 && Q_stricmp( filename + l - 4, ".dat" )   // for journal files
+					 && Q_stricmp( filename + l - 4, ".ttf" ) ) { // custom hudchars/console font
 					continue;
 				}
 			}
@@ -1242,7 +1243,8 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 				 && Q_stricmp( filename + l - 5, ".menu" )  // menu files
 				 && Q_stricmp( filename + l - 5, ".game" )  // menu files
 				 && Q_stricmp( filename + l - strlen( demoExt ), demoExt ) // menu files
-				 && Q_stricmp( filename + l - 4, ".dat" ) ) { // for journal files
+				 && Q_stricmp( filename + l - 4, ".dat" )   // for journal files
+				 && Q_stricmp( filename + l - 4, ".ttf" ) ) { // custom hudchars/console font
 				fs_fakeChkSum = random();
 			}
 

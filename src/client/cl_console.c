@@ -367,7 +367,8 @@ void Con_Init( void ) {
 	con_conspeed = Cvar_Get( "scr_conspeed", "3", 0 );
 	con_debug = Cvar_Get( "con_debug", "0", CVAR_ARCHIVE ); //----(SA)	added
 	con_restricted = Cvar_Get( "con_restricted", "0", CVAR_INIT );      // DHM - Nerve
-	con_scale = Cvar_Get( "con_scale", "1.0", CVAR_ARCHIVE );
+	// CVAR_LATCH: a vid_restart is required to regenerate the font atlas.
+	con_scale = Cvar_Get( "con_scale", "1.0", CVAR_ARCHIVE | CVAR_LATCH );
 	con_type = Cvar_Get("con_type", "0", CVAR_ARCHIVE);
 	con_color[0] = Cvar_Get("con_colorRed", "0.5", CVAR_ARCHIVE);
 	con_color[1] = Cvar_Get("con_colorGreen", "0.5", CVAR_ARCHIVE);

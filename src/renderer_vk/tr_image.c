@@ -34,6 +34,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "tr_local.h"
+#include "../renderer_common/tr_font_bake.h"
 
 /*
  * Include file for users of JPEG library.
@@ -1675,6 +1676,13 @@ void R_LoadImage( const char *name, byte **pic, int *width, int *height ) {
 	*pic = NULL;
 	*width = 0;
 	*height = 0;
+
+	if ( Font_BakeHudcharsAtlas( name, pic, width, height ) ) {
+		return;
+	}
+	if ( Font_BakeConsoleAtlas( name, pic, width, height ) ) {
+		return;
+	}
 
 	len = strlen( name );
 	if ( len < 5 ) {

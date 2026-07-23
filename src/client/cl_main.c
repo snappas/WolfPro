@@ -2480,7 +2480,14 @@ void CL_InitRenderer( void ) {
 	re.BeginRegistration( &cls.glconfig );
 
 	// load character sets
-	cls.charSetShader = re.RegisterShader( "gfx/2d/hudchars" );
+	// Fetched unconditionally so a latched con_scale change still promotes
+	// even when r_hudFontEnabled 0 skips Font_BakeConsoleAtlas below.
+	Cvar_Get( "con_scale", "1.0", CVAR_ARCHIVE | CVAR_LATCH );
+
+	// r_hudFontEnabled 0: use the real bitmap image instead of the synthetic
+	// "consolechars" name the vector console atlas intercepts.
+	cls.charSetShader = re.RegisterShader( Cvar_Get( "r_hudFontEnabled", "1", CVAR_ARCHIVE | CVAR_LATCH )->integer
+											? "gfx/2d/consolechars" : "gfx/2d/hudchars" );
 	cls.whiteShader = re.RegisterShader( "white" );
 
 // JPW NERVE

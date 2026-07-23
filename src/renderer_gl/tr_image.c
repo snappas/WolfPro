@@ -34,6 +34,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "tr_local.h"
+#include "../renderer_common/tr_font_bake.h"
 
 /*
  * Include file for users of JPEG library.
@@ -1832,6 +1833,13 @@ void R_LoadImage( const char *name, byte **pic, int *width, int *height ) {
 	*width = 0;
 	*height = 0;
 
+	if ( Font_BakeHudcharsAtlas( name, pic, width, height ) ) {
+		return;
+	}
+	if ( Font_BakeConsoleAtlas( name, pic, width, height ) ) {
+		return;
+	}
+
 	len = strlen( name );
 	if ( len < 5 ) {
 		return;
@@ -3447,6 +3455,13 @@ image_t *R_FindCachedImage( const char *name, int hash ) {
 	}
 
 	if ( !numBackupImages ) {
+		return NULL;
+	}
+
+	// never reuse a backup of the baked hudchars/console atlases: R_TouchImage
+	// only relinks bookkeeping, never re-uploads pixels, so a stale GL id
+	// would show old texture content instead of a fresh bake.
+	if ( Font_IsHudcharsImageName( name ) || Font_IsConsoleImageName( name ) ) {
 		return NULL;
 	}
 

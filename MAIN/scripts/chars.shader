@@ -1,5 +1,27 @@
 // OSP character-set definitions
 
+gfx/2d/hudchars
+{
+	nopicmip
+	nomipmaps
+	{
+		map gfx/2d/hudchars.tga
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbgen vertex
+	}
+}
+
+gfx/2d/consolechars
+{
+	nopicmip
+	nomipmaps
+	{
+		map gfx/2d/consolechars.tga
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbgen vertex
+	}
+}
+
 gfx/2d/hudchars_OSP1
 {
 	nopicmip
