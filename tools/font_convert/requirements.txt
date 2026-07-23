@@ -1,0 +1,3 @@
+fonttools>=4.63.0
+scikit-image>=0.26.0
+potracer>=0.0.4
