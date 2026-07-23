@@ -215,8 +215,10 @@ FILE(GLOB JPEG_FILES
 FILE(GLOB RENDERER_COMMON
 	"src/game/q_shared.h"
 	"src/renderer_common/*.h"
+	"src/renderer_common/*.c"
 	"src/qcommon/model.c"
 	"src/qcommon/qcommon.h"
+	"src/thirdparty/stb/*.h"
 )
 
 FILE(GLOB RENDERER_FILES
