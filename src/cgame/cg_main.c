@@ -1917,7 +1917,7 @@ static void CG_RegisterGraphics( void ) {
 	}
 	// -NERVE - SMF
 
-//	cgs.media.cursor = trap_R_RegisterShaderNoMip( "menu/art/3_cursor2" );
+	cgs.media.cursor = trap_R_RegisterShaderNoMip( "ui_mp/assets/3_cursor3" );
 	cgs.media.sizeCursor = trap_R_RegisterShaderNoMip( "ui_mp/assets/sizecursor.tga" );
 	cgs.media.selectCursor = trap_R_RegisterShaderNoMip( "ui_mp/assets/selectcursor.tga" );
 	CG_LoadingString( " - game media done" );
@@ -3054,6 +3054,8 @@ void CG_Shutdown( void ) {
 		ndp_round2EndSize = 0;
 		ndp_docDropSize = 0;
 		ndp_docPickupSize = 0;
+		ndp_levelStartTimesSize = 0;
+		ndp_timeLimitsSize = 0;
 		SaveSession();
 	}
 }

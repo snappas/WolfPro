@@ -31,6 +31,12 @@ int ndp_round2End[32] = { 0 };
 int ndp_round1EndSize = 0;
 int ndp_round2EndSize = 0;
 
+int ndp_levelStartTimes[32] = { 0 };
+int ndp_levelStartTimesSize = 0;
+int ndp_timeLimitTimes[32] = { 0 };
+float ndp_timeLimits[32] = { 0 };
+int ndp_timeLimitsSize = 0;
+
 int ndp_docPickupTime[1024] = { 0 };
 int ndp_docDropTime[1024] = { 0 };
 int ndp_docPickupSize = 0;
@@ -213,6 +219,21 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 		if (atoi(CG_Argv(1)) == CS_MULTI_INFO) {
 			const char* info = CG_Argv(2);
 			ndp_defender = atoi(Info_ValueForKey(info, "defender"));
+		}
+		if (atoi(CG_Argv(1)) == CS_LEVEL_START_TIME) {
+			if (ndp_levelStartTimesSize == 0 || ndp_levelStartTimes[ndp_levelStartTimesSize - 1] != serverTime) {
+				ndp_levelStartTimes[ndp_levelStartTimesSize++] = serverTime;
+			}
+		}
+		if (atoi(CG_Argv(1)) == CS_SERVERINFO) {
+			const char* info = CG_Argv(2);
+			float timelimit = atof(Info_ValueForKey(info, "timelimit"));
+
+			if (ndp_timeLimitsSize == 0 || ndp_timeLimits[ndp_timeLimitsSize - 1] != timelimit) {
+				ndp_timeLimitTimes[ndp_timeLimitsSize] = serverTime;
+				ndp_timeLimits[ndp_timeLimitsSize] = timelimit;
+				ndp_timeLimitsSize++;
+			}
 		}
 
 	}
@@ -440,6 +461,45 @@ void CG_NDP_SeekRelative(int seconds)
 	CG_NDP_SeekAbsolute(cg.time + seconds * 1000);
 }
 
+int CG_NDP_LevelStartTimeAt(int serverTime)
+{
+	int i;
+	int result = m_firstServerTime;
+
+	for (i = 0; i < ndp_levelStartTimesSize; i++) {
+		if (ndp_levelStartTimes[i] > serverTime) {
+			break;
+		}
+		result = ndp_levelStartTimes[i];
+	}
+	return result;
+}
+
+float CG_NDP_TimeLimitAt(int serverTime)
+{
+	int i;
+	float result = 0.0f;
+
+	for (i = 0; i < ndp_timeLimitsSize; i++) {
+		if (ndp_timeLimitTimes[i] > serverTime) {
+			break;
+		}
+		result = ndp_timeLimits[i];
+	}
+	return result;
+}
+
+char *CG_NDP_FormatTimestamp(int seconds)
+{
+	int hour = seconds / 3600;
+	int minute = (seconds / 60) % 60;
+	int second = seconds % 60;
+
+	if (hour > 0) {
+		return va("%02d:%02d:%02d", hour, minute, second);
+	}
+	return va("%02d:%02d", minute, second);
+}
 
 /*
 =================

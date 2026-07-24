@@ -896,8 +896,8 @@ qboolean    ConsoleCommand( void ) {
 			trap_SendServerCommand( -1, va( "print \"server:[lof] %s\"", ConcatArgs( 1 ) ) );
 			return qtrue;
 		}
-		// everything else will also be printed as a say command
-		trap_SendServerCommand( -1, va( "print \"server:[lof] %s\"", ConcatArgs( 0 ) ) );
+		// unrecognized command: report back to the console/rcon issuer only
+		trap_Printf( va( "unknown command: %s\n", ConcatArgs( 0 ) ) );
 		return qtrue;
 	}
 

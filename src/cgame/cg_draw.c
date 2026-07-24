@@ -4453,6 +4453,143 @@ void CG_GenerateHudEvents(void){
 	}
 }
 
+qboolean CG_DemoTimelineCursorInRect( void ) {
+	return (qboolean)(
+		cgs.cursorX >= DEMO_TIMELINE_X && cgs.cursorX <= DEMO_TIMELINE_X + DEMO_TIMELINE_W &&
+		cgs.cursorY >= DEMO_TIMELINE_Y && cgs.cursorY <= DEMO_TIMELINE_Y + DEMO_TIMELINE_H );
+}
+
+int CG_DemoTimelineServerTimeAtCursor( void ) {
+	float percent = (float)( cgs.cursorX - DEMO_TIMELINE_X ) / (float)DEMO_TIMELINE_W;
+
+	if ( percent < 0.0f ) {
+		percent = 0.0f;
+	} else if ( percent > 1.0f ) {
+		percent = 1.0f;
+	}
+	return m_firstServerTime + (int)( percent * (float)( m_lastServerTime - m_firstServerTime ) );
+}
+
+static void CG_DrawDemoTimeline( void ) {
+	int i;
+	int demoDuration, demoProgress, progressLocation;
+	float progressPercent;
+	vec4_t bgColor = { 0.0f, 0.0f, 0.0f, 0.3f };
+	vec4_t timelineBarFill = { 0.25f, 0.36f, 0.2f, 0.8f };
+	vec4_t timelineBarPositionFill = { 1.0f, 0.0f, 0.0f, 1.0f };
+	vec4_t killSquareFill = { 0.0f, 1.0f, 0.0f, 1.0f };
+	vec4_t killStreakFill = { 0.98f, 0.98f, 0.02f, 1.0f };
+	vec4_t docCarrierFill = { 0.02f, 0.98f, 0.98f, 1.0f };
+
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled && cg.demoTimelineShown ) ) {
+		return;
+	}
+
+	demoDuration = m_lastServerTime - m_firstServerTime;
+	if ( demoDuration <= 0 ) {
+		return;
+	}
+
+	CG_FillRect( 0, DEMO_TIMELINE_Y, SCREEN_WIDTH, DEMO_TIMELINE_H, bgColor );
+	CG_FillRect( 1.0f, DEMO_TIMELINE_Y + 1.0f, SCREEN_WIDTH - 2.0f, DEMO_TIMELINE_H - 2.0f, bgColor );
+
+	CG_FillRect( DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - GIANTCHAR_HEIGHT, DEMO_TIMELINE_W, 8, timelineBarFill );
+
+	demoProgress = m_currServerTime - m_firstServerTime;
+	progressPercent = (float)demoProgress / (float)demoDuration;
+	progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+	CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - GIANTCHAR_HEIGHT, 3, 10, timelineBarPositionFill );
+	CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - GIANTCHAR_HEIGHT, 1, 32, timelineBarPositionFill );
+
+	CG_DrawPic( 24, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 37, 10, 10, cgs.media.skullIcon );
+	CG_DrawPic( 20, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 28, 15, 15, cgs.media.exclamationIcon );
+
+	for ( i = 0; i < ndp_myKillsSize; i++ ) {
+		demoProgress = ndp_myKills[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		if ( ndp_killStreak[i] ) {
+			CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 32, 2, 2, killStreakFill );
+		} else {
+			CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 32, 2, 2, killSquareFill );
+		}
+	}
+
+	for ( i = 0; i < ndp_axisWinsSize; i++ ) {
+		demoProgress = ndp_axisWins[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 52, 24, 14, trap_R_RegisterShaderNoMip( "ui_mp/assets/ger_flag.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_alliesWinsSize; i++ ) {
+		demoProgress = ndp_alliesWins[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 52, 24, 14, trap_R_RegisterShaderNoMip( "ui_mp/assets/usa_flag.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_round1EndSize; i++ ) {
+		demoProgress = ndp_round1End[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 64, 14, 14, trap_R_RegisterShader( "sprites/stopwatch1.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_round2EndSize; i++ ) {
+		demoProgress = ndp_round2End[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 64, 14, 14, trap_R_RegisterShader( "sprites/stopwatch2.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_docPickupSize; i++ ) {
+		int docDropProgressLocation;
+		float docDropProgressPercent = 1.0f;
+
+		demoProgress = ndp_docPickupTime[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		if ( i < ndp_docDropSize ) {
+			int docDropTime = ndp_docDropTime[i] - m_firstServerTime;
+			docDropProgressPercent = (float)docDropTime / (float)demoDuration;
+		}
+		docDropProgressLocation = (int)( (float)( DEMO_TIMELINE_W ) * docDropProgressPercent );
+
+		CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 20, docDropProgressLocation - progressLocation, 2, docCarrierFill );
+	}
+
+	CG_DrawPic( cgs.cursorX - 16, cgs.cursorY - 16, 32, 32, cgs.media.cursor );
+
+	if ( cgs.demoTimelineHoverTime >= 0 ) {
+		int roundStart = CG_NDP_LevelStartTimeAt( cgs.demoTimelineHoverTime );
+		float limit = CG_NDP_TimeLimitAt( cgs.demoTimelineHoverTime );
+		int msec = ( limit > 0.0f )
+			? (int)( limit * 60000.0f ) - ( cgs.demoTimelineHoverTime - roundStart )
+			: ( cgs.demoTimelineHoverTime - roundStart );
+		int seconds = msec / 1000;
+		char *label;
+		int labelWidth;
+		vec4_t tooltipBg = { 0.0f, 0.0f, 0.0f, 0.6f };
+
+		if ( seconds < 0 ) {
+			seconds = 0;
+		}
+		label = CG_NDP_FormatTimestamp( seconds );
+		labelWidth = CG_DrawStrlen( label ) * TINYCHAR_WIDTH;
+
+		CG_FillRect( cgs.cursorX - labelWidth / 2 - 2, cgs.cursorY - 32, labelWidth + 4, TINYCHAR_HEIGHT + 2, tooltipBg );
+		CG_DrawStringExt( cgs.cursorX - labelWidth / 2, cgs.cursorY - 31, label, colorWhite, qfalse, qtrue, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0 );
+	}
+}
+
 static void CG_DrawStatsWindows(void){
 	vec4_t bgColor = {0.0f, 0.0f, 0.0f, 0.3f};
 
@@ -4517,6 +4654,7 @@ static void CG_Draw2D( void ) {
 
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		CG_DrawIntermission();
+		CG_DrawDemoTimeline();
 		return;
 	}
 
@@ -4602,6 +4740,7 @@ static void CG_Draw2D( void ) {
 	}
 
 	CG_DrawStatsWindows();
+	CG_DrawDemoTimeline();
 
 	// Ridah, draw flash blends now
 	CG_DrawFlashBlend();

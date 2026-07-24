@@ -1889,6 +1889,12 @@ void CG_MouseEvent( int x, int y ) {
 		Display_MouseMove( NULL, cgs.cursorX, cgs.cursorY );
 	}
 
+	if ( cg.demoPlayback && cg.ndpDemoEnabled && cg.demoTimelineShown ) {
+		if ( cgs.demoTimelineDragging ) {
+			CG_NDP_SeekAbsolute( CG_DemoTimelineServerTimeAtCursor() );
+		}
+		cgs.demoTimelineHoverTime = CG_DemoTimelineCursorInRect() ? CG_DemoTimelineServerTimeAtCursor() : -1;
+	}
 }
 
 /*
@@ -1939,11 +1945,39 @@ void CG_EventHandling( int type ) {
 
 void CG_KeyEvent( int key, qboolean down ) {
 
+	if ( cg.demoPlayback && cg.ndpDemoEnabled ) {
+		if ( key == K_MOUSE1 ) {
+			if ( down ) {
+				if ( cg.demoTimelineShown && CG_DemoTimelineCursorInRect() ) {
+					cgs.demoTimelineDragging = qtrue;
+					CG_NDP_SeekAbsolute( CG_DemoTimelineServerTimeAtCursor() );
+				}
+			} else {
+				cgs.demoTimelineDragging = qfalse;
+			}
+		} else if ( down ) {
+			if ( key == K_END ) {
+				if ( cg.demoTimelineShown ) {
+					cg.demoTimelineShown = qfalse;
+				} else {
+					cg.demoTimelineShown = qtrue;
+					cgs.cursorX = 320;
+					cgs.cursorY = 240;
+					cgs.demoTimelineHoverTime = -1;
+				}
+			} else if ( key == K_PGUP ) {
+				CG_NDP_GoToNextFrag( qtrue );
+			} else if ( key == K_PGDN ) {
+				CG_NDP_GoToNextFrag( qfalse );
+			}
+		}
+	}
+
 	if ( !down ) {
 		return;
 	}
 
-	if ( cg.predictedPlayerState.pm_type == PM_NORMAL || ( cg.predictedPlayerState.pm_type == PM_SPECTATOR && cg.showScores == qfalse ) ) {
+	if ( !cg.demoPlayback && ( cg.predictedPlayerState.pm_type == PM_NORMAL || ( cg.predictedPlayerState.pm_type == PM_SPECTATOR && cg.showScores == qfalse ) ) ) {
 		CG_EventHandling( CGAME_EVENT_NONE );
 		trap_Key_SetCatcher( 0 );
 		return;

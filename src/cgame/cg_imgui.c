@@ -13,16 +13,6 @@ void CG_ImGUI_Share(void *ctx, void *alloc, void *free, void **user){
 	cgs.igUserData = user;
 }
 
-char* GetStringTimestamp(int seconds){
-	int hour = seconds / 3600;
-	int minute = (seconds / 60) % 60;
-	int second = seconds % 60;
-	if(hour > 0){
-		return va("%02d:%02d:%02d", hour, minute, second);
-	}
-	return va("%02d:%02d", minute, second);
-}
-
 static const float TIMELINE_RADIUS = 8.0f;
 static const float delta = 3.0f;
 static const float TIMELINE_HEIGHT = 8.0f * 2.0f + 3.0f * 2;
@@ -42,9 +32,6 @@ static void ImGUIDemoWindow(void){
 
 static void DemoPlaybackTimeline(void){
 	static qbool demoTimelineActive = qfalse;
-	if (cg.demoPlayback) {
-		demoTimelineActive = qtrue;
-	}
 
 	ToggleBooleanWithShortcut(&demoTimelineActive, ImGuiKey_D, ImGUI_ShortcutOptions_Global);
 	trap_CL_AddGuiMenu(ImGUI_MainMenu_Info, "Demo Tools", "", &demoTimelineActive, cg.demoPlayback);
@@ -110,8 +97,8 @@ static void DemoPlaybackTimeline(void){
 			
 			
 			igPopItemWidth();
-			
-			igText("%s / %s", GetStringTimestamp(currentOffset / 1000), GetStringTimestamp(demoDuration / 1000));
+
+			igText("%s / %s", CG_NDP_FormatTimestamp(currentOffset / 1000), CG_NDP_FormatTimestamp(demoDuration / 1000));
 
 			
 			
@@ -414,7 +401,7 @@ qbool TimelineEvent(const char* str_id, float* values, int numVals)
 		if (igIsItemActive() || igIsItemHovered(0))
 		{
 			int currentOffset = values[i] * (m_lastServerTime - m_firstServerTime);
-			igSetTooltip("%s", GetStringTimestamp(currentOffset / 1000)); 
+			igSetTooltip("%s", CG_NDP_FormatTimestamp(currentOffset / 1000));
 		}
 		
 		igPopID();

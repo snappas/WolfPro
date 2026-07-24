@@ -932,6 +932,7 @@ typedef struct {
 	pmoveExt_t pmext;
 
 	qbool ndpDemoEnabled;
+	qboolean demoTimelineShown;
 
 	int popinPrintTime;
 	int popinPrintCharWidth;
@@ -1601,6 +1602,8 @@ typedef struct {
 	qboolean sizingHud;
 	void *capturedItem;
 	qhandle_t activeCursor;
+	int demoTimelineHoverTime;
+	qboolean demoTimelineDragging;
 
 	// screen fading
 	float fadeAlpha, fadeAlphaCurrent;
@@ -1948,6 +1951,14 @@ void CG_LoadMenus( const char *menuFile );
 void CG_KeyEvent( int key, qboolean down );
 void CG_MouseEvent( int x, int y );
 void CG_EventHandling( int type );
+
+#define DEMO_TIMELINE_X ( GIANTCHAR_WIDTH )
+#define DEMO_TIMELINE_Y ( SCREEN_HEIGHT - 70 )
+#define DEMO_TIMELINE_W ( SCREEN_WIDTH - ( GIANTCHAR_WIDTH * 2 ) )
+#define DEMO_TIMELINE_H ( 70 )
+
+qboolean CG_DemoTimelineCursorInRect( void );
+int CG_DemoTimelineServerTimeAtCursor( void );
 
 qboolean CG_GetTag( int clientNum, char *tagname, orientation_t * or );
 qboolean CG_GetWeaponTag( int clientNum, char *tagname, orientation_t * or );

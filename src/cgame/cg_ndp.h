@@ -48,4 +48,14 @@ extern qbool gameVersionFound;
 extern int m_currServerTime;
 extern int m_firstServerTime;
 extern int m_lastServerTime;
+
+extern int ndp_levelStartTimes[32];
+extern int ndp_levelStartTimesSize;
+extern int ndp_timeLimitTimes[32];
+extern float ndp_timeLimits[32];
+extern int ndp_timeLimitsSize;
+
+int CG_NDP_LevelStartTimeAt( int serverTime );
+float CG_NDP_TimeLimitAt( int serverTime );
+char *CG_NDP_FormatTimestamp( int seconds );
 #endif
