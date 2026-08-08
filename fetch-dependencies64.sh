@@ -40,6 +40,26 @@ cp ../src/*.h .
 fi
 cd $DEPS_ROOT
 
+LIBLZMA_DIR=`pwd`/xz
+if [ ! -d "$LIBLZMA_DIR" ]; then
+# Pinned: XZ Utils 5.8.3, the current stable release tag as of this writing
+# (https://github.com/tukaani-project/xz/releases) -- avoid "latest" per
+# this project's fetch-dependencies convention.
+VER=5.8.3
+wget https://github.com/tukaani-project/xz/releases/download/v${VER}/xz-${VER}.tar.gz
+tar xvfz xz-${VER}.tar.gz
+rm xz-${VER}.tar.gz
+mv xz-${VER} xz
+cd $LIBLZMA_DIR
+mkdir build
+cd build
+cmake -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_NLS=OFF ..
+make -j
+cp ../src/liblzma/api/lzma.h .
+cp -r ../src/liblzma/api/lzma .
+fi
+cd $DEPS_ROOT
+
 OMNIBOT_DIR=`pwd`/omni-bot
 if [ ! -d "$OMNIBOT_DIR" ]; then
 VER=$(curl --silent -qI https://github.com/jswigart/omni-bot/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');

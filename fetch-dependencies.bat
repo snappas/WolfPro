@@ -133,7 +133,20 @@ rem ***************************************************************************
 	) else (
 		set SKIP_JPEG=1
 	)
-	
+
+	if not exist "xz" (
+		echo xz...
+		rem Pinned: XZ Utils 5.8.3, the current stable release tag as of this
+		rem writing (https://github.com/tukaani-project/xz/releases) -- avoid
+		rem "latest" per this project's fetch-dependencies convention.
+		call powershell "Invoke-WebRequest -Uri https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz -Out xz.tar.gz"
+		call powershell "tar -xzf xz.tar.gz"
+		call powershell "Rename-Item -Path xz-5.8.3 -NewName xz"
+		call powershell "rm xz.tar.gz"
+	) else (
+		set SKIP_XZ=1
+	)
+
 	if not exist "jansson" (
 		echo jansson...
 		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/akheron/jansson/releases)[0].zipball_url;"^
@@ -181,7 +194,7 @@ rem ***************************************************************************
 	
 :buildLibJPEG
 	if defined SKIP_JPEG (
-		goto buildJansson
+		goto buildXZ
 	)
 	cd "%ROOT_DEP_DIR%\libjpeg-turbo"
 	mkdir build
@@ -190,7 +203,20 @@ rem ***************************************************************************
 	call "%PF%\%VC_PATH%\Common7\IDE\devenv.exe" libjpeg-turbo.sln /Build Release
 	call powershell "Get-ChildItem """..\src\*.h""" | copy-item -Destination """..\""
 	call powershell "Get-ChildItem """*.h""" | copy-item -Destination """..\""
-	
+
+:buildXZ
+	if defined SKIP_XZ (
+		goto buildJansson
+	)
+	cd "%ROOT_DEP_DIR%\xz"
+	mkdir build
+	cd build
+	call cmake -G"%cmake_makefiles%" -A Win32 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_NLS=OFF ..
+	call "%PF%\%VC_PATH%\Common7\IDE\devenv.exe" xz.sln /Build Release
+	call powershell "Get-ChildItem """..\src\liblzma\api\lzma.h""" | copy-item -Destination """..\""
+	call powershell "Copy-Item -Path """..\src\liblzma\api\lzma""" -Destination """..\lzma""" -Recurse -Force"
+	cd "%ROOT_DEP_DIR%"
+
 :buildJansson
 	if defined SKIP_JANSSON (
 		goto harvest
@@ -210,6 +236,7 @@ rem ***************************************************************************
 	call powershell "Get-ChildItem """curl\bin\*.lib""" | copy-item -Destination """bin\""
 	call powershell "Get-ChildItem """libjpeg-turbo\build\Release\*.dll""" | copy-item -Destination """bin\""
 	call powershell "Get-ChildItem """libjpeg-turbo\build\Release\*.lib""" | copy-item -Destination """bin\""
+	call powershell "Get-ChildItem """xz\build\Release\lzma.lib""" | copy-item -Destination """bin\""
 	call powershell "Get-ChildItem """jansson\build\lib\Release\*.lib""" | copy-item -Destination """bin\""
 	echo Copy the DLL files from deps/bin to your RtcwPro install location where wolfMP.exe is
 	if "%~1" == "" (

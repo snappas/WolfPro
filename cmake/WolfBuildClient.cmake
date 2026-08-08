@@ -52,6 +52,7 @@ if(IS_VULKAN)
 		engine_libraries
 		os_libraries
 		${CURL_LIBRARIES}
+		${LZMA_LIBRARIES}
 	)
 	target_link_libraries(${wolfmp_target} cimgui cimplot)
 else()
@@ -60,13 +61,14 @@ else()
 	engine_libraries
 	os_libraries
 	${CURL_LIBRARIES}
+	${LZMA_LIBRARIES}
 	)
 endif()
 if(ENABLE_ASAN)
 target_link_options(${wolfmp_target} PRIVATE /wholearchive:clang_rt.asan-x86_64.lib)
 endif()
 
-target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR})
+target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})
 
 message(STATUS CMAKE_BUILD_TYPE)
 

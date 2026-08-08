@@ -136,6 +136,34 @@ i686-w64-mingw32-dlltool -d libjpeg-62.def -l libjpeg-62.lib
 fi
 cd $DEPS_ROOT
 
+LIBLZMA_DIR=`pwd`/xz
+if [ ! -d "$LIBLZMA_DIR" ]; then
+# Pinned: XZ Utils 5.8.3, the current stable release tag as of this writing
+# (https://github.com/tukaani-project/xz/releases) -- avoid "latest" per
+# this project's fetch-dependencies convention.
+VER=5.8.3
+wget https://github.com/tukaani-project/xz/releases/download/v${VER}/xz-${VER}.tar.gz
+tar xvfz xz-${VER}.tar.gz
+rm xz-${VER}.tar.gz
+mv xz-${VER} xz
+cd $LIBLZMA_DIR
+mkdir build
+mkdir build-win
+cd build
+CFLAGS=-m32 CXXFLAGS=-m32 LDFLAGS=-m32 cmake -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_NLS=OFF ..
+make -j
+cp ../src/liblzma/api/lzma.h .
+cp -r ../src/liblzma/api/lzma .
+
+cd ../build-win
+echo "${CMAKEMINGW}" > toolchain.cmake
+cmake -G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=./toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_NLS=OFF ..
+make -j
+cp ../src/liblzma/api/lzma.h .
+cp -r ../src/liblzma/api/lzma .
+fi
+cd $DEPS_ROOT
+
 XWIN_DIR=`pwd`/xwin
 if [ ! -d "$XWIN_DIR" ]; then
 VER=$(curl --silent -qI https://github.com/Jake-Shadle/xwin/releases/latest | awk -F '/' '/^location/ {print  substr($NF, 1, length($NF)-1)}');

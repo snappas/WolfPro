@@ -151,6 +151,19 @@ if(CURL_FOUND)
 	message(STATUS "CURL library: " ${CURL_LIBRARY})
 endif()
 
+find_package(LZMA)
+if(LZMA_FOUND)
+	set(CMAKE_REQUIRED_INCLUDES ${LZMA_INCLUDE_DIR})
+	set(CMAKE_REQUIRED_LIBRARIES ${LZMA_LIBRARY})
+	message(STATUS "LZMA Include dir: " ${LZMA_INCLUDE_DIR})
+	message(STATUS "LZMA library: " ${LZMA_LIBRARY})
+	# We link the static lzma.lib; without this, lzma.h declares its API
+	# __declspec(dllimport) on MSVC and every lzma_* symbol fails to link.
+	if(WIN32)
+		add_definitions(-DLZMA_API_STATIC)
+	endif()
+endif()
+
 add_library(cimgui STATIC ${RENDERER_CIMGUI_FILES})
 set_property(TARGET cimgui PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(cimgui PRIVATE src/cimgui)
