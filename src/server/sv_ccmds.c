@@ -28,6 +28,7 @@ If you have questions concerning this license or the applicable additional terms
 
 
 #include "server.h"
+#include "sv_wtvdemo.h"
 
 /*
 ===============================================================================
@@ -349,15 +350,6 @@ static void SV_MapRestart_f( void ) {
 		delay = 5;
 	}
 
-	if ( delay != 0 && Cvar_VariableIntegerValue( "g_doWarmup" ) == 0 ) {
-		sv.restartTime = sv.time + delay * 1000;
-		if ( sv.restartTime == 0 ) {
-			sv.restartTime = 1;
-		}
-		SV_SetConfigstring( CS_WARMUP, va( "%i", sv.restartTime ) );
-		return;
-	}
-
 	// NERVE - SMF - read in gamestate or just default to GS_PLAYING
 	old_gs = atoi( Cvar_VariableString( "gamestate" ) );
 
@@ -365,6 +357,22 @@ static void SV_MapRestart_f( void ) {
 		new_gs = atoi( Cmd_Argv( 2 ) );
 	} else {
 		new_gs = GS_PLAYING;
+	}
+
+	// Not continuing to GS_PLAYING/GS_WARMUP_COUNTDOWN means any WTV
+	// recording tied to this round is discarded, not kept; decided here
+	// (before the deferral below can lose new_gs to a later bare re-fire).
+	if ( new_gs != GS_PLAYING && new_gs != GS_WARMUP_COUNTDOWN ) {
+		WTV_RecordStop( 1 );
+	}
+
+	if ( delay != 0 && Cvar_VariableIntegerValue( "g_doWarmup" ) == 0 ) {
+		sv.restartTime = sv.time + delay * 1000;
+		if ( sv.restartTime == 0 ) {
+			sv.restartTime = 1;
+		}
+		SV_SetConfigstring( CS_WARMUP, va( "%i", sv.restartTime ) );
+		return;
 	}
 
 	if ( !SV_TransitionGameState( new_gs, old_gs, delay ) ) {

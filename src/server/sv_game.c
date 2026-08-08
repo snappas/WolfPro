@@ -29,6 +29,7 @@ If you have questions concerning this license or the applicable additional terms
 // sv_game.c -- interface to the game dll
 
 #include "server.h"
+#include "sv_wtvdemo.h"
 
 #include "../game/botlib.h"
 
@@ -903,7 +904,26 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 
 	case G_REGISTER_MODEL:
 		return MDL_RegisterModel(VMA(1), VM_QAGAME);
-		
+
+	case G_WTV_RECORD_START:
+		WTV_RecordStart( args[1] );
+		return 0;
+
+	case G_WTV_RECORD_STOP:
+		WTV_RecordStop( args[1] );
+		return 0;
+
+	case G_WTV_RECORD_PLAYER_IDENTITY:
+		WTV_RecordPlayerIdentity( args[1], (const char *)VMA( 2 ), (const char *)VMA( 3 ) );
+		return 0;
+
+	case G_WTV_IS_RECORDING:
+		return WTV_IsRecording();
+
+	case G_WTV_RECORD_COMMAND:
+		WTV_QueueBroadcastCommand( (const char *)VMA( 1 ) );
+		return 0;
+
 	default:
 		Com_Error( ERR_DROP, "Bad game system trap: %i", args[0] );
 	}

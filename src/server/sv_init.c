@@ -34,6 +34,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 #include <curl/curl.h>
 #include "server.h"
+#include "sv_wtvdemo.h"
 
 
 /*
@@ -135,6 +136,8 @@ void SV_SetConfigstring (int index, const char *val) {
 	// change the string in sv
 	Z_Free( sv.configstrings[index] );
 	sv.configstrings[index] = CopyString( val );
+
+	WTV_RecordConfigstringChange( index, val );
 
 	// send it to all the clients if we aren't
 	// spawning a new server
@@ -525,7 +528,7 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 
 	// MrE: main zone should be pretty much emtpy at this point
 	// except for file system data and cached renderer data
-	Z_LogHeap();
+	//Z_LogHeap();
 
 	// allocate empty config strings
 	for ( i = 0 ; i < MAX_CONFIGSTRINGS ; i++ ) {
@@ -588,6 +591,12 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 		// just set it to a negative number,so the cgame knows not to draw the percent bar
 		Cvar_Set( "com_expectedhunkusage", "-1" );
 	}
+
+	// a mid-round map change bypasses the normal round-end trap that would
+	// otherwise stop WTV recording; without this, the still-open temp file's
+	// baselines get silently compressed against the NEW map's entities once
+	// this new map itself later reaches intermission.
+	WTV_RecordStop( 1 );
 
 	// preserve maxclients
 	i = sv.maxclients;
@@ -1115,6 +1124,8 @@ void SV_Shutdown( const char *finalmsg ) {
 	}
 
 	Com_Printf( "----- Server Shutdown (%s) -----\n", finalmsg );
+
+	WTV_RecordStop( 0 ); // finalize (not delete) any in-progress recording rather than leaving it open
 
 	if ( svs.clients && !com_errorEntered ) {
 		SV_FinalMessage( finalmsg );
