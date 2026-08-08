@@ -1676,6 +1676,7 @@ void ClientUserinfoChanged( int clientNum ) {
 
 	trap_SetConfigstring( CS_PLAYERS + clientNum, s );
 
+	trap_WTV_RecordPlayerIdentity( clientNum, client->sess.guid, client->pers.netname );
 
 	if (!(ent->r.svFlags & SVF_BOT)) {
 		char *team;

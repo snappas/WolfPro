@@ -815,6 +815,26 @@ int trap_submit_curlPost( char* jsonfile, char* matchid ) {
 	return syscall( G_SUBMIT_STATS_CURL, jsonfile, matchid );
 }
 
+void trap_WTV_RecordStart( int roundNum ) {
+	syscall( G_WTV_RECORD_START, roundNum );
+}
+
+void trap_WTV_RecordStop( int aborted ) {
+	syscall( G_WTV_RECORD_STOP, aborted );
+}
+
+void trap_WTV_RecordPlayerIdentity( int clientNum, const char *guid, const char *name ) {
+	syscall( G_WTV_RECORD_PLAYER_IDENTITY, clientNum, guid, name );
+}
+
+qboolean trap_WTV_IsRecording( void ) {
+	return syscall( G_WTV_IS_RECORDING );
+}
+
+void trap_WTV_RecordCommand( const char *text ) {
+	syscall( G_WTV_RECORD_COMMAND, text );
+}
+
 qhandle_t trap_RegisterModel( char* name ){
 	return syscall( G_REGISTER_MODEL, name);
 }

@@ -608,6 +608,11 @@ void Svcmd_ResetMatch_f(qboolean fDoReset, qboolean fDoRestart) {
         }
     }
 
+	if ( g_gamestate.integer == GS_PLAYING && g_wtvdemos.integer && !level.wtvStopSignaled ) {
+		level.wtvStopSignaled = qtrue;
+		trap_WTV_RecordStop( 1 );
+	}
+
 	if (fDoReset && g_gametype.integer == GT_WOLF_STOPWATCH) {
 		trap_Cvar_Set("g_currentRound", "0");
 		trap_Cvar_Set("g_nextTimeLimit", "0");
@@ -653,6 +658,11 @@ void Svcmd_SwapTeams_f() {
 	if (g_gamestate.integer == GS_PLAYING && g_gameStatslog.integer) {
         G_writeGameEarlyExit();  // properly close current stats output
     }
+
+	if ( g_gamestate.integer == GS_PLAYING && g_wtvdemos.integer && !level.wtvStopSignaled ) {
+		level.wtvStopSignaled = qtrue;
+		trap_WTV_RecordStop( 1 );
+	}
 
 	trap_Cvar_Set( "g_swapteams", "1" );
 	trap_SendConsoleCommand( EXEC_APPEND, va( "map_restart 0 %i\n", GS_WARMUP ) );

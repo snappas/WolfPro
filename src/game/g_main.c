@@ -205,6 +205,7 @@ vmCvar_t g_statsDebug; // write in logfile to debug crashes
 vmCvar_t g_statsRetryCount;
 vmCvar_t g_statsRetryDelay;
 vmCvar_t g_apiquery_curl_URL;
+vmCvar_t g_wtvdemos;
 
 vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
@@ -219,9 +220,6 @@ vmCvar_t g_headMaxY;
 vmCvar_t g_headMaxZ;
 
 vmCvar_t g_gravityModifier;
-
-vmCvar_t g_lowPingAntilag;
-vmCvar_t g_lowPingAntilagThreshold;
 
 vmCvar_t g_noSelfDamage;
 vmCvar_t g_rocketMode;
@@ -415,6 +413,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_statsRetryCount, "g_statsRetryCount", "3", CVAR_ARCHIVE, 0, qfalse  }, // number of attempts to send stats if first attempt fails
 	{ &g_statsRetryDelay, "g_statsRetryDelay", "2", CVAR_ARCHIVE, 0, qfalse  }, // delay in seconds to retry sending stats if first attempt fails
 	{ &g_apiquery_curl_URL, "g_apiquery_curl_URL", "https://rtcwproapi.donkanator.com/serverquery", CVAR_ARCHIVE, 0, qfalse  },
+	{ &g_wtvdemos, "g_wtvdemos", "0", CVAR_ARCHIVE, 0, qfalse  },
 
 	{ &g_disableDeadBodyFlagGrab, "g_disableDeadBodyFlagGrab", "1", CVAR_ARCHIVE, qtrue, qfalse },
 	{ &g_mapScriptDirectory, "g_mapScriptDirectory", "", CVAR_ARCHIVE, 0, qfalse },
@@ -430,9 +429,6 @@ cvarTable_t gameCvarTable[] = {
 
 	{ &sv_fps, "sv_fps", "20", CVAR_SYSTEMINFO | CVAR_ARCHIVE, 0, qfalse },
 	{ &g_gravityModifier, "g_gravityModifier", "0.9475", CVAR_ARCHIVE, 0, qtrue },
-
-	{ &g_lowPingAntilag, "g_lowPingAntilag", "1", CVAR_ARCHIVE, 0, qtrue },
-	{ &g_lowPingAntilagThreshold, "g_lowPingAntilagThreshold", "25", CVAR_ARCHIVE, 0, qtrue },
 
 	{ &g_noSelfDamage, "g_noSelfDamage", "1", CVAR_ARCHIVE, 0, qtrue },
 
@@ -1411,6 +1407,11 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	trap_Cvar_VariableStringBuffer( "mapname", mapName, sizeof(mapName) );
 
 
+	if ( g_wtvdemos.integer && !trap_WTV_IsRecording() && ( g_gamestate.integer == GS_PLAYING ) ) {
+		level.wtvStopSignaled = qfalse;
+		trap_WTV_RecordStart( g_currentRound.integer );
+	}
+
 	if ( g_log.string[0] ) {
 		if ( g_logSync.integer ) {
 			trap_FS_FOpenFile( g_log.string, &level.logFile, FS_APPEND_SYNC );
@@ -1428,6 +1429,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 			G_LogPrintf( "------------------------------------------------------------\n" );
 			G_LogPrintf( "InitGame: %s\n", serverinfo );
 		}
+
         if (g_gameStatslog.integer && (g_gamestate.integer == GS_PLAYING)) { // definitely needs improving but here for testing purposes
                 char newGamestatFile[256];
                 
@@ -2697,6 +2699,9 @@ void CheckGameState() {
 				trap_SetConfigstring( CS_READY, va( "%i", READY_NONE ));
 				trap_SetConfigstring( CS_WARMUP, va( "%i", level.warmupTime ) );
 				trap_Cvar_Set( "gamestate", va( "%i", GS_WARMUP_COUNTDOWN ) );
+				if ( g_wtvdemos.integer && !trap_WTV_IsRecording() ) {
+					trap_WTV_RecordStart( g_currentRound.integer );
+				}
 				// Prevents joining once countdown starts..
 				//if (g_tournament.integer == 2) // xmod has a value of 2 but we do not
 				G_readyTeamLock();
@@ -2724,6 +2729,9 @@ void CheckGameState() {
 			level.warmupTime = level.time + ( delay * 1000 );
 			trap_SetConfigstring( CS_WARMUP, va( "%i", level.warmupTime ) );
 			trap_Cvar_Set( "gamestate", va( "%i", GS_WARMUP_COUNTDOWN ) );
+			if ( g_wtvdemos.integer && !trap_WTV_IsRecording() ) {
+				trap_WTV_RecordStart( g_currentRound.integer );
+			}
 		}
 	}
 
@@ -2938,6 +2946,45 @@ void G_RunThink( gentity_t *ent ) {
 	ent->think( ent );
 }
 
+#define WTV_SCOREBOARD_CAPTURE_INTERVAL 1000
+
+/*
+==================
+WTV_CaptureScoreboardAndTeamInfo
+
+Synthesizes scores/tinfo2 for WTV — both are normally per-client sends,
+invisible to WTV's broadcast-only capture. No-ops safely if not recording.
+==================
+*/
+static void WTV_CaptureScoreboardAndTeamInfo( void ) {
+	char redScores[1400];
+	char blueScores[1400];
+	char scoresCmd[1400];
+	char wrapped[1400];
+	int count;
+
+	if ( level.tinfoAxis[0] ) {
+		Com_sprintf( wrapped, sizeof( wrapped ), "wtvtinfo %i %s", TEAM_RED, level.tinfoAxis );
+		trap_WTV_RecordCommand( wrapped );
+	}
+	if ( level.tinfoAllies[0] ) {
+		Com_sprintf( wrapped, sizeof( wrapped ), "wtvtinfo %i %s", TEAM_BLUE, level.tinfoAllies );
+		trap_WTV_RecordCommand( wrapped );
+	}
+
+	count = G_BuildScoreboardMessage( TEAM_RED, redScores );
+	Com_sprintf( scoresCmd, sizeof( scoresCmd ), "scores %i %i %i%s", count,
+		level.teamScores[TEAM_RED], level.teamScores[TEAM_BLUE], redScores );
+	Com_sprintf( wrapped, sizeof( wrapped ), "wtvscores %i %s", TEAM_RED, scoresCmd );
+	trap_WTV_RecordCommand( wrapped );
+
+	count = G_BuildScoreboardMessage( TEAM_BLUE, blueScores );
+	Com_sprintf( scoresCmd, sizeof( scoresCmd ), "scores %i %i %i%s", count,
+		level.teamScores[TEAM_RED], level.teamScores[TEAM_BLUE], blueScores );
+	Com_sprintf( wrapped, sizeof( wrapped ), "wtvscores %i %s", TEAM_BLUE, scoresCmd );
+	trap_WTV_RecordCommand( wrapped );
+}
+
 /*
 ================
 G_RunFrame
@@ -3146,8 +3193,19 @@ void G_RunFrame( int levelTime ) {
 	// see if it is time to end the level
 	CheckExitRules();
 
+	if ( g_wtvdemos.integer && level.intermissiontime && !level.wtvStopSignaled
+		&& level.time >= level.intermissiontime + 3000 ) {
+		level.wtvStopSignaled = qtrue;
+		trap_WTV_RecordStop( 0 );
+	}
+
 	// update to team status?
 	CheckTeamStatus();
+
+	if ( g_wtvdemos.integer && level.time - level.lastWtvScoreboardCaptureTime > WTV_SCOREBOARD_CAPTURE_INTERVAL ) {
+		level.lastWtvScoreboardCaptureTime = level.time;
+		WTV_CaptureScoreboardAndTeamInfo();
+	}
 
 	// cancel vote if timed out
 	CheckVote();

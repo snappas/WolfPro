@@ -1668,6 +1668,7 @@ void G_writeClosingJson(void)
     if (level.jsonStatInfo.gameStatslogFile) {
         trap_FS_Write( "}\n", strlen( "}\n"), level.jsonStatInfo.gameStatslogFile );
         trap_FS_FCloseFile(level.jsonStatInfo.gameStatslogFile );
+        level.jsonStatInfo.gameStatslogFile = 0; // prevent a later G_writeGameEarlyExit() from double-closing this handle
 
         // check stats file to make sure it satisfies conditions for submission....
         ret = G_check_before_submit(level.jsonStatInfo.gameStatslogFileName);
@@ -1758,8 +1759,10 @@ void G_writeGameEarlyExit(void)
 
     if (level.jsonStatInfo.gameStatslogFile) {
 
-        if (!CanAccessFile("Stats: writing game early exit", level.jsonStatInfo.gameStatslogFileName))
+        if (!CanAccessFile("Stats: writing game early exit", level.jsonStatInfo.gameStatslogFileName)) {
+            json_decref(jdata);
             return;
+        }
 
         s = json_dumps( jdata, 0 );
         trap_FS_Write( s, strlen( s ), level.jsonStatInfo.gameStatslogFile );
@@ -1768,7 +1771,9 @@ void G_writeGameEarlyExit(void)
         free(s);
         trap_FS_Write( "]\n}\n", strlen( "]\n}\n" ), level.jsonStatInfo.gameStatslogFile );
         trap_FS_FCloseFile(level.jsonStatInfo.gameStatslogFile );
-       
+
+    } else {
+        json_decref(jdata);
     }
 
 
