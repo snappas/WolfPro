@@ -527,6 +527,7 @@ static qbool CL_CG_GetValue(char* value, int valueSize, const char* key)
 		{ "trap_CNQ3_NDP_ReadUntil", CG_EXT_NDP_READUNTIL },
 		{ "trap_CNQ3_NDP_StartVideo", CG_EXT_NDP_STARTVIDEO },
 		{ "trap_CNQ3_NDP_StopVideo", CG_EXT_NDP_STOPVIDEO },
+		{ "trap_CNQ3_NDP_ResetAnalysis", CG_EXT_NDP_RESET_ANALYSIS },
 		{ "trap_CL_AddGuiMenu", CG_IMGUI_ADDMENU },
 		{ "trap_IgImage", CG_IMGUI_IMAGE },
 		{ "trap_IgImageEx", CG_IMGUI_IMAGE_EX },
@@ -585,6 +586,17 @@ void CL_CGNDP_EndAnalysis(const char* filePath, int firstServerTime, int lastSer
 	Q_assert(lastServerTime > firstServerTime);
 	Q_strncpyz((char*)interopBufferOut, filePath, interopBufferOutSize);
 	VM_Call(cgvm, cls.cgvmCalls[CGVM_NDP_END_ANALYSIS], filePath, firstServerTime, lastServerTime, videoRestart);
+}
+
+
+// no-op for a cgame that never registered the entry point, so an older mod
+// keeps working — it just carries the stale-analysis behaviour it always had
+void CL_CGNDP_ResetAnalysis(void)
+{
+	Q_assert(cls.cgameNewDemoPlayer);
+	if (cls.cgvmCalls[CGVM_NDP_RESET_ANALYSIS]) {
+		VM_Call(cgvm, cls.cgvmCalls[CGVM_NDP_RESET_ANALYSIS]);
+	}
 }
 
 /*
@@ -1020,6 +1032,9 @@ intptr_t CL_CgameSystemCalls(intptr_t *args ) {
 			cls.cgvmCalls[CGVM_NDP_IS_CS_NEEDED] = args[3];
 			cls.cgvmCalls[CGVM_NDP_ANALYZE_SNAPSHOT] = args[4];
 			cls.cgvmCalls[CGVM_NDP_END_ANALYSIS] = args[5];
+			// registered separately by trap_CNQ3_NDP_ResetAnalysis, which a
+			// cgame built against the older trap set never calls
+			cls.cgvmCalls[CGVM_NDP_RESET_ANALYSIS] = 0;
 			return qtrue;
 		}
 		else {
@@ -1040,6 +1055,10 @@ intptr_t CL_CgameSystemCalls(intptr_t *args ) {
 
 	case CG_EXT_NDP_STOPVIDEO:
 		//CL_CloseAVI();
+		return 0;
+
+	case CG_EXT_NDP_RESET_ANALYSIS:
+		cls.cgvmCalls[CGVM_NDP_RESET_ANALYSIS] = args[1];
 		return 0;
 #ifdef RTCW_VULKAN
 	case CG_IMGUI_ADDMENU:

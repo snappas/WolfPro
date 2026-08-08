@@ -104,8 +104,6 @@ There's no need to make the player more complex for such an edge case.
 
 #define FULL_SNAPSHOT_INTERVAL_MS (8 * 1000)
 
-#define MAX_COMMANDS 256
-
 #define VERBOSE_DEBUGGING 0
 
 // VC++, GCC and Clang all seem to support ##__VA_ARGS__ just fine
@@ -129,89 +127,9 @@ typedef struct {
 	int serverTime;
 } configString_t;
 
-typedef struct  {
-	char data[128 * 1024];
-	int numBytes;
-} commandBuffer_t;
-
-typedef struct {
-	// the first char of configStrings is '\0'
-	// so that empty entries can all use offset 0
-	commandBuffer_t serverCommands;
-	commandBuffer_t synchCommands;
-	char configStrings[MAX_GAMESTATE_CHARS]; // matches the size in gameState_t
-	int configStringOffsets[MAX_CONFIGSTRINGS];
-	int configStringTimes[MAX_CONFIGSTRINGS]; // last time it was changed
-	entityState_t entities[MAX_GENTITIES];
-	byte areaMask[MAX_MAP_AREA_BYTES];
-	playerState_t ps;
-	int numAreaMaskBytes;
-	int numConfigStringBytes;
-	int messageNum;
-	int serverTime;
-	int numEntities;
-	int numServerCommands;
-	int serverCommandSequence;
-	int snapFlags;
-	int ping;
-	qbool isFullSnap;
-	qbool isServerPaused;
-} ndpSnapshot_t;
-
-typedef struct {
-	ndpSnapshot_t ndpSnapshots[2]; // current one and previous one for delta encoding
-	clSnapshot_t snapshots[PACKET_BACKUP];
-	entityState_t entityBaselines[MAX_GENTITIES];
-	entityState_t entities[MAX_PARSE_ENTITIES];
-	char bigConfigString[BIG_INFO_STRING];
-	msg_t inMsg;
-	msg_t outMsg;
-	ndpSnapshot_t* currSnap;
-	ndpSnapshot_t* prevSnap;
-	int entityWriteIndex; // indexes entities directly
-	int messageNum;       // number of the current msg_t data packet
-	int bigConfigStringIndex;
-	int prevServerTime;
-	int lastMessageNum;
-	int nextFullSnapshotTime;  // when server time is bigger, write a full snapshot
-	int serverCommandSequence; // the command number of the latest command we decoded
-	int progress;
-	int numGamestates;
-} parser_t;
-
-typedef struct {
-	int byteOffset;
-	int serverTime;
-	int snapshotIndex;
-} demoIndex_t;
-
-typedef struct {
-	byte* data;
-	int capacity; // total number of bytes allocated
-	int position; // cursor or number of bytes read/written
-	int numBytes; // total number of bytes written for read mode
-	qbool isReadMode;
-} memoryBuffer_t;
-
-typedef struct {
-	char command[MAX_STRING_CHARS]; // the size used by MSG_ReadString
-} command_t;
-
-typedef struct {
-	ndpSnapshot_t snapshots[2]; // current one and next one for CGame requests
-	demoIndex_t indices[4096];
-	command_t commands[MAX_COMMANDS];
-	memoryBuffer_t buffer;
-	ndpSnapshot_t* currSnap;
-	ndpSnapshot_t* nextSnap;
-	int numSnapshots;
-	int numIndices; // the number of full snapshots (i.e. with no delta-encoding)
-	int firstServerTime;
-	int lastServerTime;
-	int snapshotIndex; // the index of currSnap for CGame requests
-	int numCommands;   // number of commands written, must be modulo'd to index commands
-	qbool isLastSnapshot;
-} demo_t;
+// commandBuffer_t/ndpSnapshot_t/memoryBuffer_t/demoIndex_t/command_t/parser_t/
+// demo_t now live in client.h — cl_wtvdemo.c builds the same demo.buffer/
+// demo.indices[] stream from a different source format and needs them too.
 
 typedef struct {
 	jmp_buf abortLoad;
@@ -221,8 +139,8 @@ typedef struct {
 } newDemoPlayer_t;
 
 
-static parser_t parser;
-static demo_t demo;
+parser_t parser;
+demo_t demo;
 static newDemoPlayer_t ndp;
 static entityState_t nullEntityState = { 0 };
 static playerState_t nullPlayerState = { 0 };
@@ -280,7 +198,7 @@ static void MB_Write( memoryBuffer_t* mb, const void* data, int numBytes )
 }
 
 
-static void MB_InitRead( memoryBuffer_t* mb )
+void MB_InitRead( memoryBuffer_t* mb )
 {
 	Q_assert(mb->position > 0);
 	mb->numBytes = mb->position;
@@ -373,7 +291,7 @@ static void WriteNDPSnapshot( msg_t* outMsg, ndpSnapshot_t* prevSnap, ndpSnapsho
 }
 
 
-static void SaveConfigString( ndpSnapshot_t* snap, int index, const char* string, int serverTime )
+void SaveConfigString( ndpSnapshot_t* snap, int index, const char* string, int serverTime )
 {
 	snap->configStringTimes[index] = serverTime;
 
@@ -418,7 +336,7 @@ static void SaveConfigString( ndpSnapshot_t* snap, int index, const char* string
 }
 
 
-static void SaveCommandString( commandBuffer_t* cmdBuf, const char* string )
+void SaveCommandString( commandBuffer_t* cmdBuf, const char* string )
 {
 	const int numBytes = strlen(string) + 1;
 	if (cmdBuf->numBytes + numBytes > sizeof(cmdBuf->data)) {
@@ -515,6 +433,87 @@ static void ParseGamestate(void)
 	}
 	cls.cgameStarted = qtrue;
 	cls.state = CA_ACTIVE;
+}
+
+
+void FinalizeNDPSnapshot( ndpSnapshot_t* currNDPSnap, qbool isFullSnap, int currServerTime, int byteOffset )
+{
+	currNDPSnap->isFullSnap = isFullSnap;
+	currNDPSnap->serverTime = currServerTime;
+	// .ps / .entities[] / .numAreaMaskBytes / .areaMask / configstrings are
+	// assumed already populated by the caller before this is called.
+
+	// add all synchronization commands
+	if (isFullSnap) {
+		const char* synchCommands;
+		int numSynchCommandBytes;
+		CL_CGNDP_GenerateCommands(&synchCommands, &numSynchCommandBytes);
+		int synchCommandStart = 0;
+		for (;;) {
+			if (synchCommandStart >= numSynchCommandBytes) {
+				break;
+			}
+			const char* const cmd = synchCommands + synchCommandStart;
+			SaveCommandString(&currNDPSnap->synchCommands, cmd);
+			synchCommandStart += strlen(cmd) + 1;
+		}
+	}
+
+	// let CGame analyze the snapshot so it can do cool stuff
+	// e.g. store events of interest for the timeline overlay
+	demo.currSnap = currNDPSnap;
+	const qbool isServerPaused = CL_CGNDP_AnalyzeSnapshot(parser.progress);
+	// draw the current progress once in a while...
+	int lastRefreshTime = Sys_Milliseconds();
+	if (Sys_Milliseconds() > lastRefreshTime + 100) {
+		SCR_UpdateScreen();
+		lastRefreshTime = Sys_Milliseconds();
+	}
+	// write it out (delta-)compressed
+	byte outMsgData[MAX_MSGLEN];
+	msg_t writeMsg;
+	MSG_Init(&writeMsg, outMsgData, sizeof(outMsgData));
+	MSG_Clear(&writeMsg);
+	MSG_Bitstream(&writeMsg);
+	ndpSnapshot_t* const prevNDPSnap = parser.prevSnap;
+	WriteNDPSnapshot(&writeMsg, isFullSnap ? NULL : prevNDPSnap, currNDPSnap, isServerPaused);
+	if (writeMsg.overflowed) {
+		Drop("WTV/NDP snapshot overflowed MAX_MSGLEN — too much data for one snapshot");
+	}
+	MB_Write(&demo.buffer, &writeMsg.cursize, 4);
+	MB_Write(&demo.buffer, writeMsg.data, writeMsg.cursize);
+
+	// prepare the next snapshot
+	ndpSnapshot_t* const nextNDPSnap = prevNDPSnap;
+	nextNDPSnap->isFullSnap = qfalse;
+	nextNDPSnap->serverTime = 0;
+	nextNDPSnap->serverCommands.numBytes = 0;
+	nextNDPSnap->synchCommands.numBytes = 0;
+	Com_Memcpy(nextNDPSnap->configStrings, currNDPSnap->configStrings, currNDPSnap->numConfigStringBytes);
+	Com_Memcpy(nextNDPSnap->configStringOffsets, currNDPSnap->configStringOffsets, sizeof(nextNDPSnap->configStringOffsets));
+	Com_Memcpy(nextNDPSnap->configStringTimes, currNDPSnap->configStringTimes, sizeof(nextNDPSnap->configStringTimes));
+	nextNDPSnap->numConfigStringBytes = currNDPSnap->numConfigStringBytes;
+	for (int i = 0; i < MAX_GENTITIES; ++i) {
+		nextNDPSnap->entities[i].number = MAX_GENTITIES - 1;
+	}
+	// parser bookkeeping
+	parser.prevSnap = currNDPSnap;
+	parser.currSnap = nextNDPSnap;
+	parser.prevServerTime = currServerTime;
+
+	// build the playback index table
+	if (isFullSnap) {
+		if (demo.numIndices >= ARRAY_LEN(demo.indices)) {
+			Error("Ran out of indices");
+		}
+		demoIndex_t* const index = &demo.indices[demo.numIndices++];
+		index->byteOffset = byteOffset;
+		index->snapshotIndex = demo.numSnapshots;
+		index->serverTime = currServerTime;
+	}
+	demo.numSnapshots++;
+	demo.firstServerTime = min(demo.firstServerTime, currServerTime);
+	demo.lastServerTime = max(demo.lastServerTime, currServerTime);
 }
 
 
@@ -657,93 +656,26 @@ static void ParseSnapshot(void)
 		const entityState_t* const ent = &parser.entities[index];
 		currNDPSnap->entities[ent->number] = *ent;
 	}
-	currNDPSnap->isFullSnap = isFullSnap;
-	currNDPSnap->ps = newSnap->ps;
-	currNDPSnap->serverTime = currServerTime;
 	currNDPSnap->numAreaMaskBytes = numAreaMaskBytes;
 	Com_Memcpy(currNDPSnap->areaMask, newSnap->areamask, sizeof(currNDPSnap->areaMask));
-	// add all synchronization commands
-	if (isFullSnap) {
-		const char* synchCommands;
-		int numSynchCommandBytes;
-		CL_CGNDP_GenerateCommands(&synchCommands, &numSynchCommandBytes);
-		int synchCommandStart = 0;
-		for (;;) {
-			if (synchCommandStart >= numSynchCommandBytes) {
-				break;
-			}
-			const char* const cmd = synchCommands + synchCommandStart;
-			SaveCommandString(&currNDPSnap->synchCommands, cmd);
-			synchCommandStart += strlen(cmd) + 1;
-		}
-	}
+	currNDPSnap->ps = newSnap->ps;
 
-	// let CGame analyze the snapshot so it can do cool stuff
-	// e.g. store events of interest for the timeline overlay
-	demo.currSnap = currNDPSnap;
-	const qbool isServerPaused = CL_CGNDP_AnalyzeSnapshot(parser.progress);
-	// draw the current progress once in a while...
-	int lastRefreshTime = Sys_Milliseconds();
-	if (Sys_Milliseconds() > lastRefreshTime + 100) {
-		SCR_UpdateScreen();
-		lastRefreshTime = Sys_Milliseconds();
-	}
-	// write it out (delta-)compressed
-	byte outMsgData[MAX_MSGLEN];
-	msg_t writeMsg;
-	MSG_Init(&writeMsg, outMsgData, sizeof(outMsgData));
-	MSG_Clear(&writeMsg);
-	MSG_Bitstream(&writeMsg);
-	ndpSnapshot_t* const prevNDPSnap = parser.prevSnap;
-	WriteNDPSnapshot(&writeMsg, isFullSnap ? NULL : prevNDPSnap, currNDPSnap, isServerPaused);
-	MB_Write(&demo.buffer, &writeMsg.cursize, 4);
-	MB_Write(&demo.buffer, writeMsg.data, writeMsg.cursize);
-
-	// prepare the next snapshot
-	ndpSnapshot_t* const nextNDPSnap = prevNDPSnap;
-	nextNDPSnap->isFullSnap = qfalse;
-	nextNDPSnap->serverTime = 0;
-	nextNDPSnap->serverCommands.numBytes = 0;
-	nextNDPSnap->synchCommands.numBytes = 0;
-	Com_Memcpy(nextNDPSnap->configStrings, currNDPSnap->configStrings, currNDPSnap->numConfigStringBytes);
-	Com_Memcpy(nextNDPSnap->configStringOffsets, currNDPSnap->configStringOffsets, sizeof(nextNDPSnap->configStringOffsets));
-	Com_Memcpy(nextNDPSnap->configStringTimes, currNDPSnap->configStringTimes, sizeof(nextNDPSnap->configStringTimes));
-	nextNDPSnap->numConfigStringBytes = currNDPSnap->numConfigStringBytes;
-	for (int i = 0; i < MAX_GENTITIES; ++i) {
-		nextNDPSnap->entities[i].number = MAX_GENTITIES - 1;
-	}
-	// parser bookkeeping
-	parser.prevSnap = currNDPSnap;
-	parser.currSnap = nextNDPSnap;
-	parser.prevServerTime = currServerTime;
-
-	// build the playback index table
-	if (isFullSnap) {
-		if (demo.numIndices >= ARRAY_LEN(demo.indices)) {
-			Error("Ran out of indices");
-		}
-		demoIndex_t* const index = &demo.indices[demo.numIndices++];
-		index->byteOffset = byteOffset;
-		index->snapshotIndex = demo.numSnapshots;
-		index->serverTime = currServerTime;
-	}
-	demo.numSnapshots++;
-	demo.firstServerTime = min(demo.firstServerTime, currServerTime);
-	demo.lastServerTime = max(demo.lastServerTime, currServerTime);
+	FinalizeNDPSnapshot( currNDPSnap, isFullSnap, currServerTime, byteOffset );
 }
 
 
-static void ParseDemo(void)
+void ResetNDPPlaybackState(void)
 {
-	byte oldData[MAX_MSGLEN];
-	msg_t* const msg = &parser.inMsg;
-	const int fh = clc.demofile;
-
 	Com_Memset(&parser, 0, sizeof(parser));
 	parser.currSnap = &parser.ndpSnapshots[0];
 	parser.prevSnap = &parser.ndpSnapshots[1];
 	parser.currSnap->numConfigStringBytes = 1; // first char is always '\0'
 
+	// the memset below only drops the pointer, so the block it owns has to go
+	// first — MB_InitWrite then allocates a fresh one
+	if (demo.buffer.data) {
+		free(demo.buffer.data);
+	}
 	Com_Memset(&demo, 0, sizeof(demo));
 	demo.firstServerTime = INT_MAX;
 	demo.lastServerTime = INT_MIN;
@@ -758,6 +690,16 @@ static void ParseDemo(void)
 	}
 
 	MB_InitWrite(&demo.buffer);
+}
+
+
+static void ParseDemo(void)
+{
+	byte oldData[MAX_MSGLEN];
+	msg_t* const msg = &parser.inMsg;
+	const int fh = clc.demofile;
+
+	ResetNDPPlaybackState();
 
 	// we won't have a working progress bar for demo files inside pk3 files
 	const int fileLength = FS_IsZipFile(clc.demofile) ? 0 : FS_filelength(clc.demofile);

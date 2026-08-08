@@ -316,6 +316,7 @@ enum {
 	CGVM_NDP_ANALYZE_COMMAND,
 	CGVM_NDP_GENERATE_COMMANDS, // generate synchronization commands
 	CGVM_NDP_IS_CS_NEEDED,      // does this config string need to be re-submitted?
+	CGVM_NDP_RESET_ANALYSIS,    // clear analysis data before re-parsing a stream
 	CGVM_COUNT
 };
 
@@ -669,6 +670,7 @@ void CL_ShaderStateChanged( void );
 void CL_UpdateLevelHunkUsage( void );
 void CL_ConfigstringModified(void);
 void CL_CGNDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServerTime, qbool videoRestart);
+void CL_CGNDP_ResetAnalysis(void);
 qbool CL_CGNDP_AnalyzeSnapshot(int progress); // qtrue when a server pause is active
 void CL_CGNDP_AnalyzeCommand(int serverTime);
 void CL_CGNDP_GenerateCommands(const char** commands, int* numCommandBytes);
@@ -789,6 +791,105 @@ void CL_CG_ImGUI_Update(void);
 //
 // cl_demo.c
 //
+
+// NDP types shared with cl_wtvdemo.c (builds the same demo.buffer/
+// demo.indices[] stream from a different source format). configString_t
+// stays private to cl_demo.c — nothing outside it needs that type.
+#define MAX_COMMANDS 256
+
+typedef struct  {
+	char data[128 * 1024];
+	int numBytes;
+} commandBuffer_t;
+
+typedef struct {
+	// the first char of configStrings is '\0'
+	// so that empty entries can all use offset 0
+	commandBuffer_t serverCommands;
+	commandBuffer_t synchCommands;
+	char configStrings[MAX_GAMESTATE_CHARS]; // matches the size in gameState_t
+	int configStringOffsets[MAX_CONFIGSTRINGS];
+	int configStringTimes[MAX_CONFIGSTRINGS]; // last time it was changed
+	entityState_t entities[MAX_GENTITIES];
+	byte areaMask[MAX_MAP_AREA_BYTES];
+	playerState_t ps;
+	int numAreaMaskBytes;
+	int numConfigStringBytes;
+	int messageNum;
+	int serverTime;
+	int numEntities;
+	int numServerCommands;
+	int serverCommandSequence;
+	int snapFlags;
+	int ping;
+	qbool isFullSnap;
+	qbool isServerPaused;
+} ndpSnapshot_t;
+
+typedef struct {
+	byte* data;
+	int capacity; // total number of bytes allocated
+	int position; // cursor or number of bytes read/written
+	int numBytes; // total number of bytes written for read mode
+	qbool isReadMode;
+} memoryBuffer_t;
+
+typedef struct {
+	int byteOffset;
+	int serverTime;
+	int snapshotIndex;
+} demoIndex_t;
+
+typedef struct {
+	char command[MAX_STRING_CHARS]; // the size used by MSG_ReadString
+} command_t;
+
+typedef struct {
+	ndpSnapshot_t ndpSnapshots[2]; // current one and previous one for delta encoding
+	clSnapshot_t snapshots[PACKET_BACKUP];
+	entityState_t entityBaselines[MAX_GENTITIES];
+	entityState_t entities[MAX_PARSE_ENTITIES];
+	char bigConfigString[BIG_INFO_STRING];
+	msg_t inMsg;
+	msg_t outMsg;
+	ndpSnapshot_t* currSnap;
+	ndpSnapshot_t* prevSnap;
+	int entityWriteIndex; // indexes entities directly
+	int messageNum;       // number of the current msg_t data packet
+	int bigConfigStringIndex;
+	int prevServerTime;
+	int lastMessageNum;
+	int nextFullSnapshotTime;  // when server time is bigger, write a full snapshot
+	int serverCommandSequence; // the command number of the latest command we decoded
+	int progress;
+	int numGamestates;
+} parser_t;
+
+typedef struct {
+	ndpSnapshot_t snapshots[2]; // current one and next one for CGame requests
+	demoIndex_t indices[4096];
+	command_t commands[MAX_COMMANDS];
+	memoryBuffer_t buffer;
+	ndpSnapshot_t* currSnap;
+	ndpSnapshot_t* nextSnap;
+	int numSnapshots;
+	int numIndices; // the number of full snapshots (i.e. with no delta-encoding)
+	int firstServerTime;
+	int lastServerTime;
+	int snapshotIndex; // the index of currSnap for CGame requests
+	int numCommands;   // number of commands written, must be modulo'd to index commands
+	qbool isLastSnapshot;
+} demo_t;
+
+extern parser_t parser;
+extern demo_t demo;
+
+void ResetNDPPlaybackState( void );
+void FinalizeNDPSnapshot( ndpSnapshot_t* currNDPSnap, qbool isFullSnap, int currServerTime, int byteOffset );
+void SaveConfigString( ndpSnapshot_t* snap, int index, const char* string, int serverTime );
+void SaveCommandString( commandBuffer_t* cmdBuf, const char* string );
+void MB_InitRead( memoryBuffer_t* mb );
+
 void CL_NDP_PlayDemo(qbool videoRestart);
 void CL_NDP_SetCGameTime(void);
 void CL_NDP_GetCurrentSnapshotNumber(int* snapshotNumber, int* serverTime);

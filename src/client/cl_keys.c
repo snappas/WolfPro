@@ -1615,6 +1615,27 @@ Called by the system for both key up and key down events
 ===================
 */
 //static consoleCount = 0;
+static void CL_DispatchBoundKey( int key, unsigned time ) {
+	char *kb;
+	char cmd[1024];
+
+	kb = keys[key].binding;
+	if ( !kb ) {
+		if ( key >= 200 ) {
+			Com_Printf( "%s is unbound, use controls menu to set.\n"
+						, Key_KeynumToString( key, qfalse ) );
+		}
+	} else if ( kb[0] == '+' ) {
+		// button commands add keynum and time as parms so that multiple
+		// sources can be discriminated and subframe corrected
+		Com_sprintf( cmd, sizeof( cmd ), "%s %i %i\n", kb, key, time );
+		Cbuf_AddText( cmd );
+	} else {
+		Cbuf_AddText( kb );
+		Cbuf_AddText( "\n" );
+	}
+}
+
 void CL_KeyEvent( int key, qboolean down, unsigned time ) {
 	char    *kb;
 	char cmd[1024];
@@ -1818,8 +1839,11 @@ void CL_KeyEvent( int key, qboolean down, unsigned time ) {
 
 		VM_Call( uivm, UI_KEY_EVENT, key, down );
 	} else if ( cls.keyCatchers & KEYCATCH_CGAME ) {
-		if ( cgvm ) {
-			VM_Call( cgvm, CG_KEY_EVENT, key, down );
+		if ( cgvm && !VM_Call( cgvm, CG_KEY_EVENT, key, down ) ) {
+			// cgame declined this key (e.g. plain demo playback with no
+			// menu/hud-editor open) — do what the plain-gameplay branch
+			// below would have done with it, instead of swallowing it
+			CL_DispatchBoundKey( key, time );
 		}
 	} else if ( cls.keyCatchers & KEYCATCH_MESSAGE ) {
 		Message_Key( key );
@@ -1828,23 +1852,7 @@ void CL_KeyEvent( int key, qboolean down, unsigned time ) {
 		Console_Key( key );
 
 	} else {
-		// send the bound action
-		kb = keys[key].binding;
-		if ( !kb ) {
-			if ( key >= 200 ) {
-				Com_Printf( "%s is unbound, use controls menu to set.\n"
-							, Key_KeynumToString( key, qfalse ) );
-			}
-		} else if ( kb[0] == '+' ) {
-			// button commands add keynum and time as parms so that multiple
-			// sources can be discriminated and subframe corrected
-			Com_sprintf( cmd, sizeof( cmd ), "%s %i %i\n", kb, key, time );
-			Cbuf_AddText( cmd );
-		} else {
-			// down-only command
-			Cbuf_AddText( kb );
-			Cbuf_AddText( "\n" );
-		}
+		CL_DispatchBoundKey( key, time );
 	}
 }
 

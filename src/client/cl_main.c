@@ -29,6 +29,7 @@ If you have questions concerning this license or the applicable additional terms
 // cl_main.c  -- client main loop
 
 #include "client.h"
+#include "cl_wtvdemo.h"
 #include <limits.h>
 
 #ifdef __linux__
@@ -563,6 +564,10 @@ void CL_PlayDemo(qbool videoRestart)
 	// make sure a local server is killed
 	Cvar_Set( "sv_killserver", "1" );
 
+	// a classic demo has a single perspective — clears any leftover flag from
+	// a previous WTV session
+	Cvar_Set( "cg_wtvActive", "0" );
+
 	CL_Disconnect( qtrue );
 
 
@@ -596,6 +601,13 @@ void CL_PlayDemo(qbool videoRestart)
 	}
 
 	Q_strncpyz( cls.servername, Cmd_Argv( 1 ), sizeof( cls.servername ) );
+
+	// user-overridable demo-playback keybinds (freecam, follow-switching,
+	// timeline/frag-jump) — demo_binds_default.cfg ships in MAIN/, an
+	// optional demo_binds.cfg in fs_homepath overrides any of it; exec
+	// silently no-ops if either file doesn't exist
+	Cbuf_AddText( "exec demo_binds_default.cfg\n" );
+	Cbuf_AddText( "exec demo_binds.cfg\n" );
 
 	if (cl_demoPlayer->integer) {
 		//while (CL_MapDownload_Active()) {
@@ -821,6 +833,12 @@ void CL_Disconnect( qboolean showMainMenu ) {
 	if ( clc.demofile ) {
 		FS_FCloseFile( clc.demofile );
 		clc.demofile = 0;
+	}
+
+	// keep demo_binds_default.cfg's key overrides scoped to the playback
+	// session, so they don't survive into live play or the saved config
+	if ( clc.demoplaying ) {
+		Cbuf_AddText( "exec demo_binds_restore.cfg\n" );
 	}
 
 	if ( cgvm ) {
@@ -2854,6 +2872,9 @@ void CL_Init( void ) {
 	Cmd_AddCommand( "disconnect", CL_Disconnect_f );
 	Cmd_AddCommand( "record", CL_Record_f );
 	Cmd_AddCommand( "demo", CL_PlayDemo_f );
+	Cmd_AddCommand( "playwtv", CL_WTV_PlayDemo_f );
+	Cmd_AddCommand( "wtvfollow", CL_WTV_Follow_f );
+	Cmd_AddCommand( "wtvplayers", CL_WTV_Players_f );
 	Cmd_AddCommand( "cinematic", CL_PlayCinematic_f );
 	Cmd_AddCommand( "stoprecord", CL_StopRecord_f );
 	Cmd_AddCommand( "connect", CL_Connect_f );
@@ -2936,6 +2957,7 @@ void CL_Shutdown( void ) {
 	Cmd_RemoveCommand( "disconnect" );
 	Cmd_RemoveCommand( "record" );
 	Cmd_RemoveCommand( "demo" );
+	Cmd_RemoveCommand( "playwtv" );
 	Cmd_RemoveCommand( "cinematic" );
 	Cmd_RemoveCommand( "stoprecord" );
 	Cmd_RemoveCommand( "connect" );
