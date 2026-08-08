@@ -297,9 +297,9 @@ void G_DoTimeShiftFor( gentity_t *ent ) {
 		return;
 	}
 
-	// if it's enabled server-side and the client wants it
-	// or wants it for this weapon (not doing this for Rtcw as we have pistol and SMG)
-	if ( g_delagHitscan.integer && ( ent->client->pers.antilag & 1)) { // || ent->client->pers.delag & wpflag ) ) {
+	// full compensation when enabled server-side (no per-weapon delag flag in
+	// RTCW - we have pistol and SMG)
+	if ( g_delagHitscan.integer ) { // || ent->client->pers.delag & wpflag ) ) {
 		// do the full lag compensation, except what the client nudges
 		//time = ent->client->attackTime + ent->client->pers.cmdTimeNudge;
 		// don't allow the client to nudge anything

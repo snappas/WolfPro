@@ -634,7 +634,6 @@ typedef struct {
 	//Competition
 	qboolean ready;
 
-	int antilag;
 	unsigned int hitSoundType;
 	unsigned int hitSoundBodyStyle;
 	unsigned int hitSoundHeadStyle;
@@ -1592,9 +1591,6 @@ extern vmCvar_t g_headMaxY;
 extern vmCvar_t g_headMaxZ;
 
 extern vmCvar_t g_gravityModifier;
-
-extern vmCvar_t g_lowPingAntilag;
-extern vmCvar_t g_lowPingAntilagThreshold;
 
 extern vmCvar_t g_noSelfDamage;
 extern vmCvar_t g_rocketMode;
