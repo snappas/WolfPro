@@ -89,54 +89,232 @@ static void CG_ParseScores( void ) {
 
 }
 
+#define TEAMINFOARGS 12 // per-player argument count for the 12-field tinfo/tinfo2 layouts
+
 /*
 =================
 CG_ParseTeamInfo
 
+Live play only ever sees the classic 5-field layout ("tinfo2" carries our
+own modern format instead). Demo playback of foreign "tinfo" recordings
+needs the sender's exact field layout, which differs across OSP/bani and
+several incompatible rtcwPro versions - CG_NDP_FindGameVersion picks it out.
 =================
 */
 static void CG_ParseTeamInfo( void ) {
-	if(cg.demoPlayback){
-		return;
-	}
 	int i;
 	int client;
 
-	// NERVE - SMF
-	cg.identifyClientNum = atoi( CG_Argv( 1 ) );
-	cg.identifyClientHealth = atoi( CG_Argv( 2 ) );
-	// -NERVE - SMF
+	if ( !cg.demoPlayback ) {
+		// NERVE - SMF
+		cg.identifyClientNum = atoi( CG_Argv( 1 ) );
+		cg.identifyClientHealth = atoi( CG_Argv( 2 ) );
+		// -NERVE - SMF
 
-	numSortedTeamPlayers = atoi( CG_Argv( 3 ) );
+		numSortedTeamPlayers = atoi( CG_Argv( 3 ) );
 
-	for ( i = 0 ; i < numSortedTeamPlayers ; i++ ) {
-		client = atoi( CG_Argv( i * 5 + 4 ) );
+		if ( numSortedTeamPlayers < 0 || numSortedTeamPlayers > TEAM_MAXOVERLAY ) {
+			CG_Printf( "CG_ParseTeamInfo: numSortedTeamPlayers out of range (%i)\n", numSortedTeamPlayers );
+			numSortedTeamPlayers = 0;
+			return;
+		}
 
-		sortedTeamPlayers[i] = client;
+		for ( i = 0 ; i < numSortedTeamPlayers ; i++ ) {
+			client = atoi( CG_Argv( i * 5 + 4 ) );
 
-		cgs.clientinfo[ client ].location = atoi( CG_Argv( i * 5 + 5 ) );
-		cgs.clientinfo[ client ].health = atoi( CG_Argv( i * 5 + 6 ) );
-		cgs.clientinfo[ client ].powerups = atoi( CG_Argv( i * 5 + 7 ) );
+			if ( client < 0 || client >= MAX_CLIENTS ) {
+				CG_Printf( "CG_ParseTeamInfo: bad client number: %i\n", client );
+				return;
+			}
 
-		cg_entities[ client ].currentState.teamNum = atoi( CG_Argv( i * 5 + 8 ) );
+			sortedTeamPlayers[i] = client;
+
+			cgs.clientinfo[ client ].location = atoi( CG_Argv( i * 5 + 5 ) );
+			// raw (possibly negative) health - preserved as-is, since below
+			// GIB_HEALTH is this format's only gib/revivable signal (no
+			// playerLimbo field); cg_draw.c floors it for display only
+			cgs.clientinfo[ client ].health = atoi( CG_Argv( i * 5 + 6 ) );
+			cgs.clientinfo[ client ].powerups = atoi( CG_Argv( i * 5 + 7 ) );
+
+			cg_entities[ client ].currentState.teamNum = atoi( CG_Argv( i * 5 + 8 ) );
+			// this format has no latched-class field - pin it to the current
+			// class so the scoreboard doesn't render a bogus "class > S" hint
+			cgs.clientinfo[ client ].latchedClass = cg_entities[ client ].currentState.teamNum;
+		}
+		return;
+	}
+
+	if ( !cg.ndpDemoEnabled ) {
+		return;
+	}
+
+	if ( !gameVersionFound ) {
+		if ( CG_NDP_FindGameVersion() == qfalse ) {
+			return;
+		}
+	}
+
+	if ( !isRtcwPro ) {
+		// OSP, bani
+		cg.identifyClientNum = atoi( CG_Argv( 1 ) );
+		cg.identifyClientHealth = atoi( CG_Argv( 2 ) );
+
+		numSortedTeamPlayers = atoi( CG_Argv( 3 ) );
+
+		if ( numSortedTeamPlayers < 0 || numSortedTeamPlayers > TEAM_MAXOVERLAY ) {
+			CG_Printf( "CG_ParseTeamInfo: numSortedTeamPlayers out of range (%i)\n", numSortedTeamPlayers );
+			numSortedTeamPlayers = 0;
+			return;
+		}
+
+		for ( i = 0 ; i < numSortedTeamPlayers ; i++ ) {
+			client = atoi( CG_Argv( i * 5 + 4 ) );
+
+			if ( client < 0 || client >= MAX_CLIENTS ) {
+				CG_Printf( "CG_ParseTeamInfo: bad client number: %i\n", client );
+				return;
+			}
+
+			sortedTeamPlayers[i] = client;
+
+			cgs.clientinfo[ client ].location = atoi( CG_Argv( i * 5 + 5 ) );
+			// raw (possibly negative) health - preserved as-is, since below
+			// GIB_HEALTH is OSP's only gib/revivable signal (no playerLimbo
+			// field); cg_draw.c floors it for display only
+			cgs.clientinfo[ client ].health = atoi( CG_Argv( i * 5 + 6 ) );
+			cgs.clientinfo[ client ].powerups = atoi( CG_Argv( i * 5 + 7 ) );
+
+			cg_entities[ client ].currentState.teamNum = atoi( CG_Argv( i * 5 + 8 ) );
+			// OSP tinfo has no latched-class field - pin it to the current
+			// class so the scoreboard doesn't render a bogus "class > S" hint
+			cgs.clientinfo[ client ].latchedClass = cg_entities[ client ].currentState.teamNum;
+		}
+	} else if ( isRtcwProV128 ) {
+		// rtcwPro 1.1.2 to 1.2.8
+		cg.identifyClientNum = atoi( CG_Argv( 1 ) );
+		cg.identifyClientHealth = atoi( CG_Argv( 2 ) );
+
+		numSortedTeamPlayers = atoi( CG_Argv( 3 ) );
+
+		if ( numSortedTeamPlayers < 0 || numSortedTeamPlayers > TEAM_MAXOVERLAY ) {
+			CG_Printf( "CG_ParseTeamInfo: numSortedTeamPlayers out of range (%i)\n", numSortedTeamPlayers );
+			numSortedTeamPlayers = 0;
+			return;
+		}
+
+		for ( i = 0 ; i < numSortedTeamPlayers ; i++ ) {
+			client = atoi( CG_Argv( i * 11 + 4 ) );
+
+			if ( client < 0 || client >= MAX_CLIENTS ) {
+				CG_Printf( "CG_ParseTeamInfo: bad client number: %i\n", client );
+				return;
+			}
+
+			sortedTeamPlayers[i] = client;
+
+			cgs.clientinfo[ client ].location = atoi( CG_Argv( i * 11 + 5 ) );
+			cgs.clientinfo[ client ].health = atoi( CG_Argv( i * 11 + 6 ) );
+			cgs.clientinfo[ client ].powerups = atoi( CG_Argv( i * 11 + 7 ) );
+
+			cg_entities[ client ].currentState.teamNum = atoi( CG_Argv( i * 11 + 8 ) );
+
+			cgs.clientinfo[ client ].playerAmmo = atoi( CG_Argv( i * 11 + 9 ) );
+			cgs.clientinfo[ client ].playerAmmoClip = atoi( CG_Argv( i * 11 + 10 ) );
+			cgs.clientinfo[ client ].playerNades = atoi( CG_Argv( i * 11 + 11 ) );
+			cgs.clientinfo[ client ].playerWeapon = atoi( CG_Argv( i * 11 + 12 ) );
+			cgs.clientinfo[ client ].playerLimbo = atoi( CG_Argv( i * 11 + 13 ) );
+			// arg i*11+14 (isReady) unused - ready state comes from powerups/PW_READY
+
+			// this format has no latched-class field - pin it to the current
+			// class so the scoreboard doesn't render a bogus "class > S" hint
+			cgs.clientinfo[ client ].latchedClass = cg_entities[ client ].currentState.teamNum;
+		}
+	} else if ( isRtcwProV129 ) {
+		cg.identifyClientNum = atoi( CG_Argv( 1 ) );
+		cg.identifyClientHealth = atoi( CG_Argv( 2 ) );
+
+		numSortedTeamPlayers = atoi( CG_Argv( 3 ) );
+
+		if ( numSortedTeamPlayers < 0 || numSortedTeamPlayers > TEAM_MAXOVERLAY ) {
+			CG_Printf( "CG_ParseTeamInfo: numSortedTeamPlayers out of range (%i)\n", numSortedTeamPlayers );
+			numSortedTeamPlayers = 0;
+			return;
+		}
+
+		for ( i = 0 ; i < numSortedTeamPlayers ; i++ ) {
+			client = atoi( CG_Argv( i * TEAMINFOARGS + 4 ) );
+
+			if ( client < 0 || client >= MAX_CLIENTS ) {
+				CG_Printf( "CG_ParseTeamInfo: bad client number: %i\n", client );
+				return;
+			}
+
+			sortedTeamPlayers[i] = client;
+
+			cgs.clientinfo[ client ].location = atoi( CG_Argv( i * TEAMINFOARGS + 5 ) );
+			cgs.clientinfo[ client ].health = atoi( CG_Argv( i * TEAMINFOARGS + 6 ) );
+			cgs.clientinfo[ client ].powerups = atoi( CG_Argv( i * TEAMINFOARGS + 7 ) );
+
+			cg_entities[ client ].currentState.teamNum = atoi( CG_Argv( i * TEAMINFOARGS + 8 ) );
+
+			cgs.clientinfo[ client ].playerAmmo = atoi( CG_Argv( i * TEAMINFOARGS + 9 ) );
+			cgs.clientinfo[ client ].playerAmmoClip = atoi( CG_Argv( i * TEAMINFOARGS + 10 ) );
+			cgs.clientinfo[ client ].playerNades = atoi( CG_Argv( i * TEAMINFOARGS + 11 ) );
+			cgs.clientinfo[ client ].playerWeapon = atoi( CG_Argv( i * TEAMINFOARGS + 12 ) );
+			cgs.clientinfo[ client ].playerLimbo = atoi( CG_Argv( i * TEAMINFOARGS + 13 ) );
+			// arg i*TEAMINFOARGS+14 (isReady) unused - ready state comes from powerups/PW_READY
+			cgs.clientinfo[ client ].latchedClass = atoi( CG_Argv( i * TEAMINFOARGS + 15 ) );
+		}
+	} else if ( isRtcwProV130 || isRtcwProV140 ) {
+		int teamInfoPlayers = Q_atoi( CG_Argv( 1 ) );
+
+		numSortedTeamPlayers = teamInfoPlayers;
+
+		if ( teamInfoPlayers < 0 || teamInfoPlayers >= MAX_CLIENTS || teamInfoPlayers > TEAM_MAXOVERLAY ) {
+			CG_Printf( "CG_ParseTeamInfo: teamInfoPlayers out of range (%i)\n", teamInfoPlayers );
+			return;
+		}
+
+		for ( i = 0 ; i < teamInfoPlayers ; i++ ) {
+			client = Q_atoi( CG_Argv( i * TEAMINFOARGS + 2 ) );
+
+			if ( client < 0 || client >= MAX_CLIENTS ) {
+				CG_Printf( "CG_ParseTeamInfo: bad client number: %i\n", client );
+				return;
+			}
+
+			sortedTeamPlayers[i] = client;
+
+			cgs.clientinfo[ client ].location = Q_atoi( CG_Argv( i * TEAMINFOARGS + 3 ) );
+			cgs.clientinfo[ client ].health = Q_atoi( CG_Argv( i * TEAMINFOARGS + 4 ) );
+			cgs.clientinfo[ client ].powerups = Q_atoi( CG_Argv( i * TEAMINFOARGS + 5 ) );
+
+			cg_entities[ client ].currentState.teamNum = Q_atoi( CG_Argv( i * TEAMINFOARGS + 6 ) );
+
+			cgs.clientinfo[ client ].playerAmmo = Q_atoi( CG_Argv( i * TEAMINFOARGS + 7 ) );
+			cgs.clientinfo[ client ].playerAmmoClip = Q_atoi( CG_Argv( i * TEAMINFOARGS + 8 ) );
+			cgs.clientinfo[ client ].playerNades = Q_atoi( CG_Argv( i * TEAMINFOARGS + 9 ) );
+			cgs.clientinfo[ client ].playerWeapon = Q_atoi( CG_Argv( i * TEAMINFOARGS + 10 ) );
+			cgs.clientinfo[ client ].playerLimbo = Q_atoi( CG_Argv( i * TEAMINFOARGS + 11 ) );
+			// arg i*TEAMINFOARGS+12 (isReady) unused - ready state comes from powerups/PW_READY
+			cgs.clientinfo[ client ].latchedClass = Q_atoi( CG_Argv( i * TEAMINFOARGS + 13 ) );
+		}
 	}
 }
-
-#define TEAMINFOARGS 12 // number of arguments for CG_ParseTeamInfo
 
 
 static void CG_ParseNewTeamInfo( void ) {
 	int i;
 	int client;
 
-	if (!cg.demoPlayback) {
+	if (!cg.demoPlayback || cg.ndpDemoEnabled) {
 		//Current rtcwpro tinfo
 
 		int teamInfoPlayers = Q_atoi(CG_Argv(1));
 
 		numSortedTeamPlayers = teamInfoPlayers;
 
-		if (teamInfoPlayers < 0 || teamInfoPlayers >= MAX_CLIENTS)
+		if (teamInfoPlayers < 0 || teamInfoPlayers >= MAX_CLIENTS || teamInfoPlayers > TEAM_MAXOVERLAY)
 		{
 			CG_Printf("CG_ParseTeamInfo: teamInfoPlayers out of range (%i)\n", teamInfoPlayers);
 			return;
