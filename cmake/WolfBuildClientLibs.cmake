@@ -1,11 +1,29 @@
 #-----------------------------------------------------------------
+# Embed hudchars.ttf so the vector font system works even when
+# MAIN/fonts/hudchars.ttf / wolfpro_assets.pk3 isn't mounted at runtime.
+# HUDCHARS_TTF_SRC/HUDCHARS_TTF_HEADER are set in WolfSources.cmake, which
+# also lists the header in RENDERER_COMMON -- that's what makes it a real
+# source of both targets below, and gives it the build-order dependency on
+# this custom command automatically (matching OUTPUT), no add_dependencies needed.
+#-----------------------------------------------------------------
+
+add_custom_command(
+	OUTPUT ${HUDCHARS_TTF_HEADER}
+	COMMAND ${CMAKE_COMMAND} -DINPUT=${HUDCHARS_TTF_SRC} -DOUTPUT=${HUDCHARS_TTF_HEADER}
+	        -DVARNAME=font_hudchars_embedded_ttf -P ${CMAKE_SOURCE_DIR}/cmake/EmbedFont.cmake
+	DEPENDS ${HUDCHARS_TTF_SRC} ${CMAKE_SOURCE_DIR}/cmake/EmbedFont.cmake
+	COMMENT "Embedding hudchars.ttf into generated header"
+	VERBATIM
+)
+
+#-----------------------------------------------------------------
 # Build Renderer
 #-----------------------------------------------------------------
 
 add_library(renderer STATIC ${RENDERER_FILES} ${RENDERER_COMMON})
 
 target_link_libraries(renderer renderer_gl1_libraries renderer_libraries)
-target_include_directories(renderer PRIVATE src/renderer)
+target_include_directories(renderer PRIVATE src/renderer "${CMAKE_BINARY_DIR}/generated")
 
 if(NOT MSVC)
 	target_link_libraries(renderer m)
@@ -24,7 +42,7 @@ target_include_directories(vk_vma_alloc PRIVATE ${Vulkan_INCLUDE_DIR})
 
 
 target_link_libraries(renderer_vk renderer_vk_libraries renderer_libraries vk_vma_alloc)
-target_include_directories(renderer_vk PRIVATE src/renderer_vk)
+target_include_directories(renderer_vk PRIVATE src/renderer_vk "${CMAKE_BINARY_DIR}/generated")
 if(WIN32)
 LIST(APPEND WOLF_COMPILE_DEF "VK_USE_PLATFORM_WIN32_KHR")
 else()

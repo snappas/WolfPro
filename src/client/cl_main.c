@@ -2503,8 +2503,11 @@ void CL_InitRenderer( void ) {
 	Cvar_Get( "con_scale", "1.0", CVAR_ARCHIVE | CVAR_LATCH );
 
 	// r_hudFontEnabled 0: use the real bitmap image instead of the synthetic
-	// "consolechars" name the vector console atlas intercepts.
-	cls.charSetShader = re.RegisterShader( Cvar_Get( "r_hudFontEnabled", "1", CVAR_ARCHIVE | CVAR_LATCH )->integer
+	// "consolechars" name the vector console atlas intercepts. NoMip: if
+	// chars.shader isn't mounted (e.g. no mod assets), the raw-image fallback
+	// must still skip picmip/mipmaps -- otherwise it blurs regardless of the
+	// atlas's own pixel data being correct.
+	cls.charSetShader = re.RegisterShaderNoMip( Cvar_Get( "r_hudFontEnabled", "1", CVAR_ARCHIVE | CVAR_LATCH )->integer
 											? "gfx/2d/consolechars" : "gfx/2d/hudchars" );
 	cls.whiteShader = re.RegisterShader( "white" );
 
