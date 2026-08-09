@@ -11,6 +11,10 @@ qbool CG_NDP_AnalyzeObituary(entityState_t* ent, snapshot_t* snapshot);
 int m_currServerTime;
 int m_firstServerTime;
 int m_lastServerTime;
+// re-armed to 0 in CG_NDP_EndAnalysis so a fresh demo doesn't inherit a
+// wall-clock gap from whatever real time the previous demo's load/browse
+// took -- see CG_NDP_SetGameTime, which treats 0 as "no baseline yet"
+static int ndp_prevRealTime = 0;
 static char m_demoPath[4096];
 //static char ndp_configStrings[MAX_GAMESTATE_CHARS];
 int ndp_configStringOffsets[MAX_CONFIGSTRINGS];
@@ -476,6 +480,10 @@ void CG_NDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServe
 
 	m_firstServerTime = firstServerTime;
 	m_lastServerTime = lastServerTime;
+	// the cgame DLL stays resident across demos on the client (no reload
+	// to zero it for us), so this needs an explicit re-arm or the first
+	// CG_NDP_SetGameTime tick measures against the previous demo's last frame
+	ndp_prevRealTime = 0;
 
 	if (videoRestart) {
 		RestoreSession();
@@ -649,12 +657,11 @@ Advance the demo playback by incrementing the current time every frame
 =================
 */
 void CG_NDP_SetGameTime(void) {
-	static int prevRealTime = 0;
 	const int currRealTime = trap_Milliseconds();
-	if (prevRealTime == 0) {
-		prevRealTime = currRealTime;
+	if (ndp_prevRealTime == 0) {
+		ndp_prevRealTime = currRealTime;
 	}
-	const int frameDuration = currRealTime - prevRealTime;
+	const int frameDuration = currRealTime - ndp_prevRealTime;
 
 	m_currServerTime += (int)((float)frameDuration * cg_timescale.value);
 
@@ -665,7 +672,7 @@ void CG_NDP_SetGameTime(void) {
 	trap_CNQ3_NDP_ReadUntil(m_currServerTime);
 
 	cg.time = m_currServerTime;
-	prevRealTime = currRealTime;
+	ndp_prevRealTime = currRealTime;
 
 }
 

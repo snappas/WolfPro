@@ -682,6 +682,7 @@ int     FS_LoadStack();
 
 int     FS_GetFileList(  const char *path, const char *extension, char *listbuf, int bufsize );
 int     FS_GetModList(  char *listbuf, int bufsize );
+int     FS_GetModFileList( const char *modName, const char *subdir, const char *extension, char *listbuf, int bufsize );
 
 fileHandle_t    FS_FOpenFileWrite( const char *qpath );
 // will properly create any needed paths and deal with seperater character issues
@@ -689,6 +690,7 @@ fileHandle_t    FS_FOpenFileWrite( const char *qpath );
 int     FS_filelength( fileHandle_t f );
 fileHandle_t FS_SV_FOpenFileWrite( const char *filename );
 int     FS_SV_FOpenFileRead( const char *filename, fileHandle_t *fp );
+int     FS_FOpenFileReadInMod( const char *modName, const char *filename, fileHandle_t *fp );
 void    FS_SV_Rename( const char *from, const char *to );
 int     FS_FOpenFileRead( const char *qpath, fileHandle_t *file, qboolean uniqueFILE );
 /*

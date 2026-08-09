@@ -160,7 +160,8 @@ menuDef {
 
 	onOpen {
 		hide grpmessage;
-		uiScript LoadDemos
+		uiScript LoadDemos;
+		uiScript LoadWTVDemos
 	}
 
 	onEsc {
@@ -201,38 +202,61 @@ menuDef {
 	}
 
 	itemDef {
-		name windowtitle
-		text "Directory:"
-		type 1
-		style 0
+		name btn_tab_classic
+		text "CLIENT"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
 		textstyle 3
-		rect 10 25 76 20
+		border 1
+		bordercolor BORDER_DEF
+		rect 80 25 100 20
+		textalign 1
+		textalignx 50
+		textaligny 14
 		textfont UI_FONT_NORMAL
 		textscale .25
-		textalignx 10
-		textaligny 16
-		forecolor LGREY
+		backcolor BACK_DEF
+		mouseEnter { setitemcolor btn_tab_classic backcolor HILIT_ENTR }
+		mouseExit { setitemcolor btn_tab_classic backcolor HILIT_EXIT }
 		visible 1
-		decoration
+		action {
+			play "sound/misc/nomenu.wav";
+			show demolist;
+			show modlist;
+			show btn_playdemo;
+			show btn_timedemo;
+			hide demolist_wtv;
+			hide btn_playwtv
+		}
 	}
 
 	itemDef {
-		name currentdir
-		cvar "ui_demoDir"
-		type 1
+		name btn_tab_wtv
+		text "SERVER"
+		type ITEM_TYPE_BUTTON
 		style WINDOW_STYLE_FILLED
 		textstyle 3
-		rect 80 25 $evalint(WINDOW_WIDTH-4-80) 20
+		border 1
+		bordercolor BORDER_DEF
+		rect 185 25 100 20
+		textalign 1
+		textalignx 50
+		textaligny 14
 		textfont UI_FONT_NORMAL
 		textscale .25
-		textalignx 6
-		textaligny 14
-		border 1
-		bordercolor MGREY .5
-		backcolor 1 1 1 .07
-		forecolor .9 .9 .55 1
+		backcolor BACK_DEF
+		mouseEnter { setitemcolor btn_tab_wtv backcolor HILIT_ENTR }
+		mouseExit { setitemcolor btn_tab_wtv backcolor HILIT_EXIT }
 		visible 1
-		decoration
+		action {
+			play "sound/misc/nomenu.wav";
+			hide demolist;
+			hide modlist;
+			hide btn_playdemo;
+			hide btn_timedemo;
+			show demolist_wtv;
+			show btn_playwtv
+		}
 	}
 
 	itemDef {
@@ -249,6 +273,25 @@ menuDef {
 		forecolor LGREY
 		visible 1
 		decoration
+	}
+
+	itemDef {
+		name modlist
+		type ITEM_TYPE_LISTBOX
+		textfont UI_FONT_NORMAL
+		elementwidth 64
+		elementheight 12
+		elementtype LISTBOX_TEXT
+		feeder FEEDER_DEMO_MODS
+		rect 10 67 68 $evalint(WINDOW_HEIGHT-67-23-4)
+		style WINDOW_STYLE_FILLED
+		textaligny -3
+		textscale .2
+		backcolor 1 1 1 .07
+		border 1
+		bordercolor MGREY .5
+		outlinecolor BACK_DEF
+		visible 1
 	}
 
 	itemDef {
@@ -272,6 +315,30 @@ menuDef {
 		doubleclick {
 			play "sound/misc/nomenu.wav";
 			uiScript RunDemo;
+		}
+	}
+
+	itemDef {
+		name demolist_wtv
+		type ITEM_TYPE_LISTBOX
+		textfont UI_FONT_NORMAL
+		elementwidth $evalint(WINDOW_WIDTH-40)
+		elementheight 12
+		elementtype LISTBOX_TEXT
+		feeder FEEDER_WTVDEMOS
+		rect 80 47 $evalint(WINDOW_WIDTH-4-80) $evalint(WINDOW_HEIGHT-47-23-4)
+		style WINDOW_STYLE_FILLED
+		textaligny -3
+		textscale .2
+		backcolor 1 1 1 .07
+		border 1
+		bordercolor MGREY .5
+		outlinecolor BACK_DEF
+		visible 0
+		columns	1 2 $evalint(WINDOW_WIDTH-40-2) 64
+		doubleclick {
+			play "sound/misc/nomenu.wav";
+			uiScript RunWTVDemo;
 		}
 	}
 
@@ -315,6 +382,30 @@ menuDef {
 		action {
 			play "sound/misc/nomenu.wav";
 			uiScript RunDemo
+		}
+	}
+
+	itemDef {
+		name btn_playwtv
+		text "PLAY DEMO"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor BORDER_DEF
+		rect $evalfloat(.5*WINDOW_WIDTH-60) $evalint(WINDOW_HEIGHT-23) 120 17
+		textalign 1
+		textalignx 60
+		textaligny 12
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor BACK_DEF
+		mouseEnter { setitemcolor btn_playwtv backcolor HILIT_ENTR }
+		mouseExit { setitemcolor btn_playwtv backcolor HILIT_EXIT }
+		visible 0
+		action {
+			play "sound/misc/nomenu.wav";
+			uiScript RunWTVDemo
 		}
 	}
 }

@@ -235,6 +235,7 @@ typedef struct {
 
 	// demo information
 	char demoName[MAX_QPATH];
+	char demoModName[MAX_QPATH]; // empty for the current mod, else CL_PlayDemo's 3rd arg
 	qboolean demorecording;
 	qboolean demoplaying;
 	qboolean demowaiting;       // don't record until a non-delta message is received

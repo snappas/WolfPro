@@ -773,6 +773,23 @@ static int GetConfigString( int index, char *buf, int size ) {
 
 
 
+static qboolean CL_UI_GetValue( char *value, int valueSize, const char *key ) {
+	typedef struct { const char *name; int number; } syscall_t;
+	static const syscall_t syscalls[] = {
+		{ "trap_FS_GetModFileList", UI_EXT_FS_GETMODFILELIST },
+	};
+	int i;
+
+	for ( i = 0; i < ARRAY_LEN( syscalls ); ++i ) {
+		if ( Q_stricmp( key, syscalls[i].name ) == 0 ) {
+			Com_sprintf( value, valueSize, "%d", syscalls[i].number );
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
 /*
 ====================
 CL_UISystemCalls
@@ -1152,6 +1169,12 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 	case UI_OPENURL:
 		CL_OpenURL( (const char *)VMA( 1 ) );
 		return 0;
+
+	case UI_EXT_GETVALUE:
+		return CL_UI_GetValue( VMA( 1 ), args[2], VMA( 3 ) );
+
+	case UI_EXT_FS_GETMODFILELIST:
+		return FS_GetModFileList( VMA( 1 ), VMA( 2 ), VMA( 3 ), VMA( 4 ), args[5] );
 
 	default:
 		Com_Error( ERR_DROP, "Bad UI system trap: %i", args[0] );

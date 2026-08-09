@@ -646,6 +646,7 @@ typedef struct {
 #define MAX_TIERS 16
 #define MAX_MODS 64
 #define MAX_DEMOS 256
+#define MAX_DEMO_MODS 16
 #define MAX_MOVIES 256
 #define MAX_PLAYERMODELS 256
 #define MAX_SAVEGAMES 256
@@ -834,9 +835,16 @@ typedef struct {
 	int modCount;
 	int modIndex;
 
-	const char *demoList[MAX_DEMOS];
-	int demoCount;
+	const char *demoModNames[MAX_DEMO_MODS];
+	const char *demoModFiles[MAX_DEMO_MODS][MAX_DEMOS];
+	int demoModFileCount[MAX_DEMO_MODS];
+	int demoModCount;
+	int demoModIndex;
 	int demoIndex;
+
+	const char *wtvDemoList[MAX_DEMOS];
+	int wtvDemoCount;
+	int wtvDemoIndex;
 
 	const char *movieList[MAX_MOVIES];
 	int movieCount;
@@ -980,6 +988,15 @@ void            trap_FS_Write( const void *buffer, int len, fileHandle_t f );
 void            trap_FS_FCloseFile( fileHandle_t f );
 int             trap_FS_GetFileList(  const char *path, const char *extension, char *listbuf, int bufsize );
 int             trap_FS_Delete( const char *filename );
+qboolean        trap_GetValue( char *value, int valueSize, const char *key );
+int             trap_FS_GetModFileList( const char *modName, const char *subdir, const char *extension, char *listbuf, int bufsize );
+
+typedef struct {
+	int trap_FS_GetModFileList;
+} uiExt_t;
+
+extern qboolean uiModFileListAvailable;
+
 qhandle_t       trap_R_RegisterModel( const char *name );
 qhandle_t       trap_R_RegisterSkin( const char *name );
 qhandle_t       trap_R_RegisterShaderNoMip( const char *name );

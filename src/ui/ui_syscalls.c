@@ -130,6 +130,14 @@ int trap_FS_Delete( const char *filename ) {
 	return syscall( UI_FS_DELETEFILE, filename );
 }
 
+qboolean trap_GetValue( char *value, int valueSize, const char *key ) {
+	return syscall( UI_EXT_GETVALUE, value, valueSize, key );
+}
+
+int trap_FS_GetModFileList( const char *modName, const char *subdir, const char *extension, char *listbuf, int bufsize ) {
+	return syscall( UI_EXT_FS_GETMODFILELIST, modName, subdir, extension, listbuf, bufsize );
+}
+
 qhandle_t trap_R_RegisterModel( const char *name ) {
 	return syscall( UI_R_REGISTERMODEL, name );
 }

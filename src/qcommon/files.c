@@ -751,6 +751,60 @@ int FS_SV_FOpenFileRead( const char *filename, fileHandle_t *fp ) {
 	return 0;
 }
 
+/*
+===========
+FS_FOpenFileReadInMod
+
+Mirrors FS_SV_FOpenFileRead's raw-open technique, scoped to an arbitrary
+mod dir -- callers get a normal handle usable with FS_Read/FS_FCloseFile.
+===========
+*/
+int FS_FOpenFileReadInMod( const char *modName, const char *filename, fileHandle_t *fp ) {
+	char *ospath;
+	fileHandle_t f = 0;
+
+	if ( !fs_searchpaths ) {
+		Com_Error( ERR_FATAL, "Filesystem call made without initialization\n" );
+	}
+
+	f = FS_HandleForFile();
+	fsh[f].zipFile = qfalse;
+
+	Q_strncpyz( fsh[f].name, filename, sizeof( fsh[f].name ) );
+
+	// don't let sound stutter
+	S_ClearSoundBuffer();
+
+	ospath = FS_BuildOSPath( fs_homepath->string, modName, filename );
+
+	if ( fs_debug->integer ) {
+		Com_Printf( "FS_FOpenFileReadInMod (fs_homepath): %s\n", ospath );
+	}
+
+	fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
+	fsh[f].handleSync = qfalse;
+
+	if ( !fsh[f].handleFiles.file.o && Q_stricmp( fs_homepath->string, fs_basepath->string ) ) {
+		ospath = FS_BuildOSPath( fs_basepath->string, modName, filename );
+
+		if ( fs_debug->integer ) {
+			Com_Printf( "FS_FOpenFileReadInMod (fs_basepath): %s\n", ospath );
+		}
+
+		fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
+		fsh[f].handleSync = qfalse;
+	}
+
+	if ( !fsh[f].handleFiles.file.o ) {
+		f = 0;
+	}
+
+	*fp = f;
+	if ( f ) {
+		return FS_filelength( f );
+	}
+	return 0;
+}
 
 /*
 ===========
@@ -2485,6 +2539,66 @@ int FS_GetModList( char *listbuf, int bufsize ) {
 	Sys_FreeFileList( pFiles );
 
 	return nMods;
+}
+
+/*
+================
+FS_GetModFileList
+
+Returns a list of files (matching extension) inside <modName>/<subdir>,
+read directly off fs_homepath/fs_basepath rather than the active
+search-path list -- lets the UI browse another installed mod's files
+without switching fs_game. Mirrors FS_GetModList's raw-OS-path technique.
+================
+*/
+int FS_GetModFileList( const char *modName, const char *subdir, const char *extension, char *listbuf, int bufsize ) {
+	char relPath[MAX_OSPATH];
+	char *ospath;
+	char *list[MAX_FOUND_FILES];
+	char **sysFiles;
+	int numSysFiles;
+	int nfiles, nTotal, packedFiles, i, nLen;
+
+	*listbuf = 0;
+	nfiles = 0;
+
+	Com_sprintf( relPath, sizeof( relPath ), "%s/%s", modName, subdir );
+
+	ospath = FS_BuildOSPath( fs_homepath->string, relPath, "" );
+	sysFiles = Sys_ListFiles( ospath, extension, NULL, &numSysFiles, qfalse );
+	for ( i = 0; i < numSysFiles; i++ ) {
+		nfiles = FS_AddFileToList( sysFiles[i], list, nfiles );
+	}
+	Sys_FreeFileList( sysFiles );
+
+	if ( Q_stricmp( fs_basepath->string, fs_homepath->string ) ) {
+		ospath = FS_BuildOSPath( fs_basepath->string, relPath, "" );
+		sysFiles = Sys_ListFiles( ospath, extension, NULL, &numSysFiles, qfalse );
+		for ( i = 0; i < numSysFiles; i++ ) {
+			nfiles = FS_AddFileToList( sysFiles[i], list, nfiles );
+		}
+		Sys_FreeFileList( sysFiles );
+	}
+
+	nTotal = 0;
+	packedFiles = nfiles;
+	for ( i = 0; i < nfiles; i++ ) {
+		nLen = strlen( list[i] ) + 1;
+		if ( nTotal + nLen + 1 < bufsize ) {
+			strcpy( listbuf, list[i] );
+			listbuf += nLen;
+			nTotal += nLen;
+		} else {
+			packedFiles = i;
+			break;
+		}
+	}
+
+	for ( i = 0; i < nfiles; i++ ) {
+		Z_Free( list[i] );
+	}
+
+	return packedFiles;
 }
 
 

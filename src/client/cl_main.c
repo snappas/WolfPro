@@ -555,9 +555,10 @@ void CL_PlayDemo(qbool videoRestart)
 {
 	char name[MAX_OSPATH], extension[32];
 	char        *arg;
+	char        *modName;
 
-	if ( Cmd_Argc() != 2 ) {
-		Com_Printf( "playdemo <demoname>\n" );
+	if ( Cmd_Argc() != 2 && Cmd_Argc() != 3 ) {
+		Com_Printf( "playdemo <demoname> [modname]\n" );
 		return;
 	}
 
@@ -583,12 +584,20 @@ void CL_PlayDemo(qbool videoRestart)
 		Com_sprintf( name, sizeof( name ), "demos/%s.dm_%d", arg, GAME_PROTOCOL_VERSION );
 	}
 
-	FS_FOpenFileRead( name, &clc.demofile, qtrue );
+	modName = ( Cmd_Argc() == 3 ) ? Cmd_Argv( 2 ) : NULL;
+	if ( modName ) {
+		FS_FOpenFileReadInMod( modName, name, &clc.demofile );
+	} else {
+		FS_FOpenFileRead( name, &clc.demofile, qtrue );
+	}
 	if ( !clc.demofile ) {
 		Com_Error( ERR_DROP, "couldn't open %s", name );
 		return;
 	}
 	Q_strncpyz( clc.demoName, Cmd_Argv( 1 ), sizeof( clc.demoName ) );
+	// preserved so a mid-playback /vid_restart (below) can reopen the same
+	// cross-mod file instead of falling back to the current mod's demos/
+	Q_strncpyz( clc.demoModName, modName ? modName : "", sizeof( clc.demoModName ) );
 
 	Con_Close();
 
@@ -1292,7 +1301,11 @@ void CL_Vid_Restart_f( void ) {
 	// we don't really technically need to run everything again,
 	// but trying to optimize parts out is very likely to lead to nasty bugs
 	if (clc.demoplaying && clc.newDemoPlayer) {
-		Cmd_TokenizeString(va("demo \"%s\"", clc.demoName));
+		if ( clc.demoModName[0] ) {
+			Cmd_TokenizeString(va("demo \"%s\" \"%s\"", clc.demoName, clc.demoModName));
+		} else {
+			Cmd_TokenizeString(va("demo \"%s\"", clc.demoName));
+		}
 		CL_PlayDemo(qtrue);
 	}
 
@@ -2914,6 +2927,11 @@ void CL_Init( void ) {
 
 	// Allow cgame to interrogate the client if it supports extensions
 	Cvar_Set("//trap_GetValue", "700");
+
+	// Separate probe for the UI module -- it has its own trap dispatch
+	// table (CL_UISystemCalls), distinct from cgame's, so the cvar above
+	// says nothing about whether *this* engine build supports UI_EXT_GETVALUE.
+	Cvar_Set("//trap_UI_GetValue", "700");
 
 
 #ifndef __MACOS__  //DAJ USA
