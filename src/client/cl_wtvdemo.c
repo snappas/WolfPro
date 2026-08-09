@@ -489,6 +489,7 @@ qboolean CL_WTV_BuildNDPStream( const byte *buffer, int bufferSize, int followCl
 
 			if ( prefixLen ) {
 				int cmdTeam = atoi( commandText[i] + prefixLen );
+				int rawTeam = state->hasPS[followClientNum] ? state->lastPS[followClientNum].persistant[PERS_TEAM] : -999;
 				int followedTeam = state->hasPS[followClientNum] ? state->lastPS[followClientNum].persistant[PERS_TEAM] : TEAM_RED;
 				const char *payload;
 

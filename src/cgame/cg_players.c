@@ -930,6 +930,12 @@ void CG_NewClientInfo( int clientNum ) {
 	// isolate the player's name
 	if(cg_registeredPlayers.integer){
 		v = Info_ValueForKey( configstring, "un" );
+		if ( !v[0] ) {
+			// no registered username on record for this player (e.g. a demo
+			// recorded by a server/mod that never sends "un" at all) - fall
+			// back to the net name rather than leave it blank
+			v = Info_ValueForKey( configstring, "n" );
+		}
 		Q_strncpyz( newInfo.name, v, sizeof( newInfo.name ) );
 	}else{
 		v = Info_ValueForKey( configstring, "n" );

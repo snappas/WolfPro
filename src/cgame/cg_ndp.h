@@ -7,12 +7,16 @@ int trap_CNQ3_NDP_Seek(int servertime);
 void trap_CNQ3_NDP_ReadUntil(int serverTime);
 void trap_CNQ3_NDP_StartVideo(void);
 void trap_CNQ3_NDP_StopVideo(void);
+void trap_CNQ3_NDP_ResetAnalysis(void);
 void trap_LocateInteropData(void* bufferIn, int bufferInSize, void* bufferOut, int bufferOutSize);
 
 //Syscalls from Client
 void CG_NDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServerTime, qboolean videoRestart);
 void CG_NDP_AnalyzeCommand(int serverTime);
 qbool CG_NDP_AnalyzeSnapshot(int progress);
+void CG_NDP_ResetAnalysis(void);
+qbool CG_NDP_FindGameVersion(void);
+int CG_NDP_FixLegacyItemIndex(int rawIndex);
 
 //Public functions
 void CG_NDP_ResetStateWhenBackInTime(void);

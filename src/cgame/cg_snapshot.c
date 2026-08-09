@@ -55,6 +55,9 @@ static void CG_ResetEntity( centity_t *cent ) {
 	cent->headJuncIndex2 = 0;
 	// done.
 
+	// stale after any teleport/reset/demo-seek - see CG_AntilagLookup (cg_ents.c)
+	cent->antilagHistoryCount = 0;
+
 	VectorCopy( cent->currentState.origin, cent->lerpOrigin );
 	VectorCopy( cent->currentState.angles, cent->lerpAngles );
 	if ( cent->currentState.eType == ET_PLAYER ) {
@@ -102,9 +105,33 @@ static void CG_TransitionEntity( centity_t *cent ) {
 		CG_AttachedPartChange( cent );
 	}
 
+	if ( !cent->interpolate ) {
+		cent->antilagHistoryCount = 0;
+	}
 
 	cent->currentState = cent->nextState;
 	cent->currentValid = qtrue;
+
+	if ( cent->interpolate ) {
+		vec3_t histOrigin, histAngles;
+
+		// snapshot this entity's freshly-arrived position, used by
+		// CG_AntilagLookup (cg_ents.c) to reconstruct antilag-rewound playback
+		if ( cent->currentState.pos.trType == TR_LINEAR_STOP ) {
+			VectorCopy( cent->currentState.pos.trBase, histOrigin );
+		} else {
+			BG_EvaluateTrajectory( &cent->currentState.pos, cg.snap->serverTime, histOrigin );
+		}
+		BG_EvaluateTrajectory( &cent->currentState.apos, cg.snap->serverTime, histAngles );
+
+		cent->antilagHistoryHead = ( cent->antilagHistoryHead + 1 ) % CG_ANTILAG_HISTORY_SIZE;
+		VectorCopy( histOrigin, cent->antilagHistory[cent->antilagHistoryHead].origin );
+		VectorCopy( histAngles, cent->antilagHistory[cent->antilagHistoryHead].angles );
+		cent->antilagHistory[cent->antilagHistoryHead].time = cg.snap->serverTime;
+		if ( cent->antilagHistoryCount < CG_ANTILAG_HISTORY_SIZE ) {
+			cent->antilagHistoryCount++;
+		}
+	}
 
 	// reset if the entity wasn't in the last frame or was teleported
 	if ( !cent->interpolate ) {

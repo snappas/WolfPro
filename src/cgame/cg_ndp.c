@@ -48,6 +48,7 @@ qbool isRtcwProV129 = qfalse;
 qbool isRtcwProV130 = qfalse;
 qbool isRtcwProV140 = qfalse;
 qbool isRtcw10 = qfalse;
+qbool isWolfPro = qfalse;
 qbool gameVersionFound = qfalse;
 
 /*
@@ -72,12 +73,53 @@ qbool CG_NDP_FindGameVersion(void) {
 	isRtcwProV129 = (Q_strncmp(current_gamename, "RtcwPro 1.2.9", strlen("RtcwPro 1.2.9")) == 0);
 	isRtcwProV130 = (Q_strncmp(current_gamename, "RtcwPro 1.3", strlen("RtcwPro 1.3")) == 0);
 	isRtcwProV140 = (Q_strncmp(current_gamename, "RtcwPro 1.4", strlen("RtcwPro 1.4")) == 0);
+	isWolfPro = (Q_stricmp(current_gamename, "wolfpro") == 0);
 	//earlier versions all use 1.2.8 tinfo
 	if (isRtcwPro && !isRtcwProV128 && !isRtcwProV129 && !isRtcwProV130 && !isRtcwProV140) {
 		isRtcwProV128 = qtrue;
 	}
 	gameVersionFound = qtrue;
 	return qtrue;
+}
+
+/*
+=================
+CG_NDP_FixLegacyItemIndex
+
+WolfPro's "Rocket launcher mode" feature added a "weapon_rocketlauncher"
+entry to bg_itemlist that doesn't exist in rtcwPro/OSP/vanilla RTCW's item
+tables, shifting every later item's index by +1 relative to what those
+demos recorded. Foreign demos need that shift undone before their raw
+modelindex/eventParm item indices are used to look up bg_itemlist.
+=================
+*/
+int CG_NDP_FixLegacyItemIndex( int rawIndex ) {
+	static int rocketLauncherItemIndex = -1;
+	int i;
+
+	if ( !cg.demoPlayback ) {
+		return rawIndex;
+	}
+	if ( !gameVersionFound && !CG_NDP_FindGameVersion() ) {
+		return rawIndex;
+	}
+	if ( isWolfPro ) {
+		return rawIndex;
+	}
+
+	if ( rocketLauncherItemIndex < 0 ) {
+		for ( i = 1; i < bg_numItems; i++ ) {
+			if ( bg_itemlist[i].classname && !strcmp( bg_itemlist[i].classname, "weapon_rocketlauncher" ) ) {
+				rocketLauncherItemIndex = i;
+				break;
+			}
+		}
+	}
+
+	if ( rocketLauncherItemIndex >= 0 && rawIndex >= rocketLauncherItemIndex ) {
+		return rawIndex + 1;
+	}
+	return rawIndex;
 }
 
 /*
@@ -253,7 +295,7 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 			}
 		}
 	}
-	if (Q_stricmp(cmdName, "tinfo") == 0) {
+	if (Q_stricmp(cmdName, "tinfo") == 0 || Q_stricmp(cmdName, "tinfo2") == 0) {
 		int i, powerups;
 		qbool someoneHasDocsNow = qfalse;
 
@@ -263,7 +305,7 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 			}
 		}
 
-		if (!isRtcwPro) {
+		if (!isRtcwPro && !isWolfPro) {
 			numSortedTeamPlayers = atoi(CG_Argv(3));
 
 			for (i = 0; i < numSortedTeamPlayers; i++) {
@@ -293,7 +335,7 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 					}
 				}
 			}
-			else if (isRtcwProV130) {
+			else if (isRtcwProV130 || isWolfPro) {
 				int teamInfoPlayers = atoi(CG_Argv(1));
 				for (i = 0; i < teamInfoPlayers; i++) {
 					powerups = atoi(CG_Argv(i * 12 + 5));
@@ -356,7 +398,10 @@ qbool CG_NDP_AnalyzeObituary(entityState_t* ent, snapshot_t* snapshot) {
 		return qtrue;
 	}
 	if(cg_registeredPlayers.integer){
-		Q_strncpyz(targetName, Info_ValueForKey(targetInfo, "un"), sizeof(targetName) - 2);
+		const char *un = Info_ValueForKey(targetInfo, "un");
+		// no registered username on record (e.g. a demo recorded by a
+		// server/mod that never sends "un") - fall back to the net name
+		Q_strncpyz(targetName, un[0] ? un : Info_ValueForKey(targetInfo, "n"), sizeof(targetName) - 2);
 	}else{
 		Q_strncpyz(targetName, Info_ValueForKey(targetInfo, "n"), sizeof(targetName) - 2);
 	}
@@ -443,6 +488,37 @@ void CG_NDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServe
 	trap_CNQ3_NDP_Seek(m_currServerTime);
 	cgs.serverCommandSequence = 0;
 
+}
+
+// Called by the engine before a demo stream is (re)parsed.
+void CG_NDP_ResetAnalysis(void)
+{
+	ndp_myKillsSize = 0;
+	ndp_alliesWinsSize = 0;
+	ndp_axisWinsSize = 0;
+	ndp_round1EndSize = 0;
+	ndp_round2EndSize = 0;
+	ndp_docDropSize = 0;
+	ndp_docPickupSize = 0;
+	ndp_levelStartTimesSize = 0;
+	ndp_timeLimitsSize = 0;
+	// parallels ndp_myKills[] by index — stale qtrue entries beyond the old
+	// size would otherwise bleed streak coloring into the next target's timeline
+	memset( ndp_killStreak, 0, sizeof( ndp_killStreak ) );
+	// edge-detector for doc/flag pickup-drop pairs — a stale qtrue here
+	// suppresses the new target's very first real pickup event
+	ndp_someoneHasDocs = qfalse;
+
+	// force re-detection - a stale version from the previous demo would
+	// otherwise make tinfo parsing use the wrong field layout/stride
+	gameVersionFound = qfalse;
+	isRtcwPro = qfalse;
+	isRtcwProV128 = qfalse;
+	isRtcwProV129 = qfalse;
+	isRtcwProV130 = qfalse;
+	isRtcwProV140 = qfalse;
+	isRtcw10 = qfalse;
+	isWolfPro = qfalse;
 }
 
 void CG_NDP_SeekAbsolute(int serverTime)
@@ -586,10 +662,7 @@ void CG_NDP_SetGameTime(void) {
 	{
 		m_currServerTime = m_lastServerTime;
 	}
-	else
-	{
-		trap_CNQ3_NDP_ReadUntil(m_currServerTime);
-	}
+	trap_CNQ3_NDP_ReadUntil(m_currServerTime);
 
 	cg.time = m_currServerTime;
 	prevRealTime = currRealTime;

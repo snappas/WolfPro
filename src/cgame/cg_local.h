@@ -197,6 +197,17 @@ typedef struct {
 
 // centity_t have a direct corespondence with gentity_t in the game, but
 // only the entityState_t is directly communicated to the cgame
+
+// how many past snapshot-transition positions each entity retains for
+// CG_AntilagLookup (cg_ents.c) - matches NUM_CLIENT_HISTORY (g_local.h)
+#define CG_ANTILAG_HISTORY_SIZE 64
+
+typedef struct {
+	vec3_t origin;
+	vec3_t angles;
+	int time;
+} centityAntilagSample_t;
+
 typedef struct centity_s {
 	entityState_t currentState;     // from cg.frame
 	entityState_t nextState;        // from cg.nextFrame, if available
@@ -227,6 +238,12 @@ typedef struct centity_s {
 	// exact interpolated position of entity on this frame
 	vec3_t lerpOrigin;
 	vec3_t lerpAngles;
+
+	// rolling history of past positions, used by CG_AntilagLookup (cg_ents.c)
+	// to reconstruct where an entity really was at an arbitrary past time
+	centityAntilagSample_t antilagHistory[CG_ANTILAG_HISTORY_SIZE];
+	int antilagHistoryHead;
+	int antilagHistoryCount;
 
 	vec3_t lastLerpAngles;          // (SA) for remembering the last position when a state changes
 
@@ -933,6 +950,17 @@ typedef struct {
 
 	qbool ndpDemoEnabled;
 	qboolean demoTimelineShown;
+	qboolean wtvFollowListShown;
+	int wtvSpectateClientNum;
+	int wtvSpectateSmoothClientNum;   // which client wtvSpectateSmoothOrigin/Angles was last seeded for
+	vec3_t wtvSpectateSmoothOrigin;
+	vec3_t wtvSpectateSmoothAngles;
+
+	qboolean wtvFreecamInitialized;
+	vec3_t wtvFreecamOrigin;
+	vec3_t wtvFreecamAngles;
+	int wtvFreecamPrevRealTime;
+	int wtvOldButtons;
 
 	int popinPrintTime;
 	int popinPrintCharWidth;
@@ -1450,12 +1478,18 @@ typedef struct {
 	sfxHandle_t teslaLoopSound;
 	// done.
 
-	qhandle_t cursor;
 	qhandle_t selectCursor;
 	qhandle_t sizeCursor;
 
 	qhandle_t skullIcon;
 	qhandle_t exclamationIcon;
+
+	qhandle_t demoBtnSkipBack;
+	qhandle_t demoBtnRewind;
+	qhandle_t demoBtnPlay;
+	qhandle_t demoBtnPlayPause;
+	qhandle_t demoBtnFastForward;
+	qhandle_t demoBtnSkipForward;
 
 	sfxHandle_t alliesWin;
 	sfxHandle_t axisWin;
@@ -1604,6 +1638,7 @@ typedef struct {
 	qhandle_t activeCursor;
 	int demoTimelineHoverTime;
 	qboolean demoTimelineDragging;
+	int demoTimelineBtnFlashTime[6];
 
 	// screen fading
 	float fadeAlpha, fadeAlphaCurrent;
@@ -1739,6 +1774,11 @@ extern vmCvar_t cg_reticleBrightness;
 extern vmCvar_t cg_thirdPersonRange;
 extern vmCvar_t cg_thirdPersonAngle;
 extern vmCvar_t cg_thirdPerson;
+extern vmCvar_t cg_wtvFreecam;
+extern vmCvar_t cg_wtvFreecamSpeed;
+extern vmCvar_t cg_wtvFreecamSprintMultiplier;
+extern vmCvar_t cg_wtvActive;
+extern vmCvar_t cg_antilagDemoView;
 extern vmCvar_t cg_stereoSeparation;
 extern vmCvar_t cg_lagometer;
 extern vmCvar_t cg_drawAttacker;
@@ -1833,7 +1873,6 @@ extern vmCvar_t cg_descriptiveText;
 
 // TTimo
 extern vmCvar_t cg_autoReload;
-extern vmCvar_t cg_antilag;
 
 extern vmCvar_t cg_uinfo;
 
@@ -1948,17 +1987,23 @@ void CG_UpdateCvars( void );
 int CG_CrosshairPlayer( void );
 int CG_LastAttacker( void );
 void CG_LoadMenus( const char *menuFile );
-void CG_KeyEvent( int key, qboolean down );
+qboolean CG_KeyEvent( int key, qboolean down );
 void CG_MouseEvent( int x, int y );
 void CG_EventHandling( int type );
 
 #define DEMO_TIMELINE_X ( GIANTCHAR_WIDTH )
-#define DEMO_TIMELINE_Y ( SCREEN_HEIGHT - 70 )
+#define DEMO_TIMELINE_BUTTONS_H ( 24 )
+#define DEMO_TIMELINE_Y ( SCREEN_HEIGHT - 70 - DEMO_TIMELINE_BUTTONS_H )
 #define DEMO_TIMELINE_W ( SCREEN_WIDTH - ( GIANTCHAR_WIDTH * 2 ) )
-#define DEMO_TIMELINE_H ( 70 )
+#define DEMO_TIMELINE_H ( 70 + DEMO_TIMELINE_BUTTONS_H )
+#define DEMO_TIMELINE_CONTENT_BOTTOM ( DEMO_TIMELINE_Y + DEMO_TIMELINE_H - DEMO_TIMELINE_BUTTONS_H )
 
 qboolean CG_DemoTimelineCursorInRect( void );
 int CG_DemoTimelineServerTimeAtCursor( void );
+int CG_DemoTimelineButtonAtCursor( void );
+qboolean CG_WTVFollowListLabelInRect( void );
+int CG_WTVFollowListRowAtCursor( void );
+void CG_WTVNearbyRosterCycle( int direction );
 
 qboolean CG_GetTag( int clientNum, char *tagname, orientation_t * or );
 qboolean CG_GetWeaponTag( int clientNum, char *tagname, orientation_t * or );
@@ -2204,6 +2249,7 @@ void CG_Bullet( vec3_t origin, int sourceEntityNum, vec3_t normal, qboolean fles
 void CG_RailTrail( clientInfo_t *ci, vec3_t start, vec3_t end, int type );   //----(SA)	added 'type'
 void CG_GrappleTrail( centity_t *ent, const weaponInfo_t *wi );
 void CG_AddViewWeapon( playerState_t *ps );
+void CG_AddSpectateViewWeapon( centity_t *target );
 void CG_AddPlayerWeapon( refEntity_t *parent, playerState_t *ps, centity_t *cent );
 void CG_DrawWeaponSelect( void );
 void CG_DrawHoldableSelect( void );
@@ -2714,6 +2760,7 @@ typedef struct {
 	int trap_CNQ3_NDP_ReadUntil;
 	int trap_CNQ3_NDP_StartVideo;
 	int trap_CNQ3_NDP_StopVideo;
+	int trap_CNQ3_NDP_ResetAnalysis;
 	int trap_CL_AddGuiMenu;
 	int trap_CL_CMD_BACKUP;
 	int trap_Microseconds;

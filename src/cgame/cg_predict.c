@@ -326,7 +326,7 @@ static void CG_TouchItem( centity_t *cent ) {
 		return;     // can't hold it
 	}
 
-	item = &bg_itemlist[ cent->currentState.modelindex ];
+	item = &bg_itemlist[ CG_NDP_FixLegacyItemIndex( cent->currentState.modelindex ) ];
 
 	// (SA) no prediction of books/clipboards
 	if ( item->giType == IT_HOLDABLE ) {

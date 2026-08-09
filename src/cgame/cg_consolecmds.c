@@ -724,6 +724,68 @@ void CG_autoRecord_f(void){
 	trap_SendConsoleCommand(va("g_synchronousclients 0;g_synchronousclients 1;record %s;g_synchronousclients 0\n", CG_generateFilename()));
 }
 
+void CG_DemoTimeline_f( void ) {
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled ) ) {
+		return;
+	}
+	if ( cg.demoTimelineShown ) {
+		cg.demoTimelineShown = qfalse;
+	} else {
+		cg.demoTimelineShown = qtrue;
+		cg.wtvFollowListShown = qtrue;
+		cgs.cursorX = 320;
+		cgs.cursorY = 240;
+		cgs.demoTimelineHoverTime = -1;
+	}
+}
+
+void CG_NDPNextFrag_f( void ) {
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled ) ) {
+		return;
+	}
+	CG_NDP_GoToNextFrag( qtrue );
+}
+
+void CG_NDPPrevFrag_f( void ) {
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled ) ) {
+		return;
+	}
+	CG_NDP_GoToNextFrag( qfalse );
+}
+
+void CG_NDPPlayPause_f( void ) {
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled ) ) {
+		return;
+	}
+	trap_Cvar_Set( "timescale", ( cg_timescale.value != 0.0f ) ? "0" : "1" );
+}
+
+void CG_Freecam_f( void ) {
+	qboolean newState;
+
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled ) ) {
+		CG_Printf( "freecam: only available during WTV/NDP demo playback\n" );
+		return;
+	}
+	newState = !cg_wtvFreecam.integer;
+	if ( newState ) {
+		if ( cg.wtvSpectateClientNum >= 0 ) {
+			// same handoff seeding CG_CalcViewValues uses for +activate —
+			// no jump leaving spectate into free-fly via this command either.
+			VectorCopy( cg.wtvSpectateSmoothOrigin, cg.wtvFreecamOrigin );
+			VectorCopy( cg.wtvSpectateSmoothAngles, cg.wtvFreecamAngles );
+			cg.wtvFreecamPrevRealTime = trap_Milliseconds();
+			cg.wtvFreecamInitialized = qtrue;
+		}
+		cg.wtvSpectateClientNum = -1;
+	}
+	trap_Cvar_Set( "cg_wtvFreecam", newState ? "1" : "0" );
+	if ( newState ) {
+		trap_Cvar_Update( &cg_wtvFreecam );
+	}
+	CG_Printf( "freecam %s\n", newState ? "on" : "off" );
+}
+
 
 typedef struct {
 	char    *cmd;
@@ -803,6 +865,12 @@ static consoleCommand_t commands[] = {
 	{ "-stats", CG_StatsUp_f },
 	{ "+wtopshots", CG_topshotsDown_f },
 	{ "-wtopshots", CG_topshotsUp_f },
+
+	{ "demotimeline", CG_DemoTimeline_f },
+	{ "ndpnextfrag", CG_NDPNextFrag_f },
+	{ "ndpprevfrag", CG_NDPPrevFrag_f },
+	{ "ndpplaypause", CG_NDPPlayPause_f },
+	{ "freecam", CG_Freecam_f },
 };
 
 

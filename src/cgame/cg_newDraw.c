@@ -1102,12 +1102,11 @@ float CG_GetValue( int ownerDraw, int type ) {
 		return cg.snap->ps.persistant[PERS_SCORE];
 		break;
 	case CG_PLAYER_HEALTH:
-		if ( cgs.gametype >= GT_WOLF && ( ps->pm_flags & PMF_FOLLOW ) ) {
-			ci = &cgs.clientinfo[ ps->clientNum ];
-			return ci->health;
-		} else {
-			return ps->stats[STAT_HEALTH];
-		}
+		// matches CG_DrawPlayerHealth: cgs.clientinfo[].health isn't kept
+		// current for a followed player (tinfo2 is per-team, not broadcast,
+		// so WTV demos never even record it), leaving it stuck at 0 and this
+		// value's color band permanently reading "hurting"
+		return ps->stats[STAT_HEALTH];
 		break;
 	case CG_RED_SCORE:
 		return cgs.scores1;
@@ -1856,6 +1855,31 @@ void CG_OwnerDraw( float x, float y, float w, float h, float text_x, float text_
 void CG_MouseEvent( int x, int y ) {
 	int n;
 
+	// freecam look — x/y are raw, unscaled device deltas here. Reads the
+	// player's real sensitivity/m_yaw/m_pitch so freecam feels identical to
+	// normal look (mirrors CL_MouseMove's formula, minus weapon-zoom scaling
+	// and mouse accel, which have no freecam equivalent).
+	if ( cg.demoPlayback && cg.ndpDemoEnabled && cg_wtvFreecam.integer && !cg.demoTimelineShown ) {
+		char cvarBuf[16];
+		float sensitivity, yawScale, pitchScale;
+
+		trap_Cvar_VariableStringBuffer( "sensitivity", cvarBuf, sizeof( cvarBuf ) );
+		sensitivity = atof( cvarBuf );
+		trap_Cvar_VariableStringBuffer( "m_yaw", cvarBuf, sizeof( cvarBuf ) );
+		yawScale = atof( cvarBuf );
+		trap_Cvar_VariableStringBuffer( "m_pitch", cvarBuf, sizeof( cvarBuf ) );
+		pitchScale = atof( cvarBuf );
+
+		cg.wtvFreecamAngles[YAW] -= x * sensitivity * yawScale;
+		cg.wtvFreecamAngles[PITCH] += y * sensitivity * pitchScale;
+		if ( cg.wtvFreecamAngles[PITCH] > 89.0f ) {
+			cg.wtvFreecamAngles[PITCH] = 89.0f;
+		} else if ( cg.wtvFreecamAngles[PITCH] < -89.0f ) {
+			cg.wtvFreecamAngles[PITCH] = -89.0f;
+		}
+		return;
+	}
+
 	if ( !cg.demoPlayback && ( cg.predictedPlayerState.pm_type == PM_NORMAL || cg.predictedPlayerState.pm_type == PM_SPECTATOR ) && cg.showScores == qfalse ) {
 		trap_Key_SetCatcher( 0 );
 		return;
@@ -1943,44 +1967,105 @@ void CG_EventHandling( int type ) {
 
 }
 
-void CG_KeyEvent( int key, qboolean down ) {
+qboolean CG_KeyEvent( int key, qboolean down ) {
 
 	if ( cg.demoPlayback && cg.ndpDemoEnabled ) {
 		if ( key == K_MOUSE1 ) {
 			if ( down ) {
-				if ( cg.demoTimelineShown && CG_DemoTimelineCursorInRect() ) {
-					cgs.demoTimelineDragging = qtrue;
-					CG_NDP_SeekAbsolute( CG_DemoTimelineServerTimeAtCursor() );
-				}
-			} else {
-				cgs.demoTimelineDragging = qfalse;
-			}
-		} else if ( down ) {
-			if ( key == K_END ) {
 				if ( cg.demoTimelineShown ) {
-					cg.demoTimelineShown = qfalse;
-				} else {
-					cg.demoTimelineShown = qtrue;
-					cgs.cursorX = 320;
-					cgs.cursorY = 240;
-					cgs.demoTimelineHoverTime = -1;
+					if ( cg.wtvFollowListShown ) {
+						int rowClientNum = CG_WTVFollowListRowAtCursor();
+						if ( rowClientNum == -2 ) {
+							return qtrue;
+						}
+						if ( rowClientNum >= 0 ) {
+							if ( cg_wtvActive.integer ) {
+								// WTV recording: full playerstate reconstruction
+								// available, switch targets the same way it always has.
+								if ( rowClientNum != cg.snap->ps.clientNum ) {
+									trap_SendConsoleCommand( va( "wtvfollow %d\n", rowClientNum ) );
+								} else if ( cg_wtvFreecam.integer ) {
+									trap_Cvar_Set( "cg_wtvFreecam", "0" );
+								}
+							} else {
+								// classic demo: no wtvfollow available — either return
+								// to the true POV, or lock onto a nearby entity.
+								cg.wtvSpectateClientNum = ( rowClientNum == cg.snap->ps.clientNum ) ? -1 : rowClientNum;
+								trap_Cvar_Set( "cg_wtvFreecam", "0" );
+							}
+							cg.wtvFollowListShown = qfalse;
+							return qtrue;
+						}
+					}
+					if ( CG_WTVFollowListLabelInRect() ) {
+						cg.wtvFollowListShown = !cg.wtvFollowListShown;
+						return qtrue;
+					}
+					{
+						int demoBtn = CG_DemoTimelineButtonAtCursor();
+
+						if ( demoBtn >= 0 ) {
+							switch ( demoBtn ) {
+							case 0:
+								CG_NDP_GoToNextFrag( qfalse );
+								break;
+							case 1:
+								trap_Cvar_Set( "timescale", va( "%f", cg_timescale.value * 0.75f ) );
+								break;
+							case 2:
+								trap_Cvar_Set( "timescale", "1" );
+								break;
+							case 3:
+								trap_Cvar_Set( "timescale", ( cg_timescale.value != 0.0f ) ? "0" : "1" );
+								break;
+							case 4:
+								trap_Cvar_Set( "timescale", va( "%f", cg_timescale.value * 1.25f ) );
+								break;
+							case 5:
+								CG_NDP_GoToNextFrag( qtrue );
+								break;
+							}
+							if ( demoBtn != 3 ) {
+								cgs.demoTimelineBtnFlashTime[demoBtn] = trap_Milliseconds();
+							}
+							return qtrue;
+						}
+					}
+					if ( CG_DemoTimelineCursorInRect() ) {
+						cgs.demoTimelineDragging = qtrue;
+						CG_NDP_SeekAbsolute( CG_DemoTimelineServerTimeAtCursor() );
+						return qtrue;
+					}
 				}
-			} else if ( key == K_PGUP ) {
-				CG_NDP_GoToNextFrag( qtrue );
-			} else if ( key == K_PGDN ) {
-				CG_NDP_GoToNextFrag( qfalse );
+			} else if ( cgs.demoTimelineDragging ) {
+				cgs.demoTimelineDragging = qfalse;
+				return qtrue;
 			}
+		}
+
+		// steal space for pause whenever the timeline is up, even in
+		// freecam - pausing takes priority over +moveup there
+		if ( key == K_SPACE && down && cg.demoTimelineShown ) {
+			trap_Cvar_Set( "timescale", ( cg_timescale.value != 0.0f ) ? "0" : "1" );
+			return qtrue;
+		}
+
+		// nothing above claimed it, and no menu/hud-editor overlay is up —
+		// let the engine's normal bind dispatch handle it (movement, any
+		// custom bind), exactly like it would outside of demo playback
+		if ( (int)cgs.eventHandling == CGAME_EVENT_DEMO ) {
+			return qfalse;
 		}
 	}
 
 	if ( !down ) {
-		return;
+		return qfalse;
 	}
 
 	if ( !cg.demoPlayback && ( cg.predictedPlayerState.pm_type == PM_NORMAL || ( cg.predictedPlayerState.pm_type == PM_SPECTATOR && cg.showScores == qfalse ) ) ) {
 		CG_EventHandling( CGAME_EVENT_NONE );
 		trap_Key_SetCatcher( 0 );
-		return;
+		return qfalse;
 	}
 
 	//if (key == trap_Key_GetKey("teamMenu") || !Display_CaptureItem(cgs.cursorX, cgs.cursorY)) {
@@ -1998,6 +2083,8 @@ void CG_KeyEvent( int key, qboolean down ) {
 			cgs.capturedItem = Display_CaptureItem( cgs.cursorX, cgs.cursorY );
 		}
 	}
+
+	return qtrue;
 }
 
 // prevent centerview exploits

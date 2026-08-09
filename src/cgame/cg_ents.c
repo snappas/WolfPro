@@ -805,6 +805,7 @@ static void CG_Item( centity_t *cent ) {
 	gitem_t             *item;
 	qboolean hasStand, highlight;
 	float highlightFadeScale = 1.0f;
+	int itemIndex;
 
 	es = &cent->currentState;
 
@@ -813,23 +814,27 @@ static void CG_Item( centity_t *cent ) {
 
 	// (item index is stored in es->modelindex for item)
 
-	if ( es->modelindex >= bg_numItems ) {
-		CG_Error( "Bad item index %i on entity", es->modelindex );
+	// legacy rtcwPro/OSP demos recorded item indices from a bg_itemlist one
+	// entry shorter than ours (see CG_NDP_FixLegacyItemIndex)
+	itemIndex = CG_NDP_FixLegacyItemIndex( es->modelindex );
+
+	if ( itemIndex >= bg_numItems ) {
+		CG_Error( "Bad item index %i on entity", itemIndex );
 	}
 
 	// if set to invisible, skip
-	if ( !es->modelindex || ( es->eFlags & EF_NODRAW ) ) {
+	if ( !itemIndex || ( es->eFlags & EF_NODRAW ) ) {
 		return;
 	}
 
-	item = &bg_itemlist[ es->modelindex ];
+	item = &bg_itemlist[ itemIndex ];
 
 	if ( cg_simpleItems.integer && item->giType != IT_TEAM ) {
 		memset( &ent, 0, sizeof( ent ) );
 		ent.reType = RT_SPRITE;
 		VectorCopy( cent->lerpOrigin, ent.origin );
 		ent.radius = 14;
-		ent.customShader = cg_items[es->modelindex].icons[0];
+		ent.customShader = cg_items[itemIndex].icons[0];
 		ent.shaderRGBA[0] = 255;
 		ent.shaderRGBA[1] = 255;
 		ent.shaderRGBA[2] = 255;
@@ -885,7 +890,7 @@ static void CG_Item( centity_t *cent ) {
 			ent.nonNormalizedAxes = qtrue;
 
 		} else {                                // then default to laying it on it's side
-			if ( !cg_items[es->modelindex].models[2] ) {
+			if ( !cg_items[itemIndex].models[2] ) {
 				cent->lerpAngles[2] += 90;
 			}
 
@@ -926,16 +931,16 @@ static void CG_Item( centity_t *cent ) {
 							   // try to load it first, and if it fails, default to the itemlist model
 		ent.hModel = cgs.gameModels[ es->modelindex2 ];
 	} else {
-		if ( item->giType == IT_WEAPON && cg_items[es->modelindex].models[2] ) { // check if there's a specific model for weapon pickup placement
-			ent.hModel = cg_items[es->modelindex].models[2];
+		if ( item->giType == IT_WEAPON && cg_items[itemIndex].models[2] ) { // check if there's a specific model for weapon pickup placement
+			ent.hModel = cg_items[itemIndex].models[2];
 		} else if ( item->giType == IT_HEALTH || item->giType == IT_AMMO || item->giType == IT_POWERUP ) {
 			if ( es->density < ( 1 << 9 ) ) {  // (10 bits of data transmission for density)
-				ent.hModel = cg_items[es->modelindex].models[es->density];  // multi-state powerups store their state in 'density'
+				ent.hModel = cg_items[itemIndex].models[es->density];  // multi-state powerups store their state in 'density'
 			} else {
-				ent.hModel = cg_items[es->modelindex].models[0];
+				ent.hModel = cg_items[itemIndex].models[0];
 			}
 		} else {
-			ent.hModel = cg_items[es->modelindex].models[0];
+			ent.hModel = cg_items[itemIndex].models[0];
 		}
 	}
 
@@ -1852,6 +1857,87 @@ void CG_AdjustPositionForMover( const vec3_t in, int moverNum, int fromTime, int
 
 
 /*
+===============
+CG_AntilagShiftTime
+
+Absolute server time to evaluate other players at, matching what
+cg.snap->ps.clientNum's antilag hit resolution saw; -1 if no shift applies.
+===============
+*/
+static int CG_AntilagShiftTime( void ) {
+	int t0, t1, shiftTime;
+
+	if ( !cg.demoPlayback || !cg_antilagDemoView.integer || !cg.snap ) {
+		return -1;
+	}
+	if ( cgs.antilag != 2 ) {
+		return -1;
+	}
+
+	t0 = cg.snap->ps.commandTime;
+	if ( !cg.nextSnap ) {
+		return t0;
+	}
+	t1 = cg.nextSnap->ps.commandTime;
+	shiftTime = t0 + (int)( cg.frameInterpolation * ( t1 - t0 ) );
+
+	return shiftTime;
+}
+
+/*
+===============
+CG_AntilagLookup
+
+Finds the two antilagHistory samples (cg_snapshot.c) that sandwich atTime
+and linearly interpolates between them, mirroring G_TimeShiftClient's own
+sandwich-and-lerp logic (g_unlagged.c) so playback reconstructs the same
+position the server used for antilag hit resolution. Clamps to the oldest
+available sample if atTime predates all of them, the same way
+G_TimeShiftClient's own wrapped case grabs the earliest. Returns qfalse if
+there's no history yet (falls back to the normal interpolation below).
+===============
+*/
+static qboolean CG_AntilagLookup( centity_t *cent, int atTime, vec3_t outOrigin, vec3_t outAngles ) {
+	int i, newerIdx, olderIdx;
+	float frac;
+
+	if ( cent->antilagHistoryCount == 0 ) {
+		return qfalse;
+	}
+
+	newerIdx = cent->antilagHistoryHead;
+
+	if ( cent->antilagHistory[newerIdx].time <= atTime ) {
+		return qfalse;
+	}
+
+	for ( i = 1; i < cent->antilagHistoryCount; i++ ) {
+		olderIdx = ( newerIdx + CG_ANTILAG_HISTORY_SIZE - 1 ) % CG_ANTILAG_HISTORY_SIZE;
+		if ( cent->antilagHistory[olderIdx].time <= atTime ) {
+			if ( cent->antilagHistory[newerIdx].time == cent->antilagHistory[olderIdx].time ) {
+				frac = 0.0f;
+			} else {
+				frac = (float)( atTime - cent->antilagHistory[olderIdx].time ) /
+					   (float)( cent->antilagHistory[newerIdx].time - cent->antilagHistory[olderIdx].time );
+			}
+			outOrigin[0] = cent->antilagHistory[olderIdx].origin[0] + frac * ( cent->antilagHistory[newerIdx].origin[0] - cent->antilagHistory[olderIdx].origin[0] );
+			outOrigin[1] = cent->antilagHistory[olderIdx].origin[1] + frac * ( cent->antilagHistory[newerIdx].origin[1] - cent->antilagHistory[olderIdx].origin[1] );
+			outOrigin[2] = cent->antilagHistory[olderIdx].origin[2] + frac * ( cent->antilagHistory[newerIdx].origin[2] - cent->antilagHistory[olderIdx].origin[2] );
+			outAngles[0] = LerpAngle( cent->antilagHistory[olderIdx].angles[0], cent->antilagHistory[newerIdx].angles[0], frac );
+			outAngles[1] = LerpAngle( cent->antilagHistory[olderIdx].angles[1], cent->antilagHistory[newerIdx].angles[1], frac );
+			outAngles[2] = LerpAngle( cent->antilagHistory[olderIdx].angles[2], cent->antilagHistory[newerIdx].angles[2], frac );
+			return qtrue;
+		}
+		newerIdx = olderIdx;
+	}
+
+	VectorCopy( cent->antilagHistory[newerIdx].origin, outOrigin );
+	VectorCopy( cent->antilagHistory[newerIdx].angles, outAngles );
+
+	return qtrue;
+}
+
+/*
 =============================
 CG_InterpolateEntityPosition
 =============================
@@ -1874,8 +1960,19 @@ static void CG_InterpolateEntityPosition( centity_t *cent ) {
 
 	// this will linearize a sine or parabolic curve, but it is important
 	// to not extrapolate player positions if more recent data is available
-	BG_EvaluateTrajectory( &cent->currentState.pos, cg.snap->serverTime, current );
-	BG_EvaluateTrajectory( &cent->nextState.pos, cg.nextSnap->serverTime, next );
+	//
+	// trTime is ps->commandTime, not serverTime - evaluating via the decel
+	// curve here would drift; trBase alone is the real recorded position.
+	if ( cent->currentState.pos.trType == TR_LINEAR_STOP ) {
+		VectorCopy( cent->currentState.pos.trBase, current );
+	} else {
+		BG_EvaluateTrajectory( &cent->currentState.pos, cg.snap->serverTime, current );
+	}
+	if ( cent->nextState.pos.trType == TR_LINEAR_STOP ) {
+		VectorCopy( cent->nextState.pos.trBase, next );
+	} else {
+		BG_EvaluateTrajectory( &cent->nextState.pos, cg.nextSnap->serverTime, next );
+	}
 
 	cent->lerpOrigin[0] = current[0] + f * ( next[0] - current[0] );
 	cent->lerpOrigin[1] = current[1] + f * ( next[1] - current[1] );
@@ -1887,7 +1984,6 @@ static void CG_InterpolateEntityPosition( centity_t *cent ) {
 	cent->lerpAngles[0] = LerpAngle( current[0], next[0], f );
 	cent->lerpAngles[1] = LerpAngle( current[1], next[1], f );
 	cent->lerpAngles[2] = LerpAngle( current[2], next[2], f );
-
 }
 
 /*
@@ -1897,6 +1993,17 @@ CG_CalcEntityLerpPositions
 ===============
 */
 static void CG_CalcEntityLerpPositions( centity_t *cent ) {
+	int shiftTime;
+
+	// doesn't depend on cent->interpolate/cg.nextSnap - only on the ring
+	// CG_TransitionEntity fed; a real teleport already cleared it there.
+	shiftTime = CG_AntilagShiftTime();
+	if ( shiftTime >= 0 && cent->currentState.eType == ET_PLAYER &&
+		 cent->currentState.clientNum != cg.snap->ps.clientNum &&
+		 CG_AntilagLookup( cent, shiftTime, cent->lerpOrigin, cent->lerpAngles ) ) {
+		return;
+	}
+
 	if ( cent->interpolate && cent->currentState.pos.trType == TR_INTERPOLATE ) {
 		CG_InterpolateEntityPosition( cent );
 		return;
