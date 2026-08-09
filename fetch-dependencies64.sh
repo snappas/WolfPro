@@ -53,7 +53,11 @@ mv xz-${VER} xz
 cd $LIBLZMA_DIR
 mkdir build
 cd build
-cmake -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_NLS=OFF ..
+# WolfPro only ever uses the LZMA2 filter, HC4 match finder and CRC32 check
+# (see sv_wtvdemo.c / cl_wtvdemo.c) -- trimming the rest keeps liblzma's
+# filter-dispatch tables from pulling every BCJ/delta/matchfinder object into
+# the final binary.
+cmake -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF -DXZ_NLS=OFF -DXZ_THREADS=no -DXZ_ENCODERS="lzma1;lzma2" -DXZ_DECODERS="lzma1;lzma2" -DXZ_MATCH_FINDERS=hc4 -DXZ_CHECKS=crc32 -DXZ_MICROLZMA_ENCODER=OFF -DXZ_MICROLZMA_DECODER=OFF -DXZ_LZIP_DECODER=OFF ..
 make -j
 cp ../src/liblzma/api/lzma.h .
 cp -r ../src/liblzma/api/lzma .
