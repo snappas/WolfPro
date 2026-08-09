@@ -2698,6 +2698,77 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 }
 
 /*
+==============
+CG_AddSpectateViewWeapon
+
+Renders a classic-demo spectate target's held weapon at the camera;
+animation only reflects their broadcast EF_FIRING state (idle/attack).
+==============
+*/
+void CG_AddSpectateViewWeapon( centity_t *target ) {
+	refEntity_t hand;
+	weaponInfo_t *weapon;
+	playerState_t miniPs;
+	clientInfo_t *ci;
+	qboolean firing;
+	weapon_t weaponNum;
+	int weapAnim;
+	float fovOffset;
+
+	weaponNum = target->currentState.weapon;
+	if ( weaponNum <= WP_NONE ) {
+		return;
+	}
+
+	if ( CG_HideWeapon( weaponNum ) ) {
+		return;
+	}
+
+	if ( target->currentState.eFlags & EF_DEAD ) {
+		return;
+	}
+
+	CG_RegisterWeapon( weaponNum );
+	weapon = &cg_weapons[ weaponNum ];
+
+	// no raise/drop transition here, so a weapon swap would otherwise leave
+	// the lerp frame pointing at the previous weapon's animation table
+	if ( target->pe.weap.animation != &weapon->weapAnimations[ target->pe.weap.animationNumber & ~ANIM_TOGGLEBIT ] ) {
+		target->pe.weap.animation = NULL;
+	}
+
+	ci = &cgs.clientinfo[ target->currentState.clientNum ];
+
+	firing = (qboolean)( ( target->currentState.eFlags & EF_FIRING ) != 0 );
+	weapAnim = firing ? WEAP_ATTACK1 : WEAP_IDLE1;
+	CG_RunWeapLerpFrame( ci, weapon, &target->pe.weap, weapAnim, 1 );
+
+	memset( &hand, 0, sizeof( hand ) );
+	VectorCopy( cg.refdef.vieworg, hand.origin );
+	AxisCopy( cg.refdef.viewaxis, hand.axis );
+
+	// same fov/gun-offset compensation CG_AddViewWeapon applies, so the
+	// spectate weapon sits where it would at the viewer's own fov setting
+	fovOffset = ( cg_fov.integer > 90 ) ? -0.2 * ( cg_fov.integer - 90 ) : 0;
+	VectorMA( hand.origin, cg_gun_x.value, cg.refdef.viewaxis[0], hand.origin );
+	VectorMA( hand.origin, cg_gun_y.value, cg.refdef.viewaxis[1], hand.origin );
+	VectorMA( hand.origin, ( cg_gun_z.value + fovOffset ), cg.refdef.viewaxis[2], hand.origin );
+
+	hand.oldframe = target->pe.weap.oldFrame;
+	hand.frame    = target->pe.weap.frame;
+	hand.backlerp = target->pe.weap.backlerp;
+	hand.hModel   = weapon->handsModel;
+	hand.renderfx = RF_DEPTHHACK | RF_FIRST_PERSON | RF_MINLIGHT;
+
+	memset( &miniPs, 0, sizeof( miniPs ) );
+	miniPs.clientNum = target->currentState.clientNum;
+	miniPs.weapon = target->currentState.weapon;
+	miniPs.persistant[ PERS_TEAM ] = ci->team;
+
+	CG_AddPlayerWeapon( &hand, &miniPs, target );
+}
+
+/*
 ==============================================================================
 
 WEAPON SELECTION
