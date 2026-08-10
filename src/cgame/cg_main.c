@@ -406,6 +406,8 @@ vmCvar_t cg_compassY;
 vmCvar_t cg_lagometerX;
 vmCvar_t cg_lagometerY;
 
+vmCvar_t cg_hudStretch;
+
 vmCvar_t cg_drawCI;
 
 vmCvar_t cg_chatAlpha;
@@ -713,7 +715,7 @@ cvarTable_t cvarTable[] = {
 	{ &cl_guid, "cl_guid", NO_GUID, CVAR_ROM | CVAR_TEMP },
 
 	// team overlay
-	{ &cg_teamOverlayX, "cg_teamOverlayX", "640", CVAR_ARCHIVE },
+	{ &cg_teamOverlayX, "cg_teamOverlayX", "-1", CVAR_ARCHIVE },
 	{ &cg_teamOverlayY, "cg_teamOverlayY", "0", CVAR_ARCHIVE },
 	{ &cg_teamOverlayMaxLocationWidth, "cg_teamOverlayMaxLocationWidth", "20", CVAR_ARCHIVE }, 
 
@@ -739,8 +741,10 @@ cvarTable_t cvarTable[] = {
 	{ &cg_compassY, "cg_compassY", "420", CVAR_ARCHIVE },
 
 	// lagometer
-	{ &cg_lagometerX, "cg_lagometerX", "585", CVAR_ARCHIVE },
+	{ &cg_lagometerX, "cg_lagometerX", "-55", CVAR_ARCHIVE },
 	{ &cg_lagometerY, "cg_lagometerY", "340", CVAR_ARCHIVE },
+
+	{ &cg_hudStretch, "cg_hudStretch", "1", CVAR_ARCHIVE },
 
 	{ &cg_drawCI, "cg_drawCI", "1", CVAR_ARCHIVE },
 
@@ -872,6 +876,27 @@ void CG_setClientFlags(void) {
 }
 
 /*
+==============
+CG_UpdateScreenScale
+
+Recomputes the virtual-640-space -> real-pixel scale factors. Called once at
+init and every frame from CG_UpdateCvars so cg_hudStretch takes effect
+immediately without a vid_restart.
+==============
+*/
+void CG_UpdateScreenScale( void ) {
+	cgs.screenXScale = cgs.screenYScale = cgs.glconfig.vidHeight / 480.0f;
+
+	if ( cg_hudStretch.integer ) {
+		cgs.virtualWidth = 480.0f * cgs.glconfig.vidWidth / cgs.glconfig.vidHeight;
+		cgs.screenXBias = 0;
+	} else {
+		cgs.virtualWidth = 640.0f;
+		cgs.screenXBias = 0.5f * ( cgs.glconfig.vidWidth - cgs.glconfig.vidHeight * 640.0f / 480.0f );
+	}
+}
+
+/*
 =================
 CG_UpdateCvars
 =================
@@ -895,6 +920,8 @@ void CG_UpdateCvars( void ) {
 			}
 		}
 	}
+
+	CG_UpdateScreenScale();
 
 	// if force model changed
 	if ( forceModelModificationCount != cg_forceModel.modificationCount ) {
@@ -2957,8 +2984,7 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 
 	// get the rendering configuration from the client system
 	trap_GetGlconfig( &cgs.glconfig );
-	cgs.screenXScale = cgs.glconfig.vidWidth / 640.0;
-	cgs.screenYScale = cgs.glconfig.vidHeight / 480.0;
+	CG_UpdateScreenScale();
 
 	// get the gamestate from the client system
 	trap_GetGameState( &cgs.gameState );

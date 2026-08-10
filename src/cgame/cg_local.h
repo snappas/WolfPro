@@ -1564,6 +1564,7 @@ typedef struct {
 	float screenXScale;                 // derived from glconfig
 	float screenYScale;
 	float screenXBias;
+	float virtualWidth;                 // true right edge, in virtual-640-space units (>= 640 on widescreen)
 
 	int serverCommandSequence;              // reliable command stream counter
 	int processedSnapshotNum;            // the number of snapshots cgame has requested
@@ -1686,6 +1687,8 @@ typedef struct {
 	char* dumpStatsFileName;  // Name of file to dump stats
 	int dumpStatsTime;
 } cgs_t;
+
+#define CG_VIRTUAL_CENTER_X ( (int)( cgs.virtualWidth * 0.5f ) )
 
 //==============================================================================
 
@@ -1930,6 +1933,8 @@ extern vmCvar_t cg_compassY;
 extern vmCvar_t cg_lagometerX;
 extern vmCvar_t cg_lagometerY;
 
+extern vmCvar_t cg_hudStretch;
+
 extern vmCvar_t cg_drawCI;
 
 extern vmCvar_t cg_chatAlpha;
@@ -2037,6 +2042,8 @@ void CG_Concussive( centity_t *cent );
 // cg_drawtools.c
 //
 void CG_AdjustFrom640( float *x, float *y, float *w, float *h );
+void CG_UpdateScreenScale( void );
+float CG_ResolveScreenX( float value );
 void CG_FillRect( float x, float y, float width, float height, const float *color );
 void CG_HorizontalPercentBar( float x, float y, float width, float height, float percent );
 void CG_DrawMotd();

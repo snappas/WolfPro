@@ -37,13 +37,6 @@ Adjusted for resolution and screen aspect ratio
 ================
 */
 void CG_AdjustFrom640( float *x, float *y, float *w, float *h ) {
-#if 0
-	// adjust for wide screens
-	if ( cgs.glconfig.vidWidth * 480 > cgs.glconfig.vidHeight * 640 ) {
-		*x += 0.5 * ( cgs.glconfig.vidWidth - ( cgs.glconfig.vidHeight * 640 / 480 ) );
-	}
-#endif
-
 	// NERVE - SMF - hack to make images display properly in small view / limbo mode
 	if ( cg.limboMenu && cg.refdef.width ) {
 		float xscale = ( ( cg.refdef.width / cgs.screenXScale ) / 640.f );
@@ -53,14 +46,35 @@ void CG_AdjustFrom640( float *x, float *y, float *w, float *h ) {
 		( *y ) = ( *y ) * yscale + ( cg.refdef.y / cgs.screenYScale );
 		( *w ) *= xscale;
 		( *h ) *= yscale;
+
+		*x *= cgs.screenXScale;
+		*y *= cgs.screenYScale;
+		*w *= cgs.screenXScale;
+		*h *= cgs.screenYScale;
+		return;
 	}
 	// -NERVE - SMF
 
 	// scale for screen sizes
 	*x *= cgs.screenXScale;
+	*x += cgs.screenXBias;
 	*y *= cgs.screenYScale;
 	*w *= cgs.screenXScale;
 	*h *= cgs.screenYScale;
+}
+
+/*
+================
+CG_ResolveScreenX
+
+A cvar-driven X position: >= 0 is an absolute virtual-640-space X, unchanged
+from historical behavior. < 0 is a distance from the true right edge of the
+screen (cgs.virtualWidth), so HUD elements can hug the real edge on
+widescreen instead of the old fixed 640 boundary.
+================
+*/
+float CG_ResolveScreenX( float value ) {
+	return value >= 0 ? value : cgs.virtualWidth + value;
 }
 
 /*
