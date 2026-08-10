@@ -87,8 +87,7 @@ intptr_t vmMain(intptr_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2, i
 	case CG_LAST_ATTACKER:
 		return CG_LastAttacker();
 	case CG_KEY_EVENT:
-		CG_KeyEvent( arg0, arg1 );
-		return 0;
+		return CG_KeyEvent( arg0, arg1 );
 	case CG_MOUSE_EVENT:
 		cgDC.cursorx = cgs.cursorX;
 		cgDC.cursory = cgs.cursorY;
@@ -115,6 +114,9 @@ intptr_t vmMain(intptr_t command, intptr_t arg0, intptr_t arg1, intptr_t arg2, i
 		return 0;
 	case CG_NDP_END_ANALYSIS:
 		CG_NDP_EndAnalysis((char*)arg0, arg1, arg2, (qboolean)arg3);
+		return 0;
+	case CG_NDP_RESET_ANALYSIS:
+		CG_NDP_ResetAnalysis();
 		return 0;
 	case CG_IMGUI_UPDATE:
 		CG_ImGUI_Update();
@@ -212,6 +214,11 @@ vmCvar_t cg_reticles;
 vmCvar_t cg_reticleType;
 vmCvar_t cg_reticleBrightness;      //----(SA)	added
 vmCvar_t cg_thirdPerson;
+vmCvar_t cg_wtvFreecam;
+vmCvar_t cg_wtvFreecamSpeed;
+vmCvar_t cg_wtvFreecamSprintMultiplier;
+vmCvar_t cg_wtvActive;
+vmCvar_t cg_antilagDemoView;
 vmCvar_t cg_thirdPersonRange;
 vmCvar_t cg_thirdPersonAngle;
 vmCvar_t cg_stereoSeparation;
@@ -313,7 +320,6 @@ vmCvar_t cg_redlimbotime;
 vmCvar_t cg_bluelimbotime;
 
 vmCvar_t cg_autoReload;
-vmCvar_t cg_antilag;
 
 vmCvar_t cg_bloodDamageBlend;
 vmCvar_t cg_bloodFlash;
@@ -540,6 +546,11 @@ cvarTable_t cvarTable[] = {
 	{ &cg_thirdPersonRange, "cg_thirdPersonRange", "80", CVAR_CHEAT }, // JPW NERVE per atvi req
 	{ &cg_thirdPersonAngle, "cg_thirdPersonAngle", "0", CVAR_CHEAT },
 	{ &cg_thirdPerson, "cg_thirdPerson", "0", CVAR_CHEAT }, // JPW NERVE per atvi req
+	{ &cg_wtvFreecam, "cg_wtvFreecam", "0", CVAR_CHEAT },
+	{ &cg_wtvFreecamSpeed, "cg_wtvFreecamSpeed", "480", CVAR_ARCHIVE },
+	{ &cg_wtvFreecamSprintMultiplier, "cg_wtvFreecamSprintMultiplier", "2.5", CVAR_ARCHIVE },
+	{ &cg_wtvActive, "cg_wtvActive", "0", CVAR_ROM }, // set by the engine when a WTV recording is playing
+	{ &cg_antilagDemoView, "cg_antilagDemoView", "1", CVAR_ARCHIVE },
 	{ &cg_teamChatTime, "cg_teamChatTime", "8000", CVAR_ARCHIVE  },
 	{ &cg_teamChatHeight, "cg_teamChatHeight", "8", CVAR_ARCHIVE  },
 	{ &cg_forceModel, "", "0", CVAR_ARCHIVE  },                           // DHM - Nerve
@@ -638,8 +649,6 @@ cvarTable_t cvarTable[] = {
 	{ &cg_showAIState, "cg_showAIState", "0", CVAR_CHEAT},
 
 	{ &cg_autoReload, "cg_autoReload", "1", CVAR_ARCHIVE },
-
-	{ &cg_antilag, "cg_antilag", "1", CVAR_ARCHIVE },
 
 	{ &cg_bloodDamageBlend, "cg_bloodDamageBlend", "1.0", CVAR_ARCHIVE },
 	{ &cg_bloodFlash, "cg_bloodFlash", "1.0", CVAR_ARCHIVE },
@@ -836,22 +845,20 @@ void CG_setClientFlags(void) {
 	}
 
 	cg.pmext.bAutoReload = (cg_autoReload.integer > 0);
-	trap_Cvar_Set("cg_uinfo", va("%d %d %d %d %d %d %d %s",
-		
+	trap_Cvar_Set("cg_uinfo", va("%d %d %d %d %d %d %s",
+
 
 		// Timenudge
 		int_cl_timenudge.integer,
 		// MaxPackets
 		int_cl_maxpackets.integer,
-		
+
 		// // GUID
 		// str_cl_guid.string,
-		// Antilag
-		cg_antilag.integer,
 		// hitsounds
 		cg_hitsounds.integer,
 		cg_hitsoundBodyStyle.integer,
-		cg_hitsoundHeadStyle.integer, 
+		cg_hitsoundHeadStyle.integer,
 		// Client Flags
 		(
 			((cg_autoReload.integer > 0) ? CGF_AUTORELOAD : 0) |
@@ -880,9 +887,9 @@ void CG_UpdateCvars( void ) {
 		if (cv->modificationCount != cv->vmCvar->modificationCount) {
 			cv->modificationCount = cv->vmCvar->modificationCount;
 
-			if (cv->vmCvar == &cg_autoAction || cv->vmCvar == &cg_autoReload || cv->vmCvar == &cg_antilag ||
+			if (cv->vmCvar == &cg_autoAction || cv->vmCvar == &cg_autoReload ||
 				cv->vmCvar == &int_cl_timenudge || cv->vmCvar == &int_cl_maxpackets ||
-				cv->vmCvar == &cg_autoactivate || cv->vmCvar == &cg_predictItems || cv->vmCvar == &cg_hitsounds || 
+				cv->vmCvar == &cg_autoactivate || cv->vmCvar == &cg_predictItems || cv->vmCvar == &cg_hitsounds ||
 				cv->vmCvar == &cg_hitsoundBodyStyle || cv->vmCvar == &cg_hitsoundHeadStyle) {
 				setFlags = qtrue;
 			}
@@ -1794,6 +1801,13 @@ static void CG_RegisterGraphics( void ) {
 	cgs.media.exclamationIcon = trap_R_RegisterShaderNoMip("gfx/2d/treasure");
 	cgs.media.skullIcon = trap_R_RegisterShaderNoMip("gfx/2d/multi_dead");
 
+	cgs.media.demoBtnSkipBack = trap_R_RegisterShaderNoMip("gfx/2d/skipbackward");
+	cgs.media.demoBtnRewind = trap_R_RegisterShaderNoMip("gfx/2d/rewind");
+	cgs.media.demoBtnPlay = trap_R_RegisterShaderNoMip("gfx/2d/play");
+	cgs.media.demoBtnPlayPause = trap_R_RegisterShaderNoMip("gfx/2d/playpause");
+	cgs.media.demoBtnFastForward = trap_R_RegisterShaderNoMip("gfx/2d/fastforward");
+	cgs.media.demoBtnSkipForward = trap_R_RegisterShaderNoMip("gfx/2d/skipforward");
+
 	memset( cg_items, 0, sizeof( cg_items ) );
 	memset( cg_weapons, 0, sizeof( cg_weapons ) );
 
@@ -1917,7 +1931,6 @@ static void CG_RegisterGraphics( void ) {
 	}
 	// -NERVE - SMF
 
-//	cgs.media.cursor = trap_R_RegisterShaderNoMip( "menu/art/3_cursor2" );
 	cgs.media.sizeCursor = trap_R_RegisterShaderNoMip( "ui_mp/assets/sizecursor.tga" );
 	cgs.media.selectCursor = trap_R_RegisterShaderNoMip( "ui_mp/assets/selectcursor.tga" );
 	CG_LoadingString( " - game media done" );
@@ -2614,6 +2627,7 @@ void CG_LoadExtensions(void) {
 		GET_TRAP(trap_CNQ3_NDP_ReadUntil);
 		GET_TRAP(trap_CNQ3_NDP_StartVideo);
 		GET_TRAP(trap_CNQ3_NDP_StopVideo);
+		GET_TRAP(trap_CNQ3_NDP_ResetAnalysis);
 
 		if (rtcwPro_ext.trap_CNQ3_NDP_Enable &&
 			rtcwPro_ext.trap_CNQ3_NDP_Seek &&
@@ -2621,6 +2635,12 @@ void CG_LoadExtensions(void) {
 			rtcwPro_ext.trap_CNQ3_NDP_StartVideo &&
 			rtcwPro_ext.trap_CNQ3_NDP_StopVideo) {
 			cg.ndpDemoEnabled = trap_CNQ3_NDP_Enable();
+			// Optional: an engine that predates this trap just never gets
+			// its analysis arrays reset on a WTV follow-switch — demo
+			// playback itself doesn't depend on it.
+			if (cg.ndpDemoEnabled && rtcwPro_ext.trap_CNQ3_NDP_ResetAnalysis) {
+				trap_CNQ3_NDP_ResetAnalysis();
+			}
 		}
 		else {
 			cg.ndpDemoEnabled = qfalse;
@@ -2914,6 +2934,8 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 	cgs.animScriptData.playSound = CG_SoundPlayIndexedScript;
 
 	cg.clientNum = clientNum;       // NERVE - SMF - TA merge
+	cg.wtvSpectateClientNum = -1;
+	cg.wtvSpectateSmoothClientNum = -1;
 
 	cgs.processedSnapshotNum = serverMessageNum;
 	cgs.serverCommandSequence = serverCommandSequence;
@@ -3047,13 +3069,7 @@ void CG_Shutdown( void ) {
 	// some mods may need to do cleanup work here,
 	// like closing files or archiving session data
 	if (cg.demoPlayback && cg.ndpDemoEnabled) {
-		ndp_myKillsSize = 0;
-		ndp_alliesWinsSize = 0;
-		ndp_axisWinsSize = 0;
-		ndp_round1EndSize = 0;
-		ndp_round2EndSize = 0;
-		ndp_docDropSize = 0;
-		ndp_docPickupSize = 0;
+		CG_NDP_ResetAnalysis();
 		SaveSession();
 	}
 }

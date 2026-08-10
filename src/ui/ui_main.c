@@ -3439,11 +3439,17 @@ static void UI_LoadMovies() {
 /*
 ===============
 UI_LoadDemos
+
+Entry 0 is always the current mod, listed via the always-available
+current-search-path traps -- safe on every engine build, extension or not.
+Remaining entries (one per other installed mod that has a demos/ folder)
+only appear when uiModFileListAvailable is set (see UI_LoadExtensions).
 ===============
 */
 static void UI_LoadDemos() {
 	char demolist[30000];
 	char demoExt[32];
+	char demoExtDotted[32];
 	char    *demoname;
 	char  demoPathName[300];
 	int i, len, j;
@@ -3453,24 +3459,29 @@ static void UI_LoadDemos() {
 	int		dirlen;
 	char*	dirptr;
 	char	game[60];
+	char	modlist[2048];
+	char	*modptr;
+	char	modName[64];
+	int		modLen, descLen, numMods, fileCount;
+	int		dirIdx;
 
 	Com_sprintf( demoExt, sizeof( demoExt ), "dm_%d", (int)trap_Cvar_VariableValue( "protocol" ) );
 
-	uiInfo.demoCount = trap_FS_GetFileList( "demos", demoExt, demolist, sizeof( demolist ) );
-	if ( uiInfo.demoCount > MAX_DEMOS ) {
-		uiInfo.demoCount = MAX_DEMOS;
+	uiInfo.demoModFileCount[0] = trap_FS_GetFileList( "demos", demoExt, demolist, sizeof( demolist ) );
+	if ( uiInfo.demoModFileCount[0] > MAX_DEMOS ) {
+		uiInfo.demoModFileCount[0] = MAX_DEMOS;
 	}
 
-	Com_sprintf( demoExt, sizeof( demoExt ), ".dm_%d", (int)trap_Cvar_VariableValue( "protocol" ) );
+	Com_sprintf( demoExtDotted, sizeof( demoExtDotted ), ".dm_%d", (int)trap_Cvar_VariableValue( "protocol" ) );
 
 	demoname = demolist;
-	for ( i = 0; i < uiInfo.demoCount; i++, demoname += len + 1 ) {
+	for ( i = 0; i < uiInfo.demoModFileCount[0]; i++, demoname += len + 1 ) {
 		len = strlen( demoname );
-		if ( !Q_stricmp( demoname +  len - strlen( demoExt ), demoExt ) ) {
-			demoname[len - strlen( demoExt )] = '\0';
+		if ( !Q_stricmp( demoname +  len - strlen( demoExtDotted ), demoExtDotted ) ) {
+			demoname[len - strlen( demoExtDotted )] = '\0';
 		}
 		Com_sprintf( demoPathName, sizeof( demoPathName ), "%s", demoname );
-		uiInfo.demoList[i] = String_Alloc( demoPathName );
+		uiInfo.demoModFiles[0][i] = String_Alloc( demoPathName );
 	}
 
 	trap_Cvar_VariableStringBuffer( "fs_game", game, sizeof( game ) );
@@ -3480,7 +3491,7 @@ static void UI_LoadDemos() {
 	dirptr = dirlist;
 
 	// iterate over all sub-directories
-	for ( i = 0; i < numdirs && uiInfo.demoCount < MAX_DEMOS; i++, dirptr += dirlen + 1 ) {
+	for ( i = 0; i < numdirs && uiInfo.demoModFileCount[0] < MAX_DEMOS; i++, dirptr += dirlen + 1 ) {
 		dirlen = strlen( dirptr );
 
 		if ( dirlen && dirptr[dirlen - 1] == '/' ) {
@@ -3492,18 +3503,134 @@ static void UI_LoadDemos() {
 		}
 
 		// iterate all demo files in directory
-		numfiles = trap_FS_GetFileList( va( "../%s/demos/%s", game, dirptr ), demoExt, demolist, sizeof( demolist ) );
+		numfiles = trap_FS_GetFileList( va( "../%s/demos/%s", game, dirptr ), demoExtDotted, demolist, sizeof( demolist ) );
 		demoname = demolist;
-		for ( j = 0; j < numfiles && uiInfo.demoCount < MAX_DEMOS; j++, demoname += len + 1 ) {
+		for ( j = 0; j < numfiles && uiInfo.demoModFileCount[0] < MAX_DEMOS; j++, demoname += len + 1 ) {
 			len = strlen( demoname );
-			if ( !Q_stricmp( demoname +  len - strlen( demoExt ), demoExt ) ) {
-				demoname[len - strlen( demoExt )] = '\0';
+			if ( !Q_stricmp( demoname +  len - strlen( demoExtDotted ), demoExtDotted ) ) {
+				demoname[len - strlen( demoExtDotted )] = '\0';
 			}
 			Com_sprintf( demoPathName, sizeof( demoPathName ), "%s/%s", dirptr, demoname );
-			uiInfo.demoList[uiInfo.demoCount] = String_Alloc( demoPathName );
-			uiInfo.demoCount++;
+			uiInfo.demoModFiles[0][uiInfo.demoModFileCount[0]] = String_Alloc( demoPathName );
+			uiInfo.demoModFileCount[0]++;
 		}
 	}
+
+	uiInfo.demoModNames[0] = String_Alloc( game );
+	uiInfo.demoModCount = 1;
+	uiInfo.demoModIndex = 0;
+	uiInfo.demoIndex = 0;
+
+	// keep the listbox widgets' own cursor/scroll state in sync -- they
+	// persist across menu close/reopen even though the state above resets
+	Menu_SetFeederSelection( NULL, FEEDER_DEMOS, 0, "demos_list" );
+	Menu_SetFeederSelection( NULL, FEEDER_DEMO_MODS, 0, "demos_list" );
+
+	if ( !uiModFileListAvailable ) {
+		return;
+	}
+
+	numMods = trap_FS_GetFileList( "$modlist", "", modlist, sizeof( modlist ) );
+	modptr = modlist;
+	for ( i = 0; i < numMods && uiInfo.demoModCount < MAX_DEMO_MODS; i++ ) {
+		modLen = strlen( modptr ) + 1;
+		Q_strncpyz( modName, modptr, sizeof( modName ) );
+		descLen = strlen( modptr + modLen ) + 1;
+		modptr += modLen + descLen;
+
+		if ( !Q_stricmp( modName, game ) ) {
+			continue; // already covered by entry 0 above
+		}
+
+		fileCount = trap_FS_GetModFileList( modName, "demos", demoExt, demolist, sizeof( demolist ) );
+		if ( fileCount > MAX_DEMOS ) {
+			fileCount = MAX_DEMOS;
+		}
+
+		demoname = demolist;
+		for ( j = 0; j < fileCount; j++, demoname += len + 1 ) {
+			len = strlen( demoname );
+			if ( !Q_stricmp( demoname +  len - strlen( demoExtDotted ), demoExtDotted ) ) {
+				demoname[len - strlen( demoExtDotted )] = '\0';
+			}
+			Com_sprintf( demoPathName, sizeof( demoPathName ), "%s", demoname );
+			uiInfo.demoModFiles[uiInfo.demoModCount][j] = String_Alloc( demoPathName );
+		}
+		uiInfo.demoModFileCount[uiInfo.demoModCount] = fileCount;
+
+		// same one-level subdirectory recursion the current mod's own scan
+		// already does above, just sourced from the other mod's raw listing
+		numdirs = trap_FS_GetModFileList( modName, "demos", "/", dirlist, sizeof( dirlist ) );
+		dirptr = dirlist;
+		for ( dirIdx = 0; dirIdx < numdirs && uiInfo.demoModFileCount[uiInfo.demoModCount] < MAX_DEMOS; dirIdx++, dirptr += dirlen + 1 ) {
+			dirlen = strlen( dirptr );
+
+			if ( dirlen && dirptr[dirlen - 1] == '/' ) {
+				dirptr[dirlen - 1] = '\0';
+			}
+
+			if ( !strcmp( dirptr, "." ) || !strcmp( dirptr, ".." ) ) {
+				continue;
+			}
+
+			numfiles = trap_FS_GetModFileList( modName, va( "demos/%s", dirptr ), demoExtDotted, demolist, sizeof( demolist ) );
+			demoname = demolist;
+			for ( j = 0; j < numfiles && uiInfo.demoModFileCount[uiInfo.demoModCount] < MAX_DEMOS; j++, demoname += len + 1 ) {
+				len = strlen( demoname );
+				if ( !Q_stricmp( demoname +  len - strlen( demoExtDotted ), demoExtDotted ) ) {
+					demoname[len - strlen( demoExtDotted )] = '\0';
+				}
+				Com_sprintf( demoPathName, sizeof( demoPathName ), "%s/%s", dirptr, demoname );
+				uiInfo.demoModFiles[uiInfo.demoModCount][uiInfo.demoModFileCount[uiInfo.demoModCount]] = String_Alloc( demoPathName );
+				uiInfo.demoModFileCount[uiInfo.demoModCount]++;
+			}
+		}
+
+		if ( uiInfo.demoModFileCount[uiInfo.demoModCount] <= 0 ) {
+			continue;
+		}
+
+		uiInfo.demoModNames[uiInfo.demoModCount] = String_Alloc( modName );
+		uiInfo.demoModCount++;
+	}
+}
+
+/*
+===============
+UI_LoadWTVDemos
+
+Lists <fs_game>/wtvdemos/*.wtv, current mod only (WTV recordings aren't
+browsed cross-mod, see the design spec's non-goals). Skips continuation
+fragments (*.partN.wtv) and strips the trailing .wtv from stored names --
+playwtv/CL_WTV_LoadRound append that extension themselves.
+===============
+*/
+static void UI_LoadWTVDemos( void ) {
+	char demolist[30000];
+	char *demoname;
+	int i, len, count;
+
+	count = trap_FS_GetFileList( "wtvdemos", ".wtv", demolist, sizeof( demolist ) );
+	if ( count > MAX_DEMOS ) {
+		count = MAX_DEMOS;
+	}
+
+	uiInfo.wtvDemoCount = 0;
+	demoname = demolist;
+	for ( i = 0; i < count; i++, demoname += len + 1 ) {
+		len = strlen( demoname );
+		if ( strstr( demoname, ".part" ) ) {
+			continue;
+		}
+		if ( len > 4 && !Q_stricmp( demoname + len - 4, ".wtv" ) ) {
+			demoname[len - 4] = '\0';
+		}
+		uiInfo.wtvDemoList[uiInfo.wtvDemoCount] = String_Alloc( demoname );
+		uiInfo.wtvDemoCount++;
+	}
+
+	uiInfo.wtvDemoIndex = 0;
+	Menu_SetFeederSelection( NULL, FEEDER_WTVDEMOS, 0, "demos_list" );
 }
 
 
@@ -4440,6 +4567,8 @@ static void UI_RunMenuScript( char **args ) {
 			}
 		} else if ( Q_stricmp( name, "LoadDemos" ) == 0 ) {
 			UI_LoadDemos();
+		} else if ( Q_stricmp( name, "LoadWTVDemos" ) == 0 ) {
+			UI_LoadWTVDemos();
 		} else if ( Q_stricmp( name, "LoadMovies" ) == 0 ) {
 			UI_LoadMovies();
 
@@ -4465,7 +4594,20 @@ static void UI_RunMenuScript( char **args ) {
 			trap_Cvar_Set( "fs_game", uiInfo.modList[uiInfo.modIndex].modName );
 			trap_Cmd_ExecuteText( EXEC_APPEND, "vid_restart;" );
 		} else if ( Q_stricmp( name, "RunDemo" ) == 0 ) {
-			trap_Cmd_ExecuteText( EXEC_APPEND, va( "demo %s\n", uiInfo.demoList[uiInfo.demoIndex] ) );
+			if ( uiInfo.demoModIndex >= 0 && uiInfo.demoModIndex < uiInfo.demoModCount &&
+				uiInfo.demoIndex >= 0 && uiInfo.demoIndex < uiInfo.demoModFileCount[uiInfo.demoModIndex] ) {
+				// entry 0 is the synthetic "CURRENT" label, not a real mod
+				// directory name -- only pass a mod name for the others
+				if ( uiInfo.demoModIndex == 0 ) {
+					trap_Cmd_ExecuteText( EXEC_APPEND, va( "demo \"%s\"\n", uiInfo.demoModFiles[uiInfo.demoModIndex][uiInfo.demoIndex] ) );
+				} else {
+					trap_Cmd_ExecuteText( EXEC_APPEND, va( "demo \"%s\" \"%s\"\n", uiInfo.demoModFiles[uiInfo.demoModIndex][uiInfo.demoIndex], uiInfo.demoModNames[uiInfo.demoModIndex] ) );
+				}
+			}
+		} else if ( Q_stricmp( name, "RunWTVDemo" ) == 0 ) {
+			if ( uiInfo.wtvDemoIndex >= 0 && uiInfo.wtvDemoIndex < uiInfo.wtvDemoCount ) {
+				trap_Cmd_ExecuteText( EXEC_APPEND, va( "playwtv \"%s\" 0\n", uiInfo.wtvDemoList[uiInfo.wtvDemoIndex] ) );
+			}
 		} else if ( Q_stricmp( name, "Quake3" ) == 0 ) {
 			trap_Cvar_Set( "fs_game", "" );
 			trap_Cmd_ExecuteText( EXEC_APPEND, "vid_restart;" );
@@ -5682,7 +5824,14 @@ static int UI_FeederCount( float feederID ) {
 	} else if ( feederID == FEEDER_MODS ) {
 		return uiInfo.modCount;
 	} else if ( feederID == FEEDER_DEMOS ) {
-		return uiInfo.demoCount;
+		if ( uiInfo.demoModIndex >= 0 && uiInfo.demoModIndex < uiInfo.demoModCount ) {
+			return uiInfo.demoModFileCount[uiInfo.demoModIndex];
+		}
+		return 0;
+	} else if ( feederID == FEEDER_DEMO_MODS ) {
+		return uiInfo.demoModCount;
+	} else if ( feederID == FEEDER_WTVDEMOS ) {
+		return uiInfo.wtvDemoCount;
 		// NERVE - SMF
 	} else if ( feederID == FEEDER_PICKSPAWN ) {
 		return uiInfo.spawnCount;
@@ -5883,8 +6032,17 @@ static const char *UI_FeederItemText( float feederID, int index, int column, qha
 			return uiInfo.savegameList[index].name;
 		}
 	} else if ( feederID == FEEDER_DEMOS ) {
-		if ( index >= 0 && index < uiInfo.demoCount ) {
-			return uiInfo.demoList[index];
+		if ( uiInfo.demoModIndex >= 0 && uiInfo.demoModIndex < uiInfo.demoModCount &&
+			index >= 0 && index < uiInfo.demoModFileCount[uiInfo.demoModIndex] ) {
+			return uiInfo.demoModFiles[uiInfo.demoModIndex][index];
+		}
+	} else if ( feederID == FEEDER_DEMO_MODS ) {
+		if ( index >= 0 && index < uiInfo.demoModCount ) {
+			return uiInfo.demoModNames[index];
+		}
+	} else if ( feederID == FEEDER_WTVDEMOS ) {
+		if ( index >= 0 && index < uiInfo.wtvDemoCount ) {
+			return uiInfo.wtvDemoList[index];
 		}
 	}
 	// NERVE - SMF
@@ -6041,6 +6199,12 @@ static void UI_FeederSelection( float feederID, int index ) {
 		uiInfo.savegameIndex = index;
 	} else if ( feederID == FEEDER_DEMOS ) {
 		uiInfo.demoIndex = index;
+	} else if ( feederID == FEEDER_DEMO_MODS ) {
+		uiInfo.demoModIndex = index;
+		uiInfo.demoIndex = 0;
+		Menu_SetFeederSelection( NULL, FEEDER_DEMOS, 0, NULL );
+	} else if ( feederID == FEEDER_WTVDEMOS ) {
+		uiInfo.wtvDemoIndex = index;
 		// NERVE - SMF
 	} else if ( feederID == FEEDER_PICKSPAWN ) {
 		switch(index){
@@ -6611,6 +6775,48 @@ static void UI_BuildQ3Model_List( void )
 }
 */
 
+#define GET_UI_TRAP( Name ) \
+	do { \
+		rtcwPro_uiExt.Name = 0; \
+		if ( trap_GetValue( extValue, sizeof( extValue ), #Name ) && \
+			sscanf( extValue, "%d", &syscallId ) == 1 && \
+			syscallId != 0 ) { \
+			rtcwPro_uiExt.Name = syscallId; \
+		} \
+	} while ( 0 )
+
+qboolean uiModFileListAvailable = qfalse;
+
+/*
+=================
+UI_LoadExtensions
+
+Probes the engine for extension traps this UI module can optionally use.
+An engine built before a given trap existed just never reports it here --
+callers must always be prepared for uiModFileListAvailable to be qfalse.
+=================
+*/
+void UI_LoadExtensions( void ) {
+	uiExt_t rtcwPro_uiExt;
+	char buf[32];
+
+	trap_Cvar_VariableStringBuffer( "//trap_UI_GetValue", buf, sizeof( buf ) );
+
+	if ( Q_atoi( buf ) == 0 ) {
+		uiModFileListAvailable = qfalse;
+		return;
+	}
+
+	{
+		char extValue[11];
+		int syscallId;
+
+		GET_UI_TRAP( trap_FS_GetModFileList );
+
+		uiModFileListAvailable = ( rtcwPro_uiExt.trap_FS_GetModFileList != 0 );
+	}
+}
+
 /*
 =================
 UI_Init
@@ -6622,6 +6828,7 @@ void _UI_Init( qboolean inGameLoad ) {
 
 	UI_RegisterCvars();
 	UI_InitMemory();
+	UI_LoadExtensions();
 
 	trap_Cvar_Set( "ui_menuFiles", "ui_mp/menus.txt" ); // NERVE - SMF - we need to hardwire for wolfMP
 

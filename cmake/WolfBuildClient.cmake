@@ -20,16 +20,16 @@ endif()
 
 #todo add debug macro in debug build
 if(WIN32)
-	set(CMAKE_C_FLAGS_DEBUG "/DEBUG /Zi")
-	set(CMAKE_C_FLAGS_RELEASE "/Zi /DEBUG")
 	set(CLANGRT "C:/Program Files/LLVM/lib/clang/19/lib/windows")
-	if(ENABLE_ASAN)
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF /O0 -g /LIBPATH:${CLANGRT} /EHsc")
-	else()
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
-	endif()
-	set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} /DEBUG /OPT:REF /OPT:ICF ")
 	add_executable(${wolfmp_target} WIN32 ${COMMON_SRC} ${CLIENT_SRC})
+	# NOTE: these used to be set(CMAKE_EXE_LINKER_FLAGS_RELEASE ...) inside this
+	# function, which is function-local and never reached the directory scope CMake
+	# reads at generate time -- silently a no-op, so /OPT:REF/ICF never actually
+	# applied and this target linked with MSVC's /DEBUG-implied /OPT:NOREF default.
+	target_link_options(${wolfmp_target} PRIVATE /OPT:REF /OPT:ICF)
+	if(ENABLE_ASAN)
+		target_link_options(${wolfmp_target} PRIVATE /O0 -g /LIBPATH:${CLANGRT} /EHsc)
+	endif()
 	if(CMAKE_BUILD_TYPE MATCHES "Debug")
 			set_property(TARGET ${wolfmp_target} PROPERTY
              MSVC_RUNTIME_LIBRARY "MultiThreadedDebug")
@@ -52,6 +52,7 @@ if(IS_VULKAN)
 		engine_libraries
 		os_libraries
 		${CURL_LIBRARIES}
+		${LZMA_LIBRARIES}
 	)
 	target_link_libraries(${wolfmp_target} cimgui cimplot)
 else()
@@ -60,13 +61,14 @@ else()
 	engine_libraries
 	os_libraries
 	${CURL_LIBRARIES}
+	${LZMA_LIBRARIES}
 	)
 endif()
 if(ENABLE_ASAN)
 target_link_options(${wolfmp_target} PRIVATE /wholearchive:clang_rt.asan-x86_64.lib)
 endif()
 
-target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR})
+target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})
 
 message(STATUS CMAKE_BUILD_TYPE)
 

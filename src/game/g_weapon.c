@@ -2170,15 +2170,7 @@ void LinkPlayerBodies( gentity_t *skip ) {
 
 
 qboolean CheckAntilagConditions(gentity_t *ent){
-	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
-	{
-		if(g_lowPingAntilag.integer == 0 && ent->client->ps.ping <= g_lowPingAntilagThreshold.integer){
-			return qfalse;
-		}else{
-			return qtrue;
-		}
-	}
-	return qfalse;
+	return ent->client && g_antilag.integer == 2;
 }
 
 /*
@@ -2550,8 +2542,7 @@ void VenomPattern( vec3_t origin, vec3_t origin2, int seed, gentity_t *ent ) {
 	PerpendicularVector( right, forward );
 	CrossProduct( forward, right, up );
 	
-	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2) 
-	{
+	if ( CheckAntilagConditions( ent ) ) {
 		G_DoTimeShiftFor(ent);
 	}
 
@@ -2568,8 +2559,7 @@ void VenomPattern( vec3_t origin, vec3_t origin2, int seed, gentity_t *ent ) {
 		}
 	}
 
-	if (ent->client && (ent->client->pers.antilag) && g_antilag.integer == 2)
-	{
+	if ( CheckAntilagConditions( ent ) ) {
 		G_UndoTimeShiftFor(ent);
 	}
 }

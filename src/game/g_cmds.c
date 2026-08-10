@@ -30,20 +30,20 @@ If you have questions concerning this license or the applicable additional terms
 #include "rtcwbot_interface.h"
 /*
 ==================
-DeathmatchScoreboardMessage
+G_BuildScoreboardMessage
 
+Per-player score entries as seen by viewerTeam. string is caller-owned
+char[1400]; returns the player count written.
 ==================
 */
-void DeathmatchScoreboardMessage( gentity_t *ent ) {
+int G_BuildScoreboardMessage( team_t viewerTeam, char *string ) {
 	char entry[1024];
-	char string[1400];
 	int stringlength;
 	int i, j;
 	gclient_t   *cl;
 	int numSorted;
 	int scoreFlags;
 
-	// send the latest information on all clients
 	string[0] = 0;
 	stringlength = 0;
 	scoreFlags = 0;
@@ -62,7 +62,7 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 		cl = &level.clients[level.sortedClients[i]];
 
 		// NERVE - SMF - if on same team, send across player class
-		if ( cl->ps.persistant[PERS_TEAM] == ent->client->ps.persistant[PERS_TEAM] ) {
+		if ( cl->ps.persistant[PERS_TEAM] == viewerTeam ) {
 			playerClass = cl->ps.stats[STAT_PLAYER_CLASS];
 		} else {
 			playerClass = 0;
@@ -91,7 +91,22 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 		stringlength += j;
 	}
 
-	trap_SendServerCommand( ent - g_entities, va( "scores %i %i %i%s", i,
+	return i;
+}
+
+/*
+==================
+DeathmatchScoreboardMessage
+
+==================
+*/
+void DeathmatchScoreboardMessage( gentity_t *ent ) {
+	char string[1400];
+	int count;
+
+	count = G_BuildScoreboardMessage( ent->client->ps.persistant[PERS_TEAM], string );
+
+	trap_SendServerCommand( ent - g_entities, va( "scores %i %i %i%s", count,
 												  level.teamScores[TEAM_RED], level.teamScores[TEAM_BLUE],
 												  string ) );
 }

@@ -151,9 +151,25 @@ if(CURL_FOUND)
 	message(STATUS "CURL library: " ${CURL_LIBRARY})
 endif()
 
+find_package(LZMA)
+if(LZMA_FOUND)
+	set(CMAKE_REQUIRED_INCLUDES ${LZMA_INCLUDE_DIR})
+	set(CMAKE_REQUIRED_LIBRARIES ${LZMA_LIBRARY})
+	message(STATUS "LZMA Include dir: " ${LZMA_INCLUDE_DIR})
+	message(STATUS "LZMA library: " ${LZMA_LIBRARY})
+	# We link the static lzma.lib; without this, lzma.h declares its API
+	# __declspec(dllimport) on MSVC and every lzma_* symbol fails to link.
+	if(WIN32)
+		add_definitions(-DLZMA_API_STATIC)
+	endif()
+endif()
+
 add_library(cimgui STATIC ${RENDERER_CIMGUI_FILES})
 set_property(TARGET cimgui PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(cimgui PRIVATE src/cimgui)
+if(MSVC)
+	target_compile_options(cimgui PRIVATE /Gy)
+endif()
 
 set_target_properties(cimgui PROPERTIES
 	COMPILE_DEFINITIONS "${WOLF_COMPILE_DEF}"
@@ -161,9 +177,19 @@ set_target_properties(cimgui PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${WOLF_OUTPUT_DIR}"
 	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${WOLF_OUTPUT_DIR}"
 )
+# Without this, every CIMGUI_API function is __declspec(dllexport) (cimgui.h's
+# default when CIMGUI_NO_EXPORT isn't set) even though this links statically into
+# the .exe -- dllexport'd symbols are permanent linker GC roots, so /OPT:REF can
+# never discard the ~800 unused Plot*<T> wrapper variants WolfPro never calls.
+# Must come after set_target_properties(... COMPILE_DEFINITIONS ...) above,
+# which does a hard SET and would otherwise wipe this back out.
+target_compile_definitions(cimgui PUBLIC CIMGUI_NO_EXPORT)
 
 add_library(cimplot STATIC ${RENDERER_CIMPLOT_FILES})
 set_property(TARGET cimplot PROPERTY POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+	target_compile_options(cimplot PRIVATE /Gy)
+endif()
 target_include_directories(cimplot PRIVATE src/cimplot src/cimplot/implot)
 # PUBLIC: cimplot.h itself does `#include "cimgui.h"` (bare, resolved relative to
 # cimplot.h's own directory first), so any consumer that includes cimplot.h - e.g.
@@ -180,3 +206,8 @@ set_target_properties(cimplot PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY_DEBUG "${WOLF_OUTPUT_DIR}"
 	RUNTIME_OUTPUT_DIRECTORY_RELEASE "${WOLF_OUTPUT_DIR}"
 )
+# cimplot.cpp's own CIMGUI_API wrapper functions need this too (see cimgui
+# target above) -- cimplot doesn't link cimgui via target_link_libraries, only
+# shares its include dirs above, so PUBLIC on cimgui alone doesn't reach here.
+# Must come after set_target_properties(... COMPILE_DEFINITIONS ...) above.
+target_compile_definitions(cimplot PUBLIC CIMGUI_NO_EXPORT)

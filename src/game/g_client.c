@@ -1445,14 +1445,13 @@ void ClientUserinfoChanged( int clientNum ) {
 	}
 
 	s = Info_ValueForKey(userinfo, "cg_uinfo");
-	sscanf(s, "%i %i %i %i %i %i %i %s", 
+	sscanf(s, "%i %i %i %i %i %i %s",
 			&client->pers.clientTimeNudge,
 			&client->pers.clientMaxPackets,
-			&client->pers.antilag, 
-			&client->pers.hitSoundType, 
-			&client->pers.hitSoundBodyStyle, 
-			&client->pers.hitSoundHeadStyle, 
-			&client->pers.clientFlags, 
+			&client->pers.hitSoundType,
+			&client->pers.hitSoundBodyStyle,
+			&client->pers.hitSoundHeadStyle,
+			&client->pers.clientFlags,
 			client->sess.guid
 		);
 
@@ -1482,7 +1481,6 @@ void ClientUserinfoChanged( int clientNum ) {
 		client->pmext.bAutoReload = qtrue;
 		client->pers.predictItemPickup = qfalse;
 		client->pers.pmoveFixed = qfalse;
-		client->pers.antilag = qtrue;
 		client->pers.hitSoundType = HITSOUND_HEAD | HITSOUND_BODY | HITSOUND_TEAM;
 		client->pers.hitSoundBodyStyle = 2;
 		client->pers.hitSoundHeadStyle = 1;
@@ -1676,6 +1674,7 @@ void ClientUserinfoChanged( int clientNum ) {
 
 	trap_SetConfigstring( CS_PLAYERS + clientNum, s );
 
+	trap_WTV_RecordPlayerIdentity( clientNum, client->sess.guid, client->pers.netname );
 
 	if (!(ent->r.svFlags & SVF_BOT)) {
 		char *team;

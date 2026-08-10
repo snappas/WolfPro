@@ -103,6 +103,8 @@ If you have questions concerning this license or the applicable additional terms
 #define FEEDER_PICKSPAWN            0x11    // NERVE - SMF - wolf mp pick spawn point
 #define FEEDER_SOLDIERWEAP          0x12    // NERVE - SMF - wolf mp soldier weapon list
 #define FEEDER_LIEUTWEAP            0x13    // NERVE - SMF - wolf mp lieutenant weapon list
+#define FEEDER_WTVDEMOS             0x14    // WTV server-recorded demos (current mod only)
+#define FEEDER_DEMO_MODS            0x15    // installed mods with a classic demos/ folder
 
 // display flags
 #define CG_SHOW_BLUE_TEAM_HAS_REDFLAG       0x00000001

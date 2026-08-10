@@ -187,7 +187,10 @@ static void CG_Obituary( entityState_t *ent ) {
 		return;
 	}
 	if(cg_registeredPlayers.integer){
-		Q_strncpyz( targetName, Info_ValueForKey( targetInfo, "un" ), sizeof( targetName ) - 2 );
+		const char *un = Info_ValueForKey( targetInfo, "un" );
+		// no registered username on record (e.g. a demo recorded by a
+		// server/mod that never sends "un") - fall back to the net name
+		Q_strncpyz( targetName, un[0] ? un : Info_ValueForKey( targetInfo, "n" ), sizeof( targetName ) - 2 );
 	}else{
 		Q_strncpyz( targetName, Info_ValueForKey( targetInfo, "n" ), sizeof( targetName ) - 2 );
 	}
@@ -273,30 +276,41 @@ static void CG_Obituary( entityState_t *ent ) {
 		return;
 	}
 
-	// check for kill messages from the current clientNum
-	if ( attacker == cg.snap->ps.clientNum ) {
-		char    *s;
+	// check for kill messages from the current watch target - during classic-demo
+	// spectate this is the followed player, not the recording owner; freecam has
+	// no watched player at all, so it never shows this message
+	if ( !cg_wtvFreecam.integer ) {
+		int watchTarget = ( cg.wtvSpectateClientNum >= 0 ) ? cg.wtvSpectateClientNum : cg.snap->ps.clientNum;
 
-		if ( cgs.gametype < GT_TEAM ) {
-			s = va( "You killed %s\n%s place with %i", targetName,
-					CG_PlaceString( cg.snap->ps.persistant[PERS_RANK] + 1 ),
-					cg.snap->ps.persistant[PERS_SCORE] );
-		} else {
-			if ( ci->team == ca->team ) {
-				s = va( "%s %s", CG_TranslateString( "You killed ^1TEAMMATE^7" ), targetName );
+		if ( attacker == watchTarget ) {
+			char    *s;
+
+			if ( cgs.gametype < GT_TEAM ) {
+				if ( watchTarget == cg.snap->ps.clientNum ) {
+					s = va( "You killed %s\n%s place with %i", targetName,
+							CG_PlaceString( cg.snap->ps.persistant[PERS_RANK] + 1 ),
+							cg.snap->ps.persistant[PERS_SCORE] );
+				} else {
+					// no real playerState for a spectated target, so no rank/score to show
+					s = va( "You killed %s", targetName );
+				}
 			} else {
-				s = va( "%s %s", CG_TranslateString( "You killed" ), targetName );
+				if ( ci->team == ca->team ) {
+					s = va( "%s %s", CG_TranslateString( "You killed ^1TEAMMATE^7" ), targetName );
+				} else {
+					s = va( "%s %s", CG_TranslateString( "You killed" ), targetName );
+				}
 			}
+			if (cg_drawFrags.integer) {
+				if (cg_fragsY.integer) {
+					CG_PriorityCenterPrint(s, cg_fragsY.integer * 0.75, cg_fragsWidth.integer * 0.6, 1);
+				}
+				else {
+					CG_PriorityCenterPrint(s, SCREEN_HEIGHT * 0.75, cg_fragsWidth.integer * 0.6, 1);
+				}
+			}
+			// print the text message as well
 		}
-		if (cg_drawFrags.integer) {
-			if (cg_fragsY.integer) {
-				CG_PriorityCenterPrint(s, cg_fragsY.integer * 0.75, cg_fragsWidth.integer * 0.6, 1);
-			}
-			else {
-				CG_PriorityCenterPrint(s, SCREEN_HEIGHT * 0.75, cg_fragsWidth.integer * 0.6, 1);
-			}
-		}
-		// print the text message as well
 	}
 
 	// check for double client messages
@@ -305,9 +319,12 @@ static void CG_Obituary( entityState_t *ent ) {
 		strcpy( attackerName, "noname" );
 	} else {
 		if(cg_registeredPlayers.integer){
-			Q_strncpyz( attackerName, Info_ValueForKey( attackerInfo, "un" ), sizeof( attackerName ) - 2 );
+			const char *un = Info_ValueForKey( attackerInfo, "un" );
+			// no registered username on record (e.g. a demo recorded by a
+			// server/mod that never sends "un") - fall back to the net name
+			Q_strncpyz( attackerName, un[0] ? un : Info_ValueForKey( attackerInfo, "n" ), sizeof( attackerName ) - 2 );
 		}else{
-			Q_strncpyz( attackerName, Info_ValueForKey( attackerInfo, "n" ), sizeof( attackerName ) - 2 );	
+			Q_strncpyz( attackerName, Info_ValueForKey( attackerInfo, "n" ), sizeof( attackerName ) - 2 );
 		}
 
 		if (cg_teamObituaryColors.integer)
@@ -1752,6 +1769,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			int index;
 
 			index = es->eventParm;      // player predicted
+			index = CG_NDP_FixLegacyItemIndex( index );   // see CG_NDP_FixLegacyItemIndex
 
 			if ( index < 1 || index >= bg_numItems ) {
 				break;
@@ -1788,6 +1806,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 			int index;
 
 			index = es->eventParm;      // player predicted
+			index = CG_NDP_FixLegacyItemIndex( index );   // see CG_NDP_FixLegacyItemIndex
 
 			if ( index < 1 || index >= bg_numItems ) {
 				break;
@@ -2220,7 +2239,10 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 	case EV_GLOBAL_CLIENT_SOUND:
 		DEBUGNAME( "EV_GLOBAL_CLIENT_SOUND" );
 
-		if ( cg.snap->ps.clientNum == es->teamNum ) {
+		// demo playback only ever carries the original recorder's own hits
+		// here (es->teamNum) - only play it while actually watching them,
+		// not while following a different player via wtvfollow
+		if ( ( cg.wtvSpectateClientNum >= 0 ? cg.wtvSpectateClientNum : cg.snap->ps.clientNum ) == es->teamNum ) {
 			if ( cgs.gameSounds[ es->eventParm ] ) {
 				if(cg_hitsounds.integer == 0 && Q_stristr(CG_ConfigString( CS_SOUNDS + es->eventParm ), "hitsounds")){
 					break;

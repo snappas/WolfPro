@@ -1526,6 +1526,12 @@ void MSG_ReadDeltaPlayerstate(msg_t* msg, const playerState_t* from, playerState
 	numFields = sizeof( playerStateFields ) / sizeof( playerStateFields[0] );
 	lc = MSG_ReadByte( msg );
 
+	// lc is corruption-controlled data off the wire; clamp before walking
+	// field past playerStateFields[numFields], which reads garbage entries.
+	if ( lc > numFields ) {
+		lc = numFields;
+	}
+
 	for ( i = 0, field = playerStateFields ; i < lc ; i++, field++ ) {
 		fromF = ( int * )( (byte *)from + field->offset );
 		toF = ( int * )( (byte *)to + field->offset );

@@ -247,6 +247,8 @@ typedef enum {
 	CG_CL_CMD_BACKUP,
 	CG_MICROSECONDS,
 // int64_t trap_Microseconds( void );
+	CG_EXT_NDP_RESET_ANALYSIS,
+// void trap_CNQ3_NDP_ResetAnalysis( void );
 } cgameImport_t;
 
 
@@ -322,8 +324,11 @@ typedef enum {
 	CG_IMGUI_UPDATE,
 // void CG_ImGUI_Update(void);
 
-	CG_IMGUI_SHARE
+	CG_IMGUI_SHARE,
 //void CG_ImGUI_Share(void *ctx, void *alloc, void *free);
+
+	CG_NDP_RESET_ANALYSIS
+// void CG_NDP_ResetAnalysis( void );
 
 } cgameExport_t;
 

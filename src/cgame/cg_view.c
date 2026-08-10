@@ -751,6 +751,44 @@ CG_Zoom
 ==============
 */
 void CG_Zoom( void ) {
+	// a follow-target switch is a hard camera cut, not one player's zoom
+	// changing - without this, CG_CalcFov eases from the old target's FOV.
+	{
+		int watchTarget = ( cg.wtvSpectateClientNum >= 0 ) ? cg.wtvSpectateClientNum : cg.snap->ps.clientNum;
+		static int s_zoomLastWatchTarget = -2;
+
+		if ( cg.demoPlayback && watchTarget != s_zoomLastWatchTarget ) {
+			cg.zoomedBinoc = qfalse;
+			cg.zoomval = 0;
+			cg.zoomTime = 0;
+		}
+		s_zoomLastWatchTarget = watchTarget;
+	}
+
+	if ( cg.wtvSpectateClientNum >= 0 ) {
+		// no real playerState for a merely-watched target, but EF_ZOOMING
+		// is broadcast entityState data - gate on that, like the self path below.
+		entityState_t *targetState = &cg_entities[cg.wtvSpectateClientNum].currentState;
+		qboolean targetZoomed = (qboolean)( ( targetState->eFlags & EF_ZOOMING ) != 0 );
+
+		if ( targetZoomed ) {
+			if ( cg.zoomedBinoc ) {
+				return;
+			}
+			cg.zoomedBinoc = qtrue;
+			cg.zoomTime = cg.time;
+			cg.zoomval = cg_zoomDefaultSniper.value;
+		} else {
+			if ( !cg.zoomedBinoc ) {
+				return;
+			}
+			cg.zoomedBinoc = qfalse;
+			cg.zoomTime = cg.time;
+			cg.zoomval = 0;
+		}
+		return;
+	}
+
 	if ( cgs.gametype >= GT_WOLF && ( ( cg.snap->ps.pm_flags & PMF_FOLLOW ) || cg.demoPlayback ) ) {
 		cg.predictedPlayerState.eFlags = cg.snap->ps.eFlags;
 		cg.predictedPlayerState.weapon = cg.snap->ps.weapon;
@@ -814,10 +852,18 @@ static int CG_CalcFov( void ) {
 	float zoomFov;
 	float f;
 	int inwater;
+	qboolean freecamActive;
 
 	CG_Zoom();
 
-	if ( cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 && !( cgs.gametype >= GT_WOLF && cg.snap->ps.pm_flags & PMF_FOLLOW ) ) {
+	// freecam is an independent camera, not looking through the recorded
+	// player's eyes - their binoculars/sniper zoom must not affect it.
+	freecamActive = (qboolean)( cg.demoPlayback && cg.ndpDemoEnabled && cg_wtvFreecam.integer );
+
+	// predictedPlayerState is always the recording owner's, even while
+	// spectating someone else - their death must not stomp the target's zoom.
+	if ( cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 && cg.wtvSpectateClientNum < 0 &&
+		 !( cgs.gametype >= GT_WOLF && cg.snap->ps.pm_flags & PMF_FOLLOW ) ) {
 		cg.zoomedBinoc = qfalse;
 		cg.zoomTime = 0;
 		cg.zoomval = 0;
@@ -840,8 +886,11 @@ static int CG_CalcFov( void ) {
 			}
 		}
 
-		// account for zooms
-		if ( cg.zoomval ) {
+		// account for zooms - skipped in freecam, which isn't looking
+		// through the recorded player's weapon at all
+		if ( freecamActive ) {
+			// nothing to do; fov_x already holds the plain cg_fov value
+		} else if ( cg.zoomval ) {
 			zoomFov = cg.zoomval;   // (SA) use user scrolled amount
 
 			if ( zoomFov < 1 ) {
@@ -854,7 +903,9 @@ static int CG_CalcFov( void ) {
 		}
 
 		// do smooth transitions for the binocs
-		if ( cg.zoomedBinoc ) {        // binoc zooming in
+		if ( freecamActive ) {
+			// fov_x untouched
+		} else if ( cg.zoomedBinoc ) {        // binoc zooming in
 			f = ( cg.time - cg.zoomTime ) / (float)ZOOM_TIME;
 			if ( f > 1.0 ) {
 				fov_x = zoomFov;
@@ -873,13 +924,13 @@ static int CG_CalcFov( void ) {
 		}
 	}
 
-	if ( cg.weaponSelect == WP_SNOOPERSCOPE ) {
+	if ( !freecamActive && cg.weaponSelect == WP_SNOOPERSCOPE ) {
 		cg.refdef.rdflags |= RDF_SNOOPERVIEW;
 	} else {
 		cg.refdef.rdflags &= ~RDF_SNOOPERVIEW;
 	}
 
-	if ( cg.snap->ps.persistant[PERS_HWEAPON_USE] ) {
+	if ( !freecamActive && cg.snap->ps.persistant[PERS_HWEAPON_USE] ) {
 		fov_x = 55;
 	}
 
@@ -1141,6 +1192,52 @@ if (cg.snap->ps.pm_type == PM_FREEZE) {
 }
 
 
+// exponential smoothing time constant (ms) for the spectate camera -
+// eases toward the target's raw transform instead of snapping every frame.
+#define WTV_SPECTATE_SMOOTH_MS 80.0
+
+/*
+===============
+CG_WTVSpectateInterpolatedTransform
+
+CG_AddPacketEntities (which refreshes lerpOrigin/lerpAngles for the current
+frame) runs after CG_CalcViewValues, so target->lerpOrigin/lerpAngles are
+always one client frame stale here. Recompute fresh so the spectate camera
+doesn't show a small correction jump at every snapshot boundary - most
+visible as view shake on a target whose per-snapshot deltas are larger and
+less even, i.e. a laggier player.
+===============
+*/
+static void CG_WTVSpectateInterpolatedTransform( centity_t *target, vec3_t outOrigin, vec3_t outAngles ) {
+	vec3_t current, next;
+	float f;
+	int delta;
+
+	VectorCopy( target->lerpOrigin, outOrigin );
+	VectorCopy( target->lerpAngles, outAngles );
+
+	if ( !cg.nextSnap || !target->interpolate ||
+		 ( target->currentState.pos.trType != TR_INTERPOLATE &&
+		   ( target->currentState.pos.trType != TR_LINEAR_STOP || target->currentState.number >= MAX_CLIENTS ) ) ) {
+		return;
+	}
+
+	delta = cg.nextSnap->serverTime - cg.snap->serverTime;
+	f = ( delta == 0 ) ? 0 : (float)( cg.time - cg.snap->serverTime ) / delta;
+
+	BG_EvaluateTrajectory( &target->currentState.pos, cg.snap->serverTime, current );
+	BG_EvaluateTrajectory( &target->nextState.pos, cg.nextSnap->serverTime, next );
+	outOrigin[0] = current[0] + f * ( next[0] - current[0] );
+	outOrigin[1] = current[1] + f * ( next[1] - current[1] );
+	outOrigin[2] = current[2] + f * ( next[2] - current[2] );
+
+	BG_EvaluateTrajectory( &target->currentState.apos, cg.snap->serverTime, current );
+	BG_EvaluateTrajectory( &target->nextState.apos, cg.nextSnap->serverTime, next );
+	outAngles[0] = LerpAngle( current[0], next[0], f );
+	outAngles[1] = LerpAngle( current[1], next[1], f );
+	outAngles[2] = LerpAngle( current[2], next[2], f );
+}
+
 /*
 ===============
 CG_CalcViewValues
@@ -1190,6 +1287,150 @@ static int CG_CalcViewValues( void ) {
 			CG_Fade( 0, 0, 0, 0, 1500 );  // then fadeup
 		}
 	}
+
+	// +activate enters freecam (one-way); +attack cycles the followed player
+	// (WTV: full roster via wtvfollow; classic demo: nearby PVS-visible only).
+	// usercmd needs CG_KeyEvent's demo fallthrough fix.
+	if ( cg.demoPlayback && cg.ndpDemoEnabled ) {
+		usercmd_t cmd;
+		int pressed;
+
+		trap_GetUserCmd( trap_GetCurrentCmdNumber(), &cmd );
+		pressed = cmd.buttons & ~cg.wtvOldButtons;
+		cg.wtvOldButtons = cmd.buttons;
+
+		if ( pressed & BUTTON_ACTIVATE ) {
+			if ( cg.wtvSpectateClientNum >= 0 ) {
+				// hand off from spectate into free-fly, seeded from wherever the
+				// (smoothed) spectate camera was already sitting — no jump.
+				VectorCopy( cg.wtvSpectateSmoothOrigin, cg.wtvFreecamOrigin );
+				VectorCopy( cg.wtvSpectateSmoothAngles, cg.wtvFreecamAngles );
+				cg.wtvFreecamPrevRealTime = trap_Milliseconds();
+				cg.wtvFreecamInitialized = qtrue;
+				cg.wtvSpectateClientNum = -1;
+				trap_Cvar_Set( "cg_wtvFreecam", "1" );
+				trap_Cvar_Update( &cg_wtvFreecam );
+			} else if ( !cg_wtvFreecam.integer ) {
+				trap_Cvar_Set( "cg_wtvFreecam", "1" );
+			}
+		}
+		if ( pressed & BUTTON_ATTACK ) {
+			if ( cg_wtvActive.integer ) {
+				trap_SendConsoleCommand( "wtvfollow next\n" );
+			} else {
+				CG_WTVNearbyRosterCycle( 1 );
+			}
+		}
+
+		// classic-demo spectate: camera locked to a nearby player's reported
+		// position/angles only (no playerstate); target lost falls through.
+		if ( cg.wtvSpectateClientNum < 0 ) {
+			// next entry re-seeds the smoother from scratch instead of
+			// gliding in from a possibly stale remembered position.
+			cg.wtvSpectateSmoothClientNum = -1;
+		} else {
+			centity_t *target = &cg_entities[cg.wtvSpectateClientNum];
+
+			if ( !target->currentValid || target->currentState.eType != ET_PLAYER ) {
+				cg.wtvSpectateClientNum = -1;
+			} else {
+				vec3_t freshOrigin, freshAngles;
+				int viewheight;
+
+				// don't let the followed player's own body block the camera.
+				target->currentState.eFlags |= EF_NODRAW;
+				CG_WTVSpectateInterpolatedTransform( target, freshOrigin, freshAngles );
+
+				// no playerstate for this target, but eFlags is broadcast to
+				// everyone and is what drives their own pose/animation too
+				if ( target->currentState.eFlags & EF_DEAD ) {
+					viewheight = DEAD_VIEWHEIGHT;
+				} else if ( target->currentState.eFlags & EF_CROUCHING ) {
+					viewheight = CROUCH_VIEWHEIGHT;
+				} else {
+					viewheight = DEFAULT_VIEWHEIGHT;
+				}
+				freshOrigin[2] += viewheight;
+
+				if ( cg.wtvSpectateSmoothClientNum != cg.wtvSpectateClientNum ) {
+					// new target (or first frame back in spectate) - snap, don't slide in.
+					VectorCopy( freshOrigin, cg.wtvSpectateSmoothOrigin );
+					VectorCopy( freshAngles, cg.wtvSpectateSmoothAngles );
+					cg.wtvSpectateSmoothClientNum = cg.wtvSpectateClientNum;
+				} else {
+					// ease toward the raw transform instead of snapping every frame -
+					// target angles only update at snapshot rate, which reads as shake.
+					float alpha = 1.0f - (float)exp( -(double)cg.frametime / WTV_SPECTATE_SMOOTH_MS );
+					int i;
+
+					if ( alpha < 0.0f ) {
+						alpha = 0.0f;
+					} else if ( alpha > 1.0f ) {
+						alpha = 1.0f;
+					}
+					for ( i = 0; i < 3; i++ ) {
+						cg.wtvSpectateSmoothOrigin[i] += alpha * ( freshOrigin[i] - cg.wtvSpectateSmoothOrigin[i] );
+						cg.wtvSpectateSmoothAngles[i] = LerpAngle( cg.wtvSpectateSmoothAngles[i], freshAngles[i], alpha );
+					}
+				}
+
+				VectorCopy( cg.wtvSpectateSmoothOrigin, cg.refdef.vieworg );
+				VectorCopy( cg.wtvSpectateSmoothAngles, cg.refdefViewAngles );
+				AnglesToAxis( cg.refdefViewAngles, cg.refdef.viewaxis );
+				cg.renderingThirdPerson = qtrue;
+				return CG_CalcFov();
+			}
+		}
+
+		// WTV/NDP free-roaming spectator camera — overrides the ps-driven
+		// view entirely when on.
+		if ( cg_wtvFreecam.integer ) {
+			vec3_t forward, right;
+			vec3_t worldUp = { 0.0f, 0.0f, 1.0f };
+			float frameSeconds;
+			float unitsPerMove;
+
+			if ( !cg.wtvFreecamInitialized ) {
+				VectorCopy( ps->origin, cg.wtvFreecamOrigin );
+				cg.wtvFreecamOrigin[2] += ps->viewheight;
+				VectorCopy( ps->viewangles, cg.wtvFreecamAngles );
+				cg.wtvFreecamPrevRealTime = trap_Milliseconds();
+				cg.wtvFreecamInitialized = qtrue;
+			}
+
+			// CG_MouseEvent owns yaw/pitch; only roll is fixed here
+			cg.wtvFreecamAngles[ROLL] = 0;
+
+			AngleVectors( cg.wtvFreecamAngles, forward, right, NULL );
+
+			// wall-clock delta, not cg.frametime — the latter is scaled by
+			// cg_timescale and stops entirely while playback is paused
+			{
+				int currRealTime = trap_Milliseconds();
+				frameSeconds = ( currRealTime - cg.wtvFreecamPrevRealTime ) * 0.001f;
+				cg.wtvFreecamPrevRealTime = currRealTime;
+			}
+			unitsPerMove = cg_wtvFreecamSpeed.value * frameSeconds / 127.0f;
+			if ( cmd.buttons & BUTTON_SPRINT ) {
+				unitsPerMove *= cg_wtvFreecamSprintMultiplier.value;
+			}
+			VectorMA( cg.wtvFreecamOrigin, cmd.forwardmove * unitsPerMove, forward, cg.wtvFreecamOrigin );
+			VectorMA( cg.wtvFreecamOrigin, cmd.rightmove * unitsPerMove, right, cg.wtvFreecamOrigin );
+			// world-space up/down (space/c), not the view-relative up vector —
+			// otherwise looking down would make moveup/movedown fly forward/back.
+			VectorMA( cg.wtvFreecamOrigin, cmd.upmove * unitsPerMove, worldUp, cg.wtvFreecamOrigin );
+
+			VectorCopy( cg.wtvFreecamOrigin, cg.refdef.vieworg );
+			VectorCopy( cg.wtvFreecamAngles, cg.refdefViewAngles );
+			AnglesToAxis( cg.refdefViewAngles, cg.refdef.viewaxis );
+			// no first-person weapon model, no single-player screen effects —
+			// the view isn't anchored to anyone's eyes anymore
+			cg.renderingThirdPerson = qtrue;
+
+			return CG_CalcFov();
+		}
+	}
+	cg.wtvFreecamInitialized = qfalse;
 
 	// intermission view
 	if ( ps->pm_type == PM_INTERMISSION ) {
@@ -1793,7 +2034,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		DEBUGTIME
 	}
 	// Rafael mg42
-	if ( !( cg.snap->ps.persistant[PERS_HWEAPON_USE] ) ) {
+	if ( cg.wtvSpectateClientNum >= 0 ) {
+		CG_AddSpectateViewWeapon( &cg_entities[cg.wtvSpectateClientNum] );
+	} else if ( !( cg.snap->ps.persistant[PERS_HWEAPON_USE] ) ) {
 		CG_AddViewWeapon( &cg.predictedPlayerState );
 	}
 
@@ -1855,8 +2098,20 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	DEBUGTIME
 
-	// update audio positions
-	trap_S_Respatialize( cg.snap->ps.clientNum, cg.refdef.vieworg, cg.refdef.viewaxis, inwater );
+	// update audio positions. Freecam detaches entirely; spectate rides the
+	// nearby entity instead, matching "hearing what they'd hear."
+	{
+		int listenerEntity = cg.snap->ps.clientNum;
+
+		if ( cg.demoPlayback && cg.ndpDemoEnabled ) {
+			if ( cg_wtvFreecam.integer ) {
+				listenerEntity = ENTITYNUM_NONE;
+			} else if ( cg.wtvSpectateClientNum >= 0 ) {
+				listenerEntity = cg.wtvSpectateClientNum;
+			}
+		}
+		trap_S_Respatialize( listenerEntity, cg.refdef.vieworg, cg.refdef.viewaxis, inwater );
+	}
 
 	if ( cg_stats.integer ) {
 		CG_Printf( "cg.clientFrame:%i\n", cg.clientFrame );

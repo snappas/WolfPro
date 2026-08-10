@@ -9,12 +9,13 @@ if(WIN32 AND NOT CMAKE_CROSSCOMPILE)
 		engine_libraries
 		os_libraries
 		${CURL_LIBRARIES}
+		${LZMA_LIBRARIES}
 	)
 	if(ENABLE_ASAN)
 	target_link_options(wolfded PRIVATE /wholearchive:clang_rt.asan-x86_64.lib /STACK:8388608)
 	endif()
 	target_link_options(wolfded PRIVATE /STACK:8388608)
-	target_include_directories(wolfded PRIVATE ${CURL_INCLUDE_DIR})
+	target_include_directories(wolfded PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})
 elseif(UNIX)
 	add_executable(wolfded ${COMMON_SRC} ${SERVER_SRC})
 	if(WOLF_64BITS)
@@ -26,8 +27,9 @@ elseif(UNIX)
 		engine_libraries
 		os_libraries
 		${CURL_LIBRARIES}
+		${LZMA_LIBRARIES}
 	)
-	target_include_directories(wolfded PRIVATE ${CURL_INCLUDE_DIR})
+	target_include_directories(wolfded PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})
 endif()
 
 if(WOLF_64BITS)

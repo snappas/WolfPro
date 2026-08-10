@@ -28,6 +28,7 @@ If you have questions concerning this license or the applicable additional terms
 
 
 #include "server.h"
+#include "sv_wtvdemo.h"
 
 serverStatic_t svs;                 // persistant server info
 server_t sv;                        // local server
@@ -202,6 +203,8 @@ void QDECL SV_SendServerCommand( client_t *cl, const char *fmt, ... ) {
 		}
 		return;
 	}
+
+	WTV_QueueBroadcastCommand( message );
 
 	// hack to echo broadcast prints to console
 	if ( com_dedicated->integer && !strncmp( message, "print", 5 ) ) {
@@ -889,6 +892,8 @@ void SV_Frame( int msec ) {
 
 	// send messages back to the clients
 	SV_SendClientMessages();
+
+	WTV_RecordTick();
 
 	// send a heartbeat to the master if needed
 	SV_MasterHeartbeat( HEARTBEAT_GAME );

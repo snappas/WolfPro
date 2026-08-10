@@ -634,7 +634,6 @@ typedef struct {
 	//Competition
 	qboolean ready;
 
-	int antilag;
 	unsigned int hitSoundType;
 	unsigned int hitSoundBodyStyle;
 	unsigned int hitSoundHeadStyle;
@@ -879,6 +878,7 @@ typedef struct {
 
 	int teamScores[TEAM_NUM_TEAMS];
 	int lastTeamLocationTime;               // last time of client team location update
+	int lastWtvScoreboardCaptureTime;       // last time scores/tinfo2 were captured for WTV
 
 	qboolean newSession;                // don't use any old session data, because
 										// we changed gametype
@@ -926,6 +926,7 @@ typedef struct {
 										// frag can be watched.  Disable future
 										// kills during this delay
 	int intermissiontime;               // time the intermission was started
+	qboolean wtvStopSignaled;           // one-shot guard so the WTV stop trap fires exactly once per round
 	char        *changemap;
 	qboolean readyToExit;               // at least one client wants to exit
 	int exitTime;
@@ -1301,6 +1302,7 @@ qboolean CheckAntilagConditions(gentity_t *ent);
 void MoveClientToIntermission( gentity_t *client );
 void G_SetStats( gentity_t *ent );
 void DeathmatchScoreboardMessage( gentity_t *client );
+int G_BuildScoreboardMessage( team_t viewerTeam, char *string );
 
 //
 // g_cmds.c
@@ -1574,6 +1576,7 @@ extern vmCvar_t g_stats_curl_submit_headers;
 extern vmCvar_t g_statsRetryCount;
 extern vmCvar_t g_statsRetryDelay;
 extern vmCvar_t g_apiquery_curl_URL;
+extern vmCvar_t g_wtvdemos;
 
 extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
@@ -1588,9 +1591,6 @@ extern vmCvar_t g_headMaxY;
 extern vmCvar_t g_headMaxZ;
 
 extern vmCvar_t g_gravityModifier;
-
-extern vmCvar_t g_lowPingAntilag;
-extern vmCvar_t g_lowPingAntilagThreshold;
 
 extern vmCvar_t g_noSelfDamage;
 extern vmCvar_t g_rocketMode;
@@ -1831,6 +1831,11 @@ void    trap_Cmd_ArgsFrom(int arg, char *buffer, int buffersize);
 int trap_RealTime( qtime_t *qtime );
 int     trap_submit_curlPost( char* jsonfile, char* matchid );
 qhandle_t trap_RegisterModel( char* name );
+void trap_WTV_RecordStart( int roundNum );
+void trap_WTV_RecordStop( int aborted );
+void trap_WTV_RecordPlayerIdentity( int clientNum, const char *guid, const char *name );
+qboolean trap_WTV_IsRecording( void );
+void trap_WTV_RecordCommand( const char *text );
 
 typedef enum
 {

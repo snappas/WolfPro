@@ -11,6 +11,10 @@ qbool CG_NDP_AnalyzeObituary(entityState_t* ent, snapshot_t* snapshot);
 int m_currServerTime;
 int m_firstServerTime;
 int m_lastServerTime;
+// re-armed to 0 in CG_NDP_EndAnalysis so a fresh demo doesn't inherit a
+// wall-clock gap from whatever real time the previous demo's load/browse
+// took -- see CG_NDP_SetGameTime, which treats 0 as "no baseline yet"
+static int ndp_prevRealTime = 0;
 static char m_demoPath[4096];
 //static char ndp_configStrings[MAX_GAMESTATE_CHARS];
 int ndp_configStringOffsets[MAX_CONFIGSTRINGS];
@@ -31,6 +35,12 @@ int ndp_round2End[32] = { 0 };
 int ndp_round1EndSize = 0;
 int ndp_round2EndSize = 0;
 
+int ndp_levelStartTimes[32] = { 0 };
+int ndp_levelStartTimesSize = 0;
+int ndp_timeLimitTimes[32] = { 0 };
+float ndp_timeLimits[32] = { 0 };
+int ndp_timeLimitsSize = 0;
+
 int ndp_docPickupTime[1024] = { 0 };
 int ndp_docDropTime[1024] = { 0 };
 int ndp_docPickupSize = 0;
@@ -42,6 +52,7 @@ qbool isRtcwProV129 = qfalse;
 qbool isRtcwProV130 = qfalse;
 qbool isRtcwProV140 = qfalse;
 qbool isRtcw10 = qfalse;
+qbool isWolfPro = qfalse;
 qbool gameVersionFound = qfalse;
 
 /*
@@ -66,12 +77,53 @@ qbool CG_NDP_FindGameVersion(void) {
 	isRtcwProV129 = (Q_strncmp(current_gamename, "RtcwPro 1.2.9", strlen("RtcwPro 1.2.9")) == 0);
 	isRtcwProV130 = (Q_strncmp(current_gamename, "RtcwPro 1.3", strlen("RtcwPro 1.3")) == 0);
 	isRtcwProV140 = (Q_strncmp(current_gamename, "RtcwPro 1.4", strlen("RtcwPro 1.4")) == 0);
+	isWolfPro = (Q_stricmp(current_gamename, "wolfpro") == 0);
 	//earlier versions all use 1.2.8 tinfo
 	if (isRtcwPro && !isRtcwProV128 && !isRtcwProV129 && !isRtcwProV130 && !isRtcwProV140) {
 		isRtcwProV128 = qtrue;
 	}
 	gameVersionFound = qtrue;
 	return qtrue;
+}
+
+/*
+=================
+CG_NDP_FixLegacyItemIndex
+
+WolfPro's "Rocket launcher mode" feature added a "weapon_rocketlauncher"
+entry to bg_itemlist that doesn't exist in rtcwPro/OSP/vanilla RTCW's item
+tables, shifting every later item's index by +1 relative to what those
+demos recorded. Foreign demos need that shift undone before their raw
+modelindex/eventParm item indices are used to look up bg_itemlist.
+=================
+*/
+int CG_NDP_FixLegacyItemIndex( int rawIndex ) {
+	static int rocketLauncherItemIndex = -1;
+	int i;
+
+	if ( !cg.demoPlayback ) {
+		return rawIndex;
+	}
+	if ( !gameVersionFound && !CG_NDP_FindGameVersion() ) {
+		return rawIndex;
+	}
+	if ( isWolfPro ) {
+		return rawIndex;
+	}
+
+	if ( rocketLauncherItemIndex < 0 ) {
+		for ( i = 1; i < bg_numItems; i++ ) {
+			if ( bg_itemlist[i].classname && !strcmp( bg_itemlist[i].classname, "weapon_rocketlauncher" ) ) {
+				rocketLauncherItemIndex = i;
+				break;
+			}
+		}
+	}
+
+	if ( rocketLauncherItemIndex >= 0 && rawIndex >= rocketLauncherItemIndex ) {
+		return rawIndex + 1;
+	}
+	return rawIndex;
 }
 
 /*
@@ -214,6 +266,21 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 			const char* info = CG_Argv(2);
 			ndp_defender = atoi(Info_ValueForKey(info, "defender"));
 		}
+		if (atoi(CG_Argv(1)) == CS_LEVEL_START_TIME) {
+			if (ndp_levelStartTimesSize == 0 || ndp_levelStartTimes[ndp_levelStartTimesSize - 1] != serverTime) {
+				ndp_levelStartTimes[ndp_levelStartTimesSize++] = serverTime;
+			}
+		}
+		if (atoi(CG_Argv(1)) == CS_SERVERINFO) {
+			const char* info = CG_Argv(2);
+			float timelimit = atof(Info_ValueForKey(info, "timelimit"));
+
+			if (ndp_timeLimitsSize == 0 || ndp_timeLimits[ndp_timeLimitsSize - 1] != timelimit) {
+				ndp_timeLimitTimes[ndp_timeLimitsSize] = serverTime;
+				ndp_timeLimits[ndp_timeLimitsSize] = timelimit;
+				ndp_timeLimitsSize++;
+			}
+		}
 
 	}
 	if (Q_stricmp(cmdName, "print") == 0) {
@@ -232,7 +299,7 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 			}
 		}
 	}
-	if (Q_stricmp(cmdName, "tinfo") == 0) {
+	if (Q_stricmp(cmdName, "tinfo") == 0 || Q_stricmp(cmdName, "tinfo2") == 0) {
 		int i, powerups;
 		qbool someoneHasDocsNow = qfalse;
 
@@ -242,7 +309,7 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 			}
 		}
 
-		if (!isRtcwPro) {
+		if (!isRtcwPro && !isWolfPro) {
 			numSortedTeamPlayers = atoi(CG_Argv(3));
 
 			for (i = 0; i < numSortedTeamPlayers; i++) {
@@ -272,7 +339,7 @@ void CG_NDP_AnalyzeCommand(int serverTime)
 					}
 				}
 			}
-			else if (isRtcwProV130) {
+			else if (isRtcwProV130 || isWolfPro) {
 				int teamInfoPlayers = atoi(CG_Argv(1));
 				for (i = 0; i < teamInfoPlayers; i++) {
 					powerups = atoi(CG_Argv(i * 12 + 5));
@@ -335,7 +402,10 @@ qbool CG_NDP_AnalyzeObituary(entityState_t* ent, snapshot_t* snapshot) {
 		return qtrue;
 	}
 	if(cg_registeredPlayers.integer){
-		Q_strncpyz(targetName, Info_ValueForKey(targetInfo, "un"), sizeof(targetName) - 2);
+		const char *un = Info_ValueForKey(targetInfo, "un");
+		// no registered username on record (e.g. a demo recorded by a
+		// server/mod that never sends "un") - fall back to the net name
+		Q_strncpyz(targetName, un[0] ? un : Info_ValueForKey(targetInfo, "n"), sizeof(targetName) - 2);
 	}else{
 		Q_strncpyz(targetName, Info_ValueForKey(targetInfo, "n"), sizeof(targetName) - 2);
 	}
@@ -410,6 +480,10 @@ void CG_NDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServe
 
 	m_firstServerTime = firstServerTime;
 	m_lastServerTime = lastServerTime;
+	// the cgame DLL stays resident across demos on the client (no reload
+	// to zero it for us), so this needs an explicit re-arm or the first
+	// CG_NDP_SetGameTime tick measures against the previous demo's last frame
+	ndp_prevRealTime = 0;
 
 	if (videoRestart) {
 		RestoreSession();
@@ -422,6 +496,37 @@ void CG_NDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServe
 	trap_CNQ3_NDP_Seek(m_currServerTime);
 	cgs.serverCommandSequence = 0;
 
+}
+
+// Called by the engine before a demo stream is (re)parsed.
+void CG_NDP_ResetAnalysis(void)
+{
+	ndp_myKillsSize = 0;
+	ndp_alliesWinsSize = 0;
+	ndp_axisWinsSize = 0;
+	ndp_round1EndSize = 0;
+	ndp_round2EndSize = 0;
+	ndp_docDropSize = 0;
+	ndp_docPickupSize = 0;
+	ndp_levelStartTimesSize = 0;
+	ndp_timeLimitsSize = 0;
+	// parallels ndp_myKills[] by index — stale qtrue entries beyond the old
+	// size would otherwise bleed streak coloring into the next target's timeline
+	memset( ndp_killStreak, 0, sizeof( ndp_killStreak ) );
+	// edge-detector for doc/flag pickup-drop pairs — a stale qtrue here
+	// suppresses the new target's very first real pickup event
+	ndp_someoneHasDocs = qfalse;
+
+	// force re-detection - a stale version from the previous demo would
+	// otherwise make tinfo parsing use the wrong field layout/stride
+	gameVersionFound = qfalse;
+	isRtcwPro = qfalse;
+	isRtcwProV128 = qfalse;
+	isRtcwProV129 = qfalse;
+	isRtcwProV130 = qfalse;
+	isRtcwProV140 = qfalse;
+	isRtcw10 = qfalse;
+	isWolfPro = qfalse;
 }
 
 void CG_NDP_SeekAbsolute(int serverTime)
@@ -440,6 +545,45 @@ void CG_NDP_SeekRelative(int seconds)
 	CG_NDP_SeekAbsolute(cg.time + seconds * 1000);
 }
 
+int CG_NDP_LevelStartTimeAt(int serverTime)
+{
+	int i;
+	int result = m_firstServerTime;
+
+	for (i = 0; i < ndp_levelStartTimesSize; i++) {
+		if (ndp_levelStartTimes[i] > serverTime) {
+			break;
+		}
+		result = ndp_levelStartTimes[i];
+	}
+	return result;
+}
+
+float CG_NDP_TimeLimitAt(int serverTime)
+{
+	int i;
+	float result = 0.0f;
+
+	for (i = 0; i < ndp_timeLimitsSize; i++) {
+		if (ndp_timeLimitTimes[i] > serverTime) {
+			break;
+		}
+		result = ndp_timeLimits[i];
+	}
+	return result;
+}
+
+char *CG_NDP_FormatTimestamp(int seconds)
+{
+	int hour = seconds / 3600;
+	int minute = (seconds / 60) % 60;
+	int second = seconds % 60;
+
+	if (hour > 0) {
+		return va("%02d:%02d:%02d", hour, minute, second);
+	}
+	return va("%02d:%02d", minute, second);
+}
 
 /*
 =================
@@ -513,12 +657,11 @@ Advance the demo playback by incrementing the current time every frame
 =================
 */
 void CG_NDP_SetGameTime(void) {
-	static int prevRealTime = 0;
 	const int currRealTime = trap_Milliseconds();
-	if (prevRealTime == 0) {
-		prevRealTime = currRealTime;
+	if (ndp_prevRealTime == 0) {
+		ndp_prevRealTime = currRealTime;
 	}
-	const int frameDuration = currRealTime - prevRealTime;
+	const int frameDuration = currRealTime - ndp_prevRealTime;
 
 	m_currServerTime += (int)((float)frameDuration * cg_timescale.value);
 
@@ -526,13 +669,10 @@ void CG_NDP_SetGameTime(void) {
 	{
 		m_currServerTime = m_lastServerTime;
 	}
-	else
-	{
-		trap_CNQ3_NDP_ReadUntil(m_currServerTime);
-	}
+	trap_CNQ3_NDP_ReadUntil(m_currServerTime);
 
 	cg.time = m_currServerTime;
-	prevRealTime = currRealTime;
+	ndp_prevRealTime = currRealTime;
 
 }
 

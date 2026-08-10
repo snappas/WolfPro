@@ -9,6 +9,7 @@
 #include "../thirdparty/stb/stb_truetype.h"
 
 #include "tr_font_bake.h"
+#include "tr_font_hudchars_embedded.h"
 
 #define FONT_GRID_CELLS       16
 #define FONT_BAKE_GLYPH_PX    64
@@ -36,12 +37,14 @@ static qboolean Font_VectorFontsEnabled( void ) {
 
 #define FONT_DEFAULT_TTF_PATH "fonts/hudchars.ttf"
 
-// Loads r_hudFontFile, falling back to the default shipped font if it's
-// missing/unparseable. On success, *outBuffer must be freed via ri.FS_FreeFile.
-static qboolean Font_LoadActiveTtf( stbtt_fontinfo *font, void **outBuffer, const char *callerTag ) {
+// On success, *outBuffer must be freed via ri.FS_FreeFile unless *outEmbedded
+// is set -- the embedded copy has static storage duration, never FS-allocated.
+static qboolean Font_LoadActiveTtf( stbtt_fontinfo *font, void **outBuffer, qboolean *outEmbedded, const char *callerTag ) {
 	char ttfPath[MAX_QPATH];
 	void *ttfBuffer;
 	int ttfLen;
+
+	*outEmbedded = qfalse;
 
 	Font_GetActiveTtfPath( ttfPath, sizeof( ttfPath ) );
 	ttfLen = ri.FS_ReadFile( ttfPath, &ttfBuffer );
@@ -54,23 +57,30 @@ static qboolean Font_LoadActiveTtf( stbtt_fontinfo *font, void **outBuffer, cons
 		ri.FS_FreeFile( ttfBuffer );
 	}
 
-	if ( !Q_stricmp( ttfPath, FONT_DEFAULT_TTF_PATH ) ) {
-		ri.Printf( PRINT_WARNING, "%s: couldn't load %s\n", callerTag, ttfPath );
-		return qfalse;
-	}
-
-	ri.Printf( PRINT_WARNING, "%s: couldn't load %s, falling back to %s\n", callerTag, ttfPath, FONT_DEFAULT_TTF_PATH );
-	ttfLen = ri.FS_ReadFile( FONT_DEFAULT_TTF_PATH, &ttfBuffer );
-	if ( ttfLen <= 0 || !ttfBuffer ||
-		 !stbtt_InitFont( font, (const unsigned char *)ttfBuffer, stbtt_GetFontOffsetForIndex( (const unsigned char *)ttfBuffer, 0 ) ) ) {
+	if ( Q_stricmp( ttfPath, FONT_DEFAULT_TTF_PATH ) ) {
+		ri.Printf( PRINT_WARNING, "%s: couldn't load %s, falling back to %s\n", callerTag, ttfPath, FONT_DEFAULT_TTF_PATH );
+		ttfLen = ri.FS_ReadFile( FONT_DEFAULT_TTF_PATH, &ttfBuffer );
+		if ( ttfLen > 0 && ttfBuffer &&
+			 stbtt_InitFont( font, (const unsigned char *)ttfBuffer, stbtt_GetFontOffsetForIndex( (const unsigned char *)ttfBuffer, 0 ) ) ) {
+			*outBuffer = ttfBuffer;
+			return qtrue;
+		}
 		if ( ttfBuffer ) {
 			ri.FS_FreeFile( ttfBuffer );
 		}
-		ri.Printf( PRINT_WARNING, "%s: couldn't load fallback %s either\n", callerTag, FONT_DEFAULT_TTF_PATH );
-		return qfalse;
+	} else {
+		ri.Printf( PRINT_WARNING, "%s: couldn't load %s\n", callerTag, ttfPath );
 	}
 
-	*outBuffer = ttfBuffer;
+	// No mod assets mounted at all (bare retail install, missing/stale pk3) --
+	// fall back to the TTF baked directly into the binary at build time.
+	ri.Printf( PRINT_WARNING, "%s: couldn't load %s from disk, using built-in font\n", callerTag, FONT_DEFAULT_TTF_PATH );
+	if ( !stbtt_InitFont( font, font_hudchars_embedded_ttf, stbtt_GetFontOffsetForIndex( font_hudchars_embedded_ttf, 0 ) ) ) {
+		ri.Printf( PRINT_WARNING, "%s: built-in font failed to parse (should never happen)\n", callerTag );
+		return qfalse;
+	}
+	*outBuffer = (void *)font_hudchars_embedded_ttf;
+	*outEmbedded = qtrue;
 	return qtrue;
 }
 
@@ -131,12 +141,13 @@ static float Font_GetBaselinePx( const stbtt_fontinfo *font, float glyphScaleY )
 
 static qboolean Font_BakeHudcharsGlyphs( void ) {
 	void *ttfBuffer;
+	qboolean ttfEmbedded;
 	stbtt_fontinfo font;
 	float scaleX, scaleY, baselinePxY;
 	int cellIndex;
 	byte glyphCoverage[FONT_BAKE_PX_PER_CELL * FONT_BAKE_PX_PER_CELL];
 
-	if ( !Font_LoadActiveTtf( &font, &ttfBuffer, "Font_BakeHudcharsGlyphs" ) ) {
+	if ( !Font_LoadActiveTtf( &font, &ttfBuffer, &ttfEmbedded, "Font_BakeHudcharsGlyphs" ) ) {
 		return qfalse;
 	}
 
@@ -172,7 +183,9 @@ static qboolean Font_BakeHudcharsGlyphs( void ) {
 		}
 	}
 
-	ri.FS_FreeFile( ttfBuffer );
+	if ( !ttfEmbedded ) {
+		ri.FS_FreeFile( ttfBuffer );
+	}
 	return qtrue;
 }
 
@@ -221,13 +234,14 @@ static byte consoleBakedAtlas[CONSOLE_BAKE_MAX_ATLAS_W * CONSOLE_BAKE_MAX_ATLAS_
 
 static qboolean Font_BakeConsoleGlyphs( int cellPxW, int cellPxH ) {
 	void *ttfBuffer;
+	qboolean ttfEmbedded;
 	stbtt_fontinfo font;
 	float scaleX, scaleY, baselinePxY;
 	int cellIndex;
 	int atlasPxW = FONT_GRID_CELLS * cellPxW;
 	byte *glyphCoverage;
 
-	if ( !Font_LoadActiveTtf( &font, &ttfBuffer, "Font_BakeConsoleGlyphs" ) ) {
+	if ( !Font_LoadActiveTtf( &font, &ttfBuffer, &ttfEmbedded, "Font_BakeConsoleGlyphs" ) ) {
 		return qfalse;
 	}
 
@@ -266,7 +280,9 @@ static qboolean Font_BakeConsoleGlyphs( int cellPxW, int cellPxH ) {
 	}
 
 	ri.Hunk_FreeTempMemory( glyphCoverage );
-	ri.FS_FreeFile( ttfBuffer );
+	if ( !ttfEmbedded ) {
+		ri.FS_FreeFile( ttfBuffer );
+	}
 	return qtrue;
 }
 

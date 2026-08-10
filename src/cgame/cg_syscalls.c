@@ -563,6 +563,12 @@ void trap_CNQ3_NDP_StopVideo(void) {
 	syscall(CG_EXT_NDP_STOPVIDEO);
 }
 
+// Hands the engine the vmMain entry point it calls back before re-parsing a
+// demo stream, so cgame's analysis accumulators start empty every time.
+void trap_CNQ3_NDP_ResetAnalysis(void) {
+	syscall(CG_EXT_NDP_RESET_ANALYSIS, CG_NDP_RESET_ANALYSIS);
+}
+
 void trap_LocateInteropData(void *bufferIn, int bufferInSize, void *bufferOut, int bufferOutSize) {
 	syscall(CG_EXT_LOCATEINTEROPDATA, bufferIn, bufferInSize, bufferOut, bufferOutSize);
 }

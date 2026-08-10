@@ -1079,8 +1079,13 @@ static float CG_DrawTeamOverlay( float y ) {
 				pcolor = damagecolor;
 			} else {
 				pcolor = deathcolor;
-				//RtcwPro
-				if (ci->playerLimbo != 1) {
+				// OSP tinfo has no playerLimbo field - it instead overloads
+				// health itself: -1 = revivable corpse, 0 = gibbed
+				if ( cg.demoPlayback && cg.ndpDemoEnabled && !isRtcwPro ) {
+					if ( ci->health < 0 ) {
+						isRevivable = "*";
+					}
+				} else if ( ci->playerLimbo != 1 ) {
 					isRevivable = "*";
 				}
 			}
@@ -1137,7 +1142,8 @@ static float CG_DrawTeamOverlay( float y ) {
 			}
 
 
-			Com_sprintf( st, sizeof( st ), "%3i", ci->health ); // JPW NERVE pulled class stuff since it's at top now
+			// OSP's -1 (revivable) is a gib-state sentinel, not real health - floor it for display
+			Com_sprintf( st, sizeof( st ), "%3i", ci->health > 0 ? ci->health : 0 );
 
 			if ( cg_drawTeamOverlay.integer > 1 ) {
 				xx = x + 20 + TINYCHAR_WIDTH * 6 + TINYCHAR_WIDTH * pwidth + TINYCHAR_WIDTH * lwidth;
@@ -2612,6 +2618,42 @@ static void CG_DrawCrosshair( void ) {
 	// -NERVE - SMF
 }
 
+/*
+=================
+CG_DrawSpectateCrosshair
+
+Generic static reticle for classic-demo spectate - no weapon-type, health-color,
+or zoom variant, since none of that state exists for a spectated target.
+=================
+*/
+static void CG_DrawSpectateCrosshair( void ) {
+	float w, h, x, y;
+	qhandle_t hShader;
+
+	if ( cg_drawCrosshair.integer < 0 ) {
+		return;
+	}
+
+	if ( cg_customCrosshair.integer ) {
+		CG_DrawCustomCrosshair();
+		return;
+	}
+
+	w = h = cg_crosshairSize.value;
+	x = cg_crosshairX.integer;
+	y = cg_crosshairY.integer;
+	CG_AdjustFrom640( &x, &y, &w, &h );
+
+	hShader = cgs.media.crosshairShader[ cg_drawCrosshair.integer % NUM_CROSSHAIRS ];
+
+	BG_setCrosshair( cg_crosshairColor.string, cg.xhairColor, cg_crosshairAlpha.value, "cg_crosshairColor" );
+	trap_R_SetColor( cg.xhairColor );
+
+	trap_R_DrawStretchPic( x + 0.5 * ( cgs.glconfig.vidWidth - w ),
+						   y + 0.5 * ( cgs.glconfig.vidHeight - h ),
+						   w, h, 0, 0, 1, 1, hShader );
+}
+
 
 
 /*
@@ -3261,6 +3303,23 @@ static qboolean CG_DrawFollow( void ) {
 	const char  *name;
 	char deploytime[128];        // JPW NERVE
 	float y;
+
+	// classic-demo/WTV spectate target - a client-side camera lock with no
+	// real PMF_FOLLOW playerstate behind it, so it needs its own branch.
+	if ( cg.wtvSpectateClientNum >= 0 ) {
+		if ( !cgs.clientinfo[ cg.wtvSpectateClientNum ].infoValid ) {
+			return qfalse;
+		}
+		color[0] = 1;
+		color[1] = 1;
+		color[2] = 1;
+		color[3] = 1;
+		y = 83;
+		CG_DrawSmallString( INFOTEXT_STARTX, y, CG_TranslateString( "following" ), 1.0F );
+		name = cgs.clientinfo[ cg.wtvSpectateClientNum ].name;
+		CG_DrawStringExt( 120, y, name, color, qtrue, qtrue, BIGCHAR_WIDTH, BIGCHAR_HEIGHT, 0 );
+		return qtrue;
+	}
 
 	if ( !( cg.snap->ps.pm_flags & PMF_FOLLOW ) ) {
 		return qfalse;
@@ -4055,16 +4114,21 @@ void CG_DrawObjectiveIcons() {
 // jpw
 
 
-	// draw treasure icon if we have the flag
-	y += 4;
+	// draw treasure icon if we have the flag - during spectate this reflects
+	// whoever the camera is watching, not the recording owner
+	{
+		int watchTarget = ( cg.wtvSpectateClientNum >= 0 ) ? cg.wtvSpectateClientNum : cg.snap->ps.clientNum;
 
-	VectorSet( hcolor, 1, 1, 1 );
-	hcolor[3] = cg_hudAlpha.value;
-	trap_R_SetColor( hcolor );
-	if ( cgs.clientinfo[cg.snap->ps.clientNum].powerups & ( 1 << PW_REDFLAG ) ||
-		 cgs.clientinfo[cg.snap->ps.clientNum].powerups & ( 1 << PW_BLUEFLAG ) ) {
-		CG_DrawPic( -7, y, 48, 48, cgs.media.exclamationIcon );
-		y += 50;
+		y += 4;
+
+		VectorSet( hcolor, 1, 1, 1 );
+		hcolor[3] = cg_hudAlpha.value;
+		trap_R_SetColor( hcolor );
+		if ( cgs.clientinfo[watchTarget].powerups & ( 1 << PW_REDFLAG ) ||
+			 cgs.clientinfo[watchTarget].powerups & ( 1 << PW_BLUEFLAG ) ) {
+			CG_DrawPic( -7, y, 48, 48, cgs.media.exclamationIcon );
+			y += 50;
+		}
 	}
 }
 // -NERVE - SMF
@@ -4453,6 +4517,480 @@ void CG_GenerateHudEvents(void){
 	}
 }
 
+qboolean CG_DemoTimelineCursorInRect( void ) {
+	return (qboolean)(
+		cgs.cursorX >= DEMO_TIMELINE_X && cgs.cursorX <= DEMO_TIMELINE_X + DEMO_TIMELINE_W &&
+		cgs.cursorY >= DEMO_TIMELINE_Y && cgs.cursorY <= DEMO_TIMELINE_Y + DEMO_TIMELINE_H );
+}
+
+int CG_DemoTimelineServerTimeAtCursor( void ) {
+	float percent = (float)( cgs.cursorX - DEMO_TIMELINE_X ) / (float)DEMO_TIMELINE_W;
+
+	if ( percent < 0.0f ) {
+		percent = 0.0f;
+	} else if ( percent > 1.0f ) {
+		percent = 1.0f;
+	}
+	return m_firstServerTime + (int)( percent * (float)( m_lastServerTime - m_firstServerTime ) );
+}
+
+#define DEMO_BTN_SIZE ( 16 )
+#define DEMO_BTN_GAP ( 3 )
+#define DEMO_BTN_COUNT ( 6 )
+
+// Shared by the draw block and the hit-test below so they can't drift apart.
+static void CG_DemoTimelineButtonRowOrigin( int *outX, int *outY ) {
+	int demoBtnRowW = DEMO_BTN_COUNT * DEMO_BTN_SIZE + ( DEMO_BTN_COUNT - 1 ) * DEMO_BTN_GAP;
+
+	*outX = DEMO_TIMELINE_X + ( DEMO_TIMELINE_W - demoBtnRowW ) / 2;
+	*outY = DEMO_TIMELINE_Y + DEMO_TIMELINE_H - 20;
+}
+
+int CG_DemoTimelineButtonAtCursor( void ) {
+	int demoBtnX, demoBtnY;
+	int btn;
+
+	CG_DemoTimelineButtonRowOrigin( &demoBtnX, &demoBtnY );
+	if ( cgs.cursorY < demoBtnY || cgs.cursorY > demoBtnY + DEMO_BTN_SIZE ) {
+		return -1;
+	}
+	for ( btn = 0; btn < DEMO_BTN_COUNT; btn++ ) {
+		int btnX = demoBtnX + btn * ( DEMO_BTN_SIZE + DEMO_BTN_GAP );
+
+		if ( cgs.cursorX >= btnX && cgs.cursorX <= btnX + DEMO_BTN_SIZE ) {
+			return btn;
+		}
+	}
+	return -1;
+}
+
+#define WTV_FOLLOWLIST_ROW_HEIGHT ( TINYCHAR_HEIGHT + 2 )
+
+// Builds the roster in top-to-bottom draw order: Axis header, Axis
+// players, Allies header, Allies players (a team with no players gets
+// no header). outClientNums[i] is -1 for a header row, else a clientNum.
+// outTeams[i] is that row's team, for header text/color. Returns row count.
+static int CG_WTVBuildFollowRoster( int outClientNums[MAX_CLIENTS + 2], team_t outTeams[MAX_CLIENTS + 2] ) {
+	int rowCount = 0;
+	int team, i;
+
+	for ( team = TEAM_RED; team <= TEAM_BLUE; team++ ) {
+		int headerRow = -1;
+
+		for ( i = 0; i < MAX_CLIENTS; i++ ) {
+			if ( !cgs.clientinfo[i].infoValid || cgs.clientinfo[i].team != team ) {
+				continue;
+			}
+			if ( headerRow < 0 ) {
+				headerRow = rowCount;
+				outClientNums[rowCount] = -1;
+				outTeams[rowCount] = team;
+				rowCount++;
+			}
+			outClientNums[rowCount] = i;
+			outTeams[rowCount] = team;
+			rowCount++;
+		}
+	}
+
+	return rowCount;
+}
+
+// Classic-demo counterpart to CG_WTVBuildFollowRoster: only entities with
+// live snapshot data qualify, except the recording owner's row (always real).
+static int CG_WTVBuildNearbyRoster( int outClientNums[MAX_CLIENTS + 2], team_t outTeams[MAX_CLIENTS + 2] ) {
+	int rowCount = 0;
+	int team, i;
+	int povClientNum = cg.snap ? cg.snap->ps.clientNum : -1;
+
+	for ( team = TEAM_RED; team <= TEAM_BLUE; team++ ) {
+		int headerRow = -1;
+
+		for ( i = 0; i < MAX_CLIENTS; i++ ) {
+			qboolean isPOV = ( i == povClientNum );
+
+			if ( !cgs.clientinfo[i].infoValid || cgs.clientinfo[i].team != team ) {
+				continue;
+			}
+			if ( !isPOV && ( !cg_entities[i].currentValid || cg_entities[i].currentState.eType != ET_PLAYER ) ) {
+				continue;
+			}
+			if ( headerRow < 0 ) {
+				headerRow = rowCount;
+				outClientNums[rowCount] = -1;
+				outTeams[rowCount] = team;
+				rowCount++;
+			}
+			outClientNums[rowCount] = i;
+			outTeams[rowCount] = team;
+			rowCount++;
+		}
+	}
+
+	return rowCount;
+}
+
+// Whoever the camera is actually locked to right now: a classic-demo
+// spectate target if one is active, else the true recorded POV's clientNum.
+static int CG_WTVEffectiveWatchTarget( void ) {
+	if ( cg.wtvSpectateClientNum >= 0 ) {
+		return cg.wtvSpectateClientNum;
+	}
+	return cg.snap ? cg.snap->ps.clientNum : -1;
+}
+
+// +attack player-cycling for classic (non-WTV) demo playback, mirroring
+// "wtvfollow next" but limited to CG_WTVBuildNearbyRoster's PVS-visible list
+// since a classic demo never recorded anyone else's full state.
+void CG_WTVNearbyRosterCycle( int direction ) {
+	int clientNums[MAX_CLIENTS + 2];
+	team_t teams[MAX_CLIENTS + 2];
+	int rowCount;
+	int currentClientNum;
+	int currentRow;
+	int i;
+
+	if ( !cg.snap ) {
+		return;
+	}
+	rowCount = CG_WTVBuildNearbyRoster( clientNums, teams );
+	if ( rowCount == 0 ) {
+		return;
+	}
+
+	currentClientNum = CG_WTVEffectiveWatchTarget();
+	currentRow = -1;
+	for ( i = 0; i < rowCount; i++ ) {
+		if ( clientNums[i] == currentClientNum ) {
+			currentRow = i;
+			break;
+		}
+	}
+
+	for ( i = 0; i < rowCount; i++ ) {
+		currentRow = ( currentRow + direction + rowCount ) % rowCount;
+		if ( clientNums[currentRow] >= 0 && clientNums[currentRow] != currentClientNum ) {
+			break;
+		}
+	}
+	if ( clientNums[currentRow] < 0 || clientNums[currentRow] == currentClientNum ) {
+		return;
+	}
+
+	cg.wtvSpectateClientNum = ( clientNums[currentRow] == cg.snap->ps.clientNum ) ? -1 : clientNums[currentRow];
+	trap_Cvar_Set( "cg_wtvFreecam", "0" );
+}
+
+// Row i's top Y, counting from the topmost row (0) down toward the
+// timeline's top edge — shared by drawing and hit-testing so they can't drift apart.
+static int CG_WTVFollowListRowY( int rowIndex, int totalRows ) {
+	return DEMO_TIMELINE_Y - totalRows * WTV_FOLLOWLIST_ROW_HEIGHT + rowIndex * WTV_FOLLOWLIST_ROW_HEIGHT;
+}
+
+// Collapsed "Following: <name>" ("Free Camera" while free-roaming) label's
+// background-box rect — also used for hit-testing, so the clickable area
+// always matches what's drawn. Returns qfalse if there's no valid
+// followed-player identity to show.
+static qboolean CG_WTVFollowListGetLabelRect( int *outX, int *outY, int *outW, int *outH, char *outLabel, int outLabelSize ) {
+	int clientNum;
+	int textW;
+
+	if ( !cg.snap ) {
+		return qfalse;
+	}
+	clientNum = CG_WTVEffectiveWatchTarget();
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || !cgs.clientinfo[clientNum].infoValid ) {
+		return qfalse;
+	}
+
+	if ( cg_wtvFreecam.integer ) {
+		Q_strncpyz( outLabel, "Free Camera", outLabelSize );
+	} else {
+		Com_sprintf( outLabel, outLabelSize, "Following: %s", cgs.clientinfo[clientNum].name );
+	}
+	textW = CG_DrawStrlen( outLabel ) * TINYCHAR_WIDTH;
+	*outX = DEMO_TIMELINE_X - 2;
+	*outY = DEMO_TIMELINE_Y + 1;
+	*outW = textW + 4;
+	*outH = TINYCHAR_HEIGHT + 2;
+	return qtrue;
+}
+
+qboolean CG_WTVFollowListLabelInRect( void ) {
+	int labelX, labelY, labelW, labelH;
+	char label[MAX_QPATH + 16];
+
+	if ( !CG_WTVFollowListGetLabelRect( &labelX, &labelY, &labelW, &labelH, label, sizeof( label ) ) ) {
+		return qfalse;
+	}
+	return (qboolean)(
+		cgs.cursorX >= labelX && cgs.cursorX <= labelX + labelW &&
+		cgs.cursorY >= labelY && cgs.cursorY <= labelY + labelH );
+}
+
+// Returns the clientNum of the row under the cursor, -2 if the cursor is
+// over a header row (present but not selectable), or -1 otherwise.
+int CG_WTVFollowListRowAtCursor( void ) {
+	int clientNums[MAX_CLIENTS + 2];
+	team_t teams[MAX_CLIENTS + 2];
+	int rowCount;
+	int i;
+
+	if ( !cg.snap || !cg.wtvFollowListShown ) {
+		return -1;
+	}
+	rowCount = cg_wtvActive.integer ? CG_WTVBuildFollowRoster( clientNums, teams ) : CG_WTVBuildNearbyRoster( clientNums, teams );
+
+	for ( i = 0; i < rowCount; i++ ) {
+		int rowY = CG_WTVFollowListRowY( i, rowCount );
+
+		if ( cgs.cursorX < DEMO_TIMELINE_X || cgs.cursorX > DEMO_TIMELINE_X + DEMO_TIMELINE_W ||
+			cgs.cursorY < rowY || cgs.cursorY >= rowY + WTV_FOLLOWLIST_ROW_HEIGHT ) {
+			continue;
+		}
+		return ( clientNums[i] < 0 ) ? -2 : clientNums[i];
+	}
+	return -1;
+}
+
+static void CG_DrawDemoTimeline( void ) {
+	int i;
+	int demoDuration, demoProgress, progressLocation;
+	float progressPercent;
+	vec4_t bgColor = { 0.0f, 0.0f, 0.0f, 0.3f };
+	vec4_t timelineBarFill = { 0.25f, 0.36f, 0.2f, 0.8f };
+	vec4_t timelineBarPositionFill = { 1.0f, 0.0f, 0.0f, 1.0f };
+	vec4_t killSquareFill = { 0.0f, 1.0f, 0.0f, 1.0f };
+	vec4_t killStreakFill = { 0.98f, 0.98f, 0.02f, 1.0f };
+	vec4_t docCarrierFill = { 0.02f, 0.98f, 0.98f, 1.0f };
+
+	if ( !( cg.demoPlayback && cg.ndpDemoEnabled && cg.demoTimelineShown ) ) {
+		return;
+	}
+
+	demoDuration = m_lastServerTime - m_firstServerTime;
+	if ( demoDuration <= 0 ) {
+		return;
+	}
+
+	CG_FillRect( 0, DEMO_TIMELINE_Y, SCREEN_WIDTH, DEMO_TIMELINE_H, bgColor );
+	CG_FillRect( 1.0f, DEMO_TIMELINE_Y + 1.0f, SCREEN_WIDTH - 2.0f, DEMO_TIMELINE_H - 2.0f, bgColor );
+
+	CG_FillRect( DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - GIANTCHAR_HEIGHT, DEMO_TIMELINE_W, 8, timelineBarFill );
+
+	demoProgress = m_currServerTime - m_firstServerTime;
+	progressPercent = (float)demoProgress / (float)demoDuration;
+	progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+	CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - GIANTCHAR_HEIGHT, 3, 10, timelineBarPositionFill );
+	CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - GIANTCHAR_HEIGHT, 1, 32, timelineBarPositionFill );
+
+	CG_DrawPic( 24, DEMO_TIMELINE_CONTENT_BOTTOM - 37, 10, 10, cgs.media.skullIcon );
+	CG_DrawPic( 21.5f, DEMO_TIMELINE_CONTENT_BOTTOM - 28, 15, 15, cgs.media.exclamationIcon );
+
+	// kill markers are specific to whichever player you're following —
+	// meaningless once freecam or spectate detaches the view from them.
+	if ( !cg_wtvFreecam.integer && cg.wtvSpectateClientNum < 0 ) {
+		for ( i = 0; i < ndp_myKillsSize; i++ ) {
+			demoProgress = ndp_myKills[i] - m_firstServerTime;
+			progressPercent = (float)demoProgress / (float)demoDuration;
+			progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+			if ( ndp_killStreak[i] ) {
+				CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 32, 2, 2, killStreakFill );
+			} else {
+				CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 32, 2, 2, killSquareFill );
+			}
+		}
+	}
+
+	for ( i = 0; i < ndp_axisWinsSize; i++ ) {
+		demoProgress = ndp_axisWins[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 52, 24, 14, trap_R_RegisterShaderNoMip( "ui_mp/assets/ger_flag.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_alliesWinsSize; i++ ) {
+		demoProgress = ndp_alliesWins[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 52, 24, 14, trap_R_RegisterShaderNoMip( "ui_mp/assets/usa_flag.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_round1EndSize; i++ ) {
+		demoProgress = ndp_round1End[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 64, 14, 14, trap_R_RegisterShader( "sprites/stopwatch1.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_round2EndSize; i++ ) {
+		demoProgress = ndp_round2End[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		CG_DrawPic( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 64, 14, 14, trap_R_RegisterShader( "sprites/stopwatch2.tga" ) );
+	}
+
+	for ( i = 0; i < ndp_docPickupSize; i++ ) {
+		int docDropProgressLocation;
+		float docDropProgressPercent = 1.0f;
+
+		demoProgress = ndp_docPickupTime[i] - m_firstServerTime;
+		progressPercent = (float)demoProgress / (float)demoDuration;
+		progressLocation = (int)( (float)( DEMO_TIMELINE_W ) * progressPercent );
+
+		if ( i < ndp_docDropSize ) {
+			int docDropTime = ndp_docDropTime[i] - m_firstServerTime;
+			docDropProgressPercent = (float)docDropTime / (float)demoDuration;
+		}
+		docDropProgressLocation = (int)( (float)( DEMO_TIMELINE_W ) * docDropProgressPercent );
+
+		CG_FillRect( progressLocation + DEMO_TIMELINE_X, DEMO_TIMELINE_CONTENT_BOTTOM - 20, docDropProgressLocation - progressLocation, 2, docCarrierFill );
+	}
+
+	{
+		qhandle_t demoBtnShaders[DEMO_BTN_COUNT];
+		vec4_t demoBtnIdleColor = { 0.631373f, 0.627451f, 0.596078f, 1.0f };
+		int demoBtnX, demoBtnY;
+		int btn;
+
+		CG_DemoTimelineButtonRowOrigin( &demoBtnX, &demoBtnY );
+
+		demoBtnShaders[0] = cgs.media.demoBtnSkipBack;
+		demoBtnShaders[1] = cgs.media.demoBtnRewind;
+		demoBtnShaders[2] = cgs.media.demoBtnPlay;
+		demoBtnShaders[3] = cgs.media.demoBtnPlayPause;
+		demoBtnShaders[4] = cgs.media.demoBtnFastForward;
+		demoBtnShaders[5] = cgs.media.demoBtnSkipForward;
+
+		for ( btn = 0; btn < DEMO_BTN_COUNT; btn++ ) {
+			vec4_t btnColor = { demoBtnIdleColor[0], demoBtnIdleColor[1], demoBtnIdleColor[2], 1.0f };
+
+			// play-pause: solid yellow while paused, no fade
+			if ( btn == 3 ) {
+				if ( cg_timescale.value == 0.0f ) {
+					btnColor[0] = 1.0f;
+					btnColor[1] = 1.0f;
+					btnColor[2] = 0.0f;
+				}
+			} else {
+				int flashAge = trap_Milliseconds() - cgs.demoTimelineBtnFlashTime[btn];
+
+				if ( flashAge >= 0 && flashAge < 500 ) {
+					float t = (float)flashAge / 500.0f;
+
+					btnColor[0] = 1.0f + ( demoBtnIdleColor[0] - 1.0f ) * t;
+					btnColor[1] = 1.0f + ( demoBtnIdleColor[1] - 1.0f ) * t;
+					btnColor[2] = demoBtnIdleColor[2] * t;
+				}
+			}
+			trap_R_SetColor( btnColor );
+			CG_DrawPic( demoBtnX + btn * ( DEMO_BTN_SIZE + DEMO_BTN_GAP ), demoBtnY, DEMO_BTN_SIZE, DEMO_BTN_SIZE, demoBtnShaders[btn] );
+		}
+		trap_R_SetColor( NULL );
+	}
+
+	if ( cgs.demoTimelineHoverTime >= 0 ) {
+		int roundStart = CG_NDP_LevelStartTimeAt( cgs.demoTimelineHoverTime );
+		float limit = CG_NDP_TimeLimitAt( cgs.demoTimelineHoverTime );
+		int msec = ( limit > 0.0f )
+			? (int)( limit * 60000.0f ) - ( cgs.demoTimelineHoverTime - roundStart )
+			: ( cgs.demoTimelineHoverTime - roundStart );
+		int seconds = msec / 1000;
+		char *label;
+		int labelWidth;
+		vec4_t tooltipBg = { 0.0f, 0.0f, 0.0f, 0.6f };
+
+		if ( seconds < 0 ) {
+			seconds = 0;
+		}
+		label = CG_NDP_FormatTimestamp( seconds );
+		labelWidth = CG_DrawStrlen( label ) * TINYCHAR_WIDTH;
+
+		CG_FillRect( cgs.cursorX - labelWidth / 2 - 2, cgs.cursorY - 32, labelWidth + 4, TINYCHAR_HEIGHT + 2, tooltipBg );
+		CG_DrawStringExt( cgs.cursorX - labelWidth / 2, cgs.cursorY - 31, label, colorWhite, qfalse, qtrue, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0 );
+	}
+
+	{
+		int labelX, labelY, labelW, labelH;
+		char label[MAX_QPATH + 16];
+
+		if ( CG_WTVFollowListGetLabelRect( &labelX, &labelY, &labelW, &labelH, label, sizeof( label ) ) ) {
+			vec4_t labelBg = { 0.0f, 0.0f, 0.0f, 0.3f };
+
+			// double fill (full rect, then inset by 1px) matches the timeline
+			// strip's own border look — the un-doubled 1px edge reads lighter.
+			CG_FillRect( labelX, labelY, labelW, labelH, labelBg );
+			CG_FillRect( labelX + 1, labelY + 1, labelW - 2, labelH - 2, labelBg );
+			CG_DrawStringExt( labelX + 2, labelY + 1, label, colorWhite, qfalse, qtrue, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0 );
+
+			if ( cg.wtvFollowListShown ) {
+				int clientNums[MAX_CLIENTS + 2];
+				team_t teams[MAX_CLIENTS + 2];
+				int rowCount = cg_wtvActive.integer ? CG_WTVBuildFollowRoster( clientNums, teams ) : CG_WTVBuildNearbyRoster( clientNums, teams );
+				int hoverClientNum = CG_WTVFollowListRowAtCursor();
+				vec4_t listBg = { 0.0f, 0.0f, 0.0f, 0.3f };
+				int listX = DEMO_TIMELINE_X - 2;
+				int listY = CG_WTVFollowListRowY( 0, rowCount );
+				int listH = rowCount * WTV_FOLLOWLIST_ROW_HEIGHT;
+				int listW = 0;
+				int row;
+
+				for ( row = 0; row < rowCount; row++ ) {
+					int rowW;
+
+					if ( clientNums[row] < 0 ) {
+						const char *teamName = ( teams[row] == TEAM_RED ) ? CG_TranslateString( "Axis" ) : CG_TranslateString( "Allies" );
+						rowW = 16 + 2 + CG_DrawStrlen( teamName ) * TINYCHAR_WIDTH;
+					} else {
+						rowW = CG_DrawStrlen( cgs.clientinfo[clientNums[row]].name ) * TINYCHAR_WIDTH;
+					}
+					if ( rowW > listW ) {
+						listW = rowW;
+					}
+				}
+				listW += 4;
+
+				CG_FillRect( listX, listY, listW, listH, listBg );
+				CG_FillRect( listX + 1, listY + 1, listW - 2, listH - 2, listBg );
+
+				for ( row = 0; row < rowCount; row++ ) {
+					int rowY = CG_WTVFollowListRowY( row, rowCount );
+					float *color = CG_TeamColor( teams[row] );
+
+					if ( clientNums[row] < 0 ) {
+						qboolean isAxis = ( teams[row] == TEAM_RED );
+						const char *teamName = isAxis ? CG_TranslateString( "Axis" ) : CG_TranslateString( "Allies" );
+						int iconW = 16;
+						qhandle_t flagShader = trap_R_RegisterShaderNoMip( isAxis ? "ui_mp/assets/ger_flag.tga" : "ui_mp/assets/usa_flag.tga" );
+
+						CG_DrawPic( DEMO_TIMELINE_X, rowY, iconW, WTV_FOLLOWLIST_ROW_HEIGHT, flagShader );
+						CG_DrawStringExt( DEMO_TIMELINE_X + iconW + 2, rowY, teamName, color, qfalse, qtrue, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0 );
+					} else {
+						const char *name = cgs.clientinfo[clientNums[row]].name;
+
+						if ( clientNums[row] == CG_WTVEffectiveWatchTarget() ) {
+							vec4_t followBg = { 1.0f, 1.0f, 1.0f, 0.2f };
+							CG_FillRect( listX, rowY, listW, WTV_FOLLOWLIST_ROW_HEIGHT, followBg );
+						} else if ( clientNums[row] == hoverClientNum ) {
+							vec4_t hoverBg = { 1.0f, 1.0f, 1.0f, 0.1f };
+							CG_FillRect( listX, rowY, listW, WTV_FOLLOWLIST_ROW_HEIGHT, hoverBg );
+						}
+						CG_DrawStringExt( DEMO_TIMELINE_X, rowY, name, color, qfalse, qtrue, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0 );
+					}
+				}
+			}
+		}
+	}
+
+	CG_DrawPic( cgs.cursorX - 12, cgs.cursorY - 12, 32, 32, cgDC.Assets.cursor );
+}
+
 static void CG_DrawStatsWindows(void){
 	vec4_t bgColor = {0.0f, 0.0f, 0.0f, 0.3f};
 
@@ -4517,6 +5055,45 @@ static void CG_Draw2D( void ) {
 
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		CG_DrawIntermission();
+		CG_DrawDemoTimeline();
+		return;
+	}
+
+	// freecam or spectate detaches the view from the recording owner —
+	// none of their HUD (health/ammo/weapon/compass/etc) applies anymore,
+	// only the timeline.
+	if ( cg.demoPlayback && cg.ndpDemoEnabled && ( cg_wtvFreecam.integer || cg.wtvSpectateClientNum >= 0 ) ) {
+		// normally cleared by CG_DrawScoreboard's fade-out, which we skip here —
+		// without this a stale "Killed by X" leaks into the next real scoreboard
+		// draw (e.g. intermission) at full opacity, since nothing ever clears it.
+		cg.killerName[0] = 0;
+		if ( cg.wtvSpectateClientNum >= 0 ) {
+			CG_DrawSpectateCrosshair();
+		}
+		CG_DrawFollow();
+		// match-wide elements (killfeed, broadcast prints, timer, objectives)
+		// aren't tied to any one player's data, so they stay visible here
+		// same as during freecam. dev overlays (fps/snapshot) are likewise
+		// client-local, not tied to whoever's being followed - stacked
+		// top-to-bottom same as CG_DrawUpperRight's own y-chaining.
+		CG_DrawNotify();
+		CG_DrawCenterString();
+		{
+			float y = 0;
+
+			if ( cg_drawSnapshot.integer ) {
+				y = CG_DrawSnapshot( y );
+			}
+			if ( cg_drawFPS.integer ) {
+				y = CG_DrawFPS( y );
+			}
+			if ( cg_drawTimer.integer && cgs.gamestate == GS_PLAYING ) {
+				CG_DrawTimer( y );
+			}
+		}
+		CG_DrawObjectiveInfo();
+		CG_DrawObjectiveIcons();
+		CG_DrawDemoTimeline();
 		return;
 	}
 
@@ -4602,6 +5179,7 @@ static void CG_Draw2D( void ) {
 	}
 
 	CG_DrawStatsWindows();
+	CG_DrawDemoTimeline();
 
 	// Ridah, draw flash blends now
 	CG_DrawFlashBlend();
