@@ -2780,8 +2780,8 @@ WEAPON SELECTION
 #define WP_ICON_X_WIDE  72  // new sizes per MK
 #define WP_ICON_Y       38
 #define WP_ICON_SPACE_Y 10
-#define WP_DRAW_X       640 - WP_ICON_X - 4 // 4 is 'selected' border width
-#define WP_DRAW_X_WIDE  640 - WP_ICON_X_WIDE - 4
+#define WP_DRAW_X       cgs.virtualWidth - WP_ICON_X - 4 // 4 is 'selected' border width
+#define WP_DRAW_X_WIDE  cgs.virtualWidth - WP_ICON_X_WIDE - 4
 #define WP_DRAW_Y       4
 
 // secondary fire icons

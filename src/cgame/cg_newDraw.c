@@ -1655,6 +1655,71 @@ static void CG_DrawWeapRecharge( rectDef_t *rect, vec4_t color, int align ) {
 
 /*
 ==============
+CG_OwnerDrawResolveRightX
+
+Keeps a right-anchored hud.txt element's margin from the true edge a constant percentage
+of screen width; overrideCvar wins when set (absolute/edge-relative, not width-scaled).
+==============
+*/
+static float CG_OwnerDrawResolveRightX( float rawX, float rawW, vmCvar_t *overrideCvar ) {
+	if ( overrideCvar->value > OWNERDRAW_X_UNSET ) {
+		return CG_ResolveScreenX( overrideCvar->value );
+	}
+	return CG_ScaleScreenXRightEdge( rawX, rawW );
+}
+
+/*
+==============
+CG_OwnerDrawResolveLeftX
+
+Left-anchored counterpart of CG_OwnerDrawResolveRightX -- the left edge needs no width
+correction (see CG_ScaleScreenX), so this just wraps the manual-override check.
+==============
+*/
+static float CG_OwnerDrawResolveLeftX( float rawX, vmCvar_t *overrideCvar ) {
+	if ( overrideCvar->value > OWNERDRAW_X_UNSET ) {
+		return CG_ResolveScreenX( overrideCvar->value );
+	}
+	return CG_ScaleScreenX( rawX );
+}
+
+/*
+==============
+CG_OwnerDrawResolveX
+
+Wired into cgDC.ownerDrawResolveX (cg_main.c) and called by the shared
+ui_shared.c Item_Paint *before* it draws a hud.txt item's own background --
+resolving x here too (not just inside the CG_OwnerDraw cases below) keeps a
+right-anchored element's background/frame texture from drifting away from
+its content, since Item_Paint draws that background straight from the item's
+un-adjusted hud.txt rect. Weapon heat rides along with the weapon icon since
+they're always meant to sit together.
+==============
+*/
+float CG_OwnerDrawResolveX( int ownerDraw, float rawX, float rawW ) {
+	switch ( ownerDraw ) {
+	case CG_PLAYER_WEAPON_ICON2D:
+	case CG_PLAYER_WEAPON_HEAT:
+		return CG_OwnerDrawResolveRightX( rawX, rawW, &cg_weaponIconX );
+	case CG_PLAYER_AMMO_ICON:
+	case CG_PLAYER_AMMO_ICON2D:
+		return CG_OwnerDrawResolveRightX( rawX, rawW, &cg_ammoIconX );
+	case CG_PLAYER_AMMO_VALUE:
+	case CG_PLAYER_AMMOCLIP_VALUE:
+		return CG_OwnerDrawResolveRightX( rawX, rawW, &cg_ammoValueX );
+	case CG_PLAYER_WEAPON_RECHARGE:
+		return CG_OwnerDrawResolveRightX( rawX, rawW, &cg_chargeBarX );
+	case CG_STAMINA:
+		return CG_OwnerDrawResolveLeftX( rawX, &cg_sprintBarX );
+	case CG_PLAYER_HEALTH:
+		return CG_OwnerDrawResolveLeftX( rawX, &cg_healthX );
+	default:
+		return rawX;
+	}
+}
+
+/*
+==============
 CG_OwnerDraw
 ==============
 */
@@ -1695,6 +1760,9 @@ void CG_OwnerDraw( float x, float y, float w, float h, float text_x, float text_
 		CG_DrawPlayerAmmoValue( &rect, scale, color, shader, textStyle, 0 );
 		break;
 	case CG_CURSORHINT:
+		// width-aware scaling re-centers this single box using its own
+		// hud.txt width, rather than assuming it was already centered
+		rect.x = CG_ScaleScreenXWidth( rect.x, rect.w );
 		CG_DrawCursorhint( &rect );
 		break;
 	case CG_PLAYER_AMMOCLIP_VALUE:
@@ -1888,8 +1956,8 @@ void CG_MouseEvent( int x, int y ) {
 	cgs.cursorX += x;
 	if ( cgs.cursorX < 0 ) {
 		cgs.cursorX = 0;
-	} else if ( cgs.cursorX > 640 ) {
-		cgs.cursorX = 640;
+	} else if ( cgs.cursorX > (int)cgs.virtualWidth ) {
+		cgs.cursorX = (int)cgs.virtualWidth;
 	}
 
 	cgs.cursorY += y;
