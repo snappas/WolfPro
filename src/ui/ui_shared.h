@@ -395,6 +395,7 @@ typedef struct {
 	void ( *Print )( const char *msg, ... );
 	void ( *Pause )( qboolean b );
 	int ( *ownerDrawWidth )( int ownerDraw, float scale );
+	float ( *ownerDrawResolveX )( int ownerDraw, float x, float w );    // optional; NULL means "leave x alone"
 //	sfxHandle_t (*registerSound)(const char *name, qboolean compressed);
 	sfxHandle_t ( *registerSound )( const char *name );
 	void ( *startBackgroundTrack )( const char *intro, const char *loop );

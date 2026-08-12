@@ -399,12 +399,23 @@ vmCvar_t cg_speedY;
 
 vmCvar_t cg_drawWeaponIconFlash;
 
+// ownerDraw HUD element X overrides (weapon icon, ammo icon/value, charge bar,
+// sprint/stamina bar, health)
+vmCvar_t cg_weaponIconX;
+vmCvar_t cg_ammoIconX;
+vmCvar_t cg_ammoValueX;
+vmCvar_t cg_chargeBarX;
+vmCvar_t cg_sprintBarX;
+vmCvar_t cg_healthX;
+
 vmCvar_t cg_chatX;
 vmCvar_t cg_chatY;
 vmCvar_t cg_compassX;
 vmCvar_t cg_compassY;
 vmCvar_t cg_lagometerX;
 vmCvar_t cg_lagometerY;
+
+vmCvar_t cg_widescreen;
 
 vmCvar_t cg_drawCI;
 
@@ -713,7 +724,7 @@ cvarTable_t cvarTable[] = {
 	{ &cl_guid, "cl_guid", NO_GUID, CVAR_ROM | CVAR_TEMP },
 
 	// team overlay
-	{ &cg_teamOverlayX, "cg_teamOverlayX", "640", CVAR_ARCHIVE },
+	{ &cg_teamOverlayX, "cg_teamOverlayX", "-1", CVAR_ARCHIVE },
 	{ &cg_teamOverlayY, "cg_teamOverlayY", "0", CVAR_ARCHIVE },
 	{ &cg_teamOverlayMaxLocationWidth, "cg_teamOverlayMaxLocationWidth", "20", CVAR_ARCHIVE }, 
 
@@ -730,17 +741,32 @@ cvarTable_t cvarTable[] = {
 
 	{ &cg_drawWeaponIconFlash, "cg_drawWeaponIconFlash", "0", CVAR_ARCHIVE },
 
+	// ownerDraw HUD element X overrides — "-99999" means unset, use the hud.txt-authored
+	// position unchanged; any other value follows the CG_ResolveScreenX convention
+	// (>=0 absolute virtual-640 X, <0 distance from the true right edge)
+	{ &cg_weaponIconX, "cg_weaponIconX", "-99999", CVAR_ARCHIVE },
+	{ &cg_ammoIconX, "cg_ammoIconX", "-99999", CVAR_ARCHIVE },
+	{ &cg_ammoValueX, "cg_ammoValueX", "-99999", CVAR_ARCHIVE },
+	{ &cg_chargeBarX, "cg_chargeBarX", "-99999", CVAR_ARCHIVE },
+	{ &cg_sprintBarX, "cg_sprintBarX", "-99999", CVAR_ARCHIVE },
+	{ &cg_healthX, "cg_healthX", "-99999", CVAR_ARCHIVE },
+
 	// chat
 	{ &cg_chatX, "cg_chatX", "0", CVAR_ARCHIVE },
 	{ &cg_chatY, "cg_chatY", "385", CVAR_ARCHIVE },
 
 	// compass
-	{ &cg_compassX, "cg_compassX", "290", CVAR_ARCHIVE },
+	{ &cg_compassX, "cg_compassX", "-99999", CVAR_ARCHIVE },
 	{ &cg_compassY, "cg_compassY", "420", CVAR_ARCHIVE },
 
 	// lagometer
-	{ &cg_lagometerX, "cg_lagometerX", "585", CVAR_ARCHIVE },
+	{ &cg_lagometerX, "cg_lagometerX", "-55", CVAR_ARCHIVE },
 	{ &cg_lagometerY, "cg_lagometerY", "340", CVAR_ARCHIVE },
+
+	// defaults to 0 (classic non-uniform stretch, pixel-identical to the pre-widescreen-fix
+	// engine for any existing player config) so upgrading is a silent no-op visually; players
+	// opt into the corrected/extended layout explicitly with cg_widescreen 1
+	{ &cg_widescreen, "cg_widescreen", "0", CVAR_ARCHIVE },
 
 	{ &cg_drawCI, "cg_drawCI", "1", CVAR_ARCHIVE },
 
@@ -872,6 +898,35 @@ void CG_setClientFlags(void) {
 }
 
 /*
+==============
+CG_UpdateScreenScale
+
+Recomputes the virtual-640-space -> real-pixel scale factors. Called once at
+init and every frame from CG_UpdateCvars so cg_widescreen takes effect
+immediately without a vid_restart.
+==============
+*/
+void CG_UpdateScreenScale( void ) {
+	cgs.screenXScale = cgs.screenYScale = cgs.glconfig.vidHeight / 480.0f;
+	cgs.screenXBias = 0;
+
+	if ( cg_widescreen.integer == 1 ) {
+		// aspect-stretched: canvas widens to fill the screen, uniform scale
+		cgs.virtualWidth = 480.0f * cgs.glconfig.vidWidth / cgs.glconfig.vidHeight;
+	} else if ( cg_widescreen.integer == 2 ) {
+		// centered: fixed 640-wide canvas, letterboxed/pillarboxed
+		cgs.virtualWidth = 640.0f;
+		cgs.screenXBias = 0.5f * ( cgs.glconfig.vidWidth - cgs.glconfig.vidHeight * 640.0f / 480.0f );
+	} else {
+		// 0 (default): classic non-uniform stretch, pixel-identical to the
+		// pre-widescreen-fix engine -- fills the screen exactly on any aspect
+		// ratio, distorting circular/square art (eg. the compass)
+		cgs.screenXScale = cgs.glconfig.vidWidth / 640.0f;
+		cgs.virtualWidth = 640.0f;
+	}
+}
+
+/*
 =================
 CG_UpdateCvars
 =================
@@ -895,6 +950,8 @@ void CG_UpdateCvars( void ) {
 			}
 		}
 	}
+
+	CG_UpdateScreenScale();
 
 	// if force model changed
 	if ( forceModelModificationCount != cg_forceModel.modificationCount ) {
@@ -2529,6 +2586,7 @@ void CG_LoadHudMenu() {
 	cgDC.Error = &Com_Error;
 	cgDC.Print = &Com_Printf;
 	cgDC.ownerDrawWidth = &CG_OwnerDrawWidth;
+	cgDC.ownerDrawResolveX = &CG_OwnerDrawResolveX;
 	//cgDC.Pause = &CG_Pause;
 	cgDC.registerSound = &trap_S_RegisterSound;
 	cgDC.startBackgroundTrack = &trap_S_StartBackgroundTrack;
@@ -2957,8 +3015,7 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 
 	// get the rendering configuration from the client system
 	trap_GetGlconfig( &cgs.glconfig );
-	cgs.screenXScale = cgs.glconfig.vidWidth / 640.0;
-	cgs.screenYScale = cgs.glconfig.vidHeight / 480.0;
+	CG_UpdateScreenScale();
 
 	// get the gamestate from the client system
 	trap_GetGameState( &cgs.gameState );

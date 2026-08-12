@@ -553,7 +553,7 @@ void CG_DrawHoldableSelect( void ) {
 		}
 	}
 
-	x = 320 - count * 20;
+	x = CG_VIRTUAL_CENTER_X - count * 20;
 	y = 380;
 
 
@@ -605,7 +605,7 @@ void CG_DrawHoldableSelect( void ) {
 		//----(SA)	trying smaller text
 //				w = CG_DrawStrlen( name ) * BIGCHAR_WIDTH;
 				w = CG_DrawStrlen( name ) * 10;
-				x = ( SCREEN_WIDTH - w ) / 2;
+				x = ( cgs.virtualWidth - w ) / 2;
 //				CG_DrawBigStringColor(x, y - 22, name, color);
 				CG_DrawStringExt2( x, y + 60, name, color, qfalse, qtrue, 10, 10, 0 );
 			}

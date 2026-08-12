@@ -207,11 +207,11 @@ cvarGui_t hudCvars[] = {
 	{"cg_notifyTextLines", &cg_notifyTextLines, CVT_INT, 0, 16, 0.0f, 50.0f },
 
 	{"cg_lagometer", &cg_lagometer, CVT_BOOL, 0, 0, 0.0f, 50.0f },
-	{"cg_lagometerX", &cg_lagometerX, CVT_INT, 0, 640, 0.0f, 50.0f },
+	{"cg_lagometerX", &cg_lagometerX, CVT_INT, -640, 640, 0.0f, 50.0f },
 	{"cg_lagometerY", &cg_lagometerY, CVT_INT, 0, 480, 0.0f, 50.0f },
 
 	{"cg_drawCompass", &cg_drawCompass, CVT_BOOL, 0, 0, 0.0f, 50.0f },
-	{"cg_compassX", &cg_compassX, CVT_INT, 0, 640, 0.0f, 50.0f },
+	{"cg_compassX", &cg_compassX, CVT_INT, -640, 640, 0.0f, 50.0f },
 	{"cg_compassY", &cg_compassY, CVT_INT, 0, 480, 0.0f, 50.0f },
 
 	{"cg_drawSpeed", &cg_drawSpeed, CVT_BOOL, 0, 0, 0.0f, 50.0f },
@@ -220,7 +220,7 @@ cvarGui_t hudCvars[] = {
 
 	
 
-	{"cg_teamOverlayX", &cg_teamOverlayX, CVT_INT, 0, 640, 0.0f, 50.0f },
+	{"cg_teamOverlayX", &cg_teamOverlayX, CVT_INT, -640, 640, 0.0f, 50.0f },
 	{"cg_teamOverlayY", &cg_teamOverlayY, CVT_INT, 0, 480, 0.0f, 50.0f },
 
 	{"cg_showPriorityText", &cg_showPriorityText, CVT_BOOL, 0, 0, 0.0f, 50.0f },

@@ -4271,6 +4271,7 @@ void Item_Paint( itemDef_t *item ) {
 	}
 	vec4_t red;
 	menuDef_t *parent = (menuDef_t*)item->parent;
+	float ownerDrawOrigX;
 	red[0] = red[3] = 1;
 	red[1] = red[2] = 0;
 
@@ -4404,6 +4405,33 @@ void Item_Paint( itemDef_t *item ) {
 		return;
 	}
 
+	// resolve ownerdraw x before painting the background so a shifted
+	// element's own backdrop stays under it; applied temporarily and
+	// restored below since item->window.rect is persistent state.
+	ownerDrawOrigX = item->window.rect.x;
+	if ( item->type == ITEM_TYPE_OWNERDRAW && DC->ownerDrawResolveX ) {
+		item->window.rect.x = DC->ownerDrawResolveX( item->window.ownerDraw, ownerDrawOrigX, item->window.rect.w );
+	} else if ( DC->ownerDrawResolveX && parent ) {
+		// plain decoration sharing a menuDef with ownerdraw item(s): ride along with
+		// whichever sibling sits closest to it, since that's the one it's framing.
+		int i;
+		float bestDist = -1.0f;
+		for ( i = 0; i < parent->itemCount; i++ ) {
+			itemDef_t *sib = parent->items[i];
+			float dist, resolvedSibX;
+			if ( !sib || sib->type != ITEM_TYPE_OWNERDRAW ) {
+				continue;
+			}
+			dist = (float)fabs( sib->window.rect.x - ownerDrawOrigX );
+			if ( bestDist >= 0.0f && dist >= bestDist ) {
+				continue;
+			}
+			bestDist = dist;
+			resolvedSibX = DC->ownerDrawResolveX( sib->window.ownerDraw, sib->window.rect.x, sib->window.rect.w );
+			item->window.rect.x = ownerDrawOrigX + ( resolvedSibX - sib->window.rect.x );
+		}
+	}
+
 	// paint the rect first..
 	Window_Paint( &item->window, parent->fadeAmount, parent->fadeClamp, parent->fadeCycle );
 
@@ -4462,6 +4490,8 @@ void Item_Paint( itemDef_t *item ) {
 	default:
 		break;
 	}
+
+	item->window.rect.x = ownerDrawOrigX;
 }
 
 void Menu_Init( menuDef_t *menu ) {

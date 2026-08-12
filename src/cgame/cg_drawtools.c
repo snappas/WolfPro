@@ -37,13 +37,6 @@ Adjusted for resolution and screen aspect ratio
 ================
 */
 void CG_AdjustFrom640( float *x, float *y, float *w, float *h ) {
-#if 0
-	// adjust for wide screens
-	if ( cgs.glconfig.vidWidth * 480 > cgs.glconfig.vidHeight * 640 ) {
-		*x += 0.5 * ( cgs.glconfig.vidWidth - ( cgs.glconfig.vidHeight * 640 / 480 ) );
-	}
-#endif
-
 	// NERVE - SMF - hack to make images display properly in small view / limbo mode
 	if ( cg.limboMenu && cg.refdef.width ) {
 		float xscale = ( ( cg.refdef.width / cgs.screenXScale ) / 640.f );
@@ -53,14 +46,105 @@ void CG_AdjustFrom640( float *x, float *y, float *w, float *h ) {
 		( *y ) = ( *y ) * yscale + ( cg.refdef.y / cgs.screenYScale );
 		( *w ) *= xscale;
 		( *h ) *= yscale;
+
+		*x *= cgs.screenXScale;
+		*y *= cgs.screenYScale;
+		*w *= cgs.screenXScale;
+		*h *= cgs.screenYScale;
+		return;
 	}
 	// -NERVE - SMF
 
 	// scale for screen sizes
 	*x *= cgs.screenXScale;
+	*x += cgs.screenXBias;
 	*y *= cgs.screenYScale;
 	*w *= cgs.screenXScale;
 	*h *= cgs.screenYScale;
+}
+
+/*
+================
+CG_ResolveScreenX
+
+A cvar-driven X position: >= 0 is an absolute virtual-640-space X, unchanged
+from historical behavior. < 0 is a distance from the true right edge of the
+screen (cgs.virtualWidth), so HUD elements can hug the real edge on
+widescreen instead of the old fixed 640 boundary.
+================
+*/
+float CG_ResolveScreenX( float value ) {
+	return value >= 0 ? value : cgs.virtualWidth + value;
+}
+
+/*
+================
+CG_ResolveScreenXLegacy
+
+Same as CG_ResolveScreenX, but a saved cvar still holding a known old literal
+(eg. "cg_lagometerX" "585" == 640 - 55) resolves as that literal's edge-relative equivalent.
+================
+*/
+float CG_ResolveScreenXLegacy( float value, float legacyLiteral ) {
+	if ( value == legacyLiteral ) {
+		// computed directly, not via CG_ResolveScreenX(offset): an offset of
+		// exactly 0 would otherwise hit its >=0 branch as an absolute x
+		return cgs.virtualWidth + ( legacyLiteral - 640.0f );
+	}
+	return CG_ResolveScreenX( value );
+}
+
+/*
+================
+CG_ScaleScreenX
+
+A free-placed 640-wide-canvas X (no edge/center anchor semantics) scaled to keep its
+percentage of screen width, matching cg_widescreen 0's proportional baseline.
+================
+*/
+float CG_ScaleScreenX( float value ) {
+	return value * ( cgs.virtualWidth / 640.0f );
+}
+
+/*
+================
+CG_ScaleScreenXWidth
+
+Same as CG_ScaleScreenX, but scales the element's center (value + width/2), not its raw
+left edge -- exact re-centering for a box already centered at 640-space's midpoint.
+================
+*/
+float CG_ScaleScreenXWidth( float value, float width ) {
+	return ( value + width * 0.5f ) * ( cgs.virtualWidth / 640.0f ) - width * 0.5f;
+}
+
+/*
+================
+CG_ScaleScreenXRightEdge
+
+Same family as CG_ScaleScreenXWidth, but scales the element's right edge (value + width)
+instead of its center -- keeps its margin from the true right edge a constant percentage
+of screen width, rather than a fixed virtual-unit gap that shrinks proportionally as the
+canvas widens.
+================
+*/
+float CG_ScaleScreenXRightEdge( float value, float width ) {
+	return ( value + width ) * ( cgs.virtualWidth / 640.0f ) - width;
+}
+
+/*
+================
+CG_FullScreenRect
+
+Virtual-space x/width that, once run through CG_AdjustFrom640, covers the
+entire real screen regardless of cg_widescreen — unlike cgs.virtualWidth
+alone, which only spans the real screen in stretch mode (bias is 0 there;
+in pillarbox mode this compensates for the nonzero bias instead).
+================
+*/
+void CG_FullScreenRect( float *x, float *w ) {
+	*x = -cgs.screenXBias / cgs.screenXScale;
+	*w = cgs.glconfig.vidWidth / cgs.screenXScale;
 }
 
 /*
@@ -231,9 +315,9 @@ void CG_DrawMotd() {
 
 	s = CG_ConfigString( CS_MOTD );
 	if ( s[0] ) {
-		CG_FillRect( 0, 448, 640, 14, color );
+		CG_FillRect( 0, 448, cgs.virtualWidth, 14, color );
 		len = (int)( (float)UI_ProportionalStringWidth( s ) * UI_ProportionalSizeScale( UI_EXSMALLFONT ) / 2 );
-		CG_DrawStringExt( 320 - len, 445, s, colorWhite, qfalse, qtrue, SMALLCHAR_WIDTH, SMALLCHAR_HEIGHT, 0 );
+		CG_DrawStringExt( CG_VIRTUAL_CENTER_X - len, 445, s, colorWhite, qfalse, qtrue, SMALLCHAR_WIDTH, SMALLCHAR_HEIGHT, 0 );
 	}
 }
 
