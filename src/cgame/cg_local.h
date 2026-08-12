@@ -1690,6 +1690,14 @@ typedef struct {
 
 #define CG_VIRTUAL_CENTER_X ( (int)( cgs.virtualWidth * 0.5f ) )
 
+// how far a 640-wide-canvas-authored element (hud.txt art blocks, free-placed
+// HUD cvars) needs to shift to keep its original distance from center
+#define CG_CENTER_OFFSET_X ( ( cgs.virtualWidth - 640.0f ) * 0.5f )
+
+// sentinel for the ownerDraw X-override cvars (cg_weaponIconX etc.) — at or below
+// this means "unset, use the hud.txt-authored rect.x unchanged"
+#define OWNERDRAW_X_UNSET -99999.0f
+
 //==============================================================================
 
 extern cgs_t cgs;
@@ -1924,6 +1932,13 @@ extern vmCvar_t cg_speedY;
 
 extern vmCvar_t cg_drawWeaponIconFlash;
 
+extern vmCvar_t cg_weaponIconX;
+extern vmCvar_t cg_ammoIconX;
+extern vmCvar_t cg_ammoValueX;
+extern vmCvar_t cg_chargeBarX;
+extern vmCvar_t cg_sprintBarX;
+extern vmCvar_t cg_healthX;
+
 extern vmCvar_t cg_chatX;
 extern vmCvar_t cg_chatY;
 extern vmCvar_t cg_teamOverlayX;
@@ -1933,7 +1948,7 @@ extern vmCvar_t cg_compassY;
 extern vmCvar_t cg_lagometerX;
 extern vmCvar_t cg_lagometerY;
 
-extern vmCvar_t cg_hudStretch;
+extern vmCvar_t cg_widescreen;
 
 extern vmCvar_t cg_drawCI;
 
@@ -1999,7 +2014,7 @@ void CG_EventHandling( int type );
 #define DEMO_TIMELINE_X ( GIANTCHAR_WIDTH )
 #define DEMO_TIMELINE_BUTTONS_H ( 24 )
 #define DEMO_TIMELINE_Y ( SCREEN_HEIGHT - 70 - DEMO_TIMELINE_BUTTONS_H )
-#define DEMO_TIMELINE_W ( SCREEN_WIDTH - ( GIANTCHAR_WIDTH * 2 ) )
+#define DEMO_TIMELINE_W ( cgs.virtualWidth - ( GIANTCHAR_WIDTH * 2 ) )
 #define DEMO_TIMELINE_H ( 70 + DEMO_TIMELINE_BUTTONS_H )
 #define DEMO_TIMELINE_CONTENT_BOTTOM ( DEMO_TIMELINE_Y + DEMO_TIMELINE_H - DEMO_TIMELINE_BUTTONS_H )
 
@@ -2044,6 +2059,11 @@ void CG_Concussive( centity_t *cent );
 void CG_AdjustFrom640( float *x, float *y, float *w, float *h );
 void CG_UpdateScreenScale( void );
 float CG_ResolveScreenX( float value );
+float CG_ResolveScreenXLegacy( float value, float legacyLiteral );
+float CG_ScaleScreenX( float value );
+float CG_ScaleScreenXWidth( float value, float width );
+float CG_ScaleScreenXRightEdge( float value, float width );
+void CG_FullScreenRect( float *x, float *w );
 void CG_FillRect( float x, float y, float width, float height, const float *color );
 void CG_HorizontalPercentBar( float x, float y, float width, float height, float percent );
 void CG_DrawMotd();
@@ -2117,6 +2137,7 @@ void CG_DrawFlagModel( float x, float y, float w, float h, int team );
 
 void CG_DrawTeamBackground( int x, int y, int w, int h, float alpha, int team );
 void CG_OwnerDraw( float x, float y, float w, float h, float text_x, float text_y, int ownerDraw, int ownerDrawFlags, int align, float special, float scale, vec4_t color, qhandle_t shader, int textStyle );
+float CG_OwnerDrawResolveX( int ownerDraw, float rawX, float rawW );
 void CG_Text_Paint( float x, float y, float scale, vec4_t color, const char *text, float adjust, int limit, int style );
 int CG_Text_Width( const char *text, float scale, int limit );
 int CG_Text_Height( const char *text, float scale, int limit );

@@ -202,8 +202,15 @@ static void CG_CalcVrect( void ) {
 		w = LIMBO_3D_W;
 		h = LIMBO_3D_H;
 
+		// the frame drawn around this preview comes from the ui module, which
+		// still uses the old non-uniform scale - match it rather than cgame's
+		// now-uniform CG_AdjustFrom640, so the two rects stay in agreement
+		x *= cgs.glconfig.vidWidth / 640.0f;
+		w *= cgs.glconfig.vidWidth / 640.0f;
+		y *= cgs.glconfig.vidHeight / 480.0f;
+		h *= cgs.glconfig.vidHeight / 480.0f;
+
 		cg.refdef.width = 0;
-		CG_AdjustFrom640( &x, &y, &w, &h );
 
 		cg.refdef.x = x;
 		cg.refdef.y = y;

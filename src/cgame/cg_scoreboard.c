@@ -234,7 +234,7 @@ int WM_DrawObjectives( int x, int y, int width, float fade ) {
 		y -= 15;
 
 	int w = CG_DrawStrlen(scoreInfo) * TINYCHAR_WIDTH;
-	CG_DrawStringExt(615 - w, y + TINYCHAR_HEIGHT - 2, scoreInfo, colorWhite, qfalse, qfalse, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0);
+	CG_DrawStringExt(x + width - w, y + TINYCHAR_HEIGHT - 2, scoreInfo, colorWhite, qfalse, qfalse, TINYCHAR_WIDTH, TINYCHAR_HEIGHT, 0);
 
 	//CG_DrawSmallString(x + 530, y, CG_GetClock(), fade); // RTCWPro - time
 
@@ -550,7 +550,7 @@ static int WM_DrawInfoLine( int x, int y, float fade ) {
 	}
 
 	w = 300;
-	CG_DrawPic( 320 - w / 2, y, w, INFO_LINE_HEIGHT, trap_R_RegisterShaderNoMip( "ui_mp/assets/mp_line_strip.tga" ) );
+	CG_DrawPic( CG_VIRTUAL_CENTER_X - w / 2, y, w, INFO_LINE_HEIGHT, trap_R_RegisterShaderNoMip( "ui_mp/assets/mp_line_strip.tga" ) );
 
 	s = CG_ConfigString( CS_MULTI_INFO );
 	defender = atoi( Info_ValueForKey( s, "defender" ) );
@@ -582,7 +582,7 @@ static int WM_DrawInfoLine( int x, int y, float fade ) {
 
 	w = CG_DrawStrlen( s ) * SMALLCHAR_WIDTH;
 
-	CG_DrawSmallString( 320 - w / 2, ( y + INFO_LINE_HEIGHT / 2 ) - SMALLCHAR_HEIGHT / 2, s, fade );
+	CG_DrawSmallString( CG_VIRTUAL_CENTER_X - w / 2, ( y + INFO_LINE_HEIGHT / 2 ) - SMALLCHAR_HEIGHT / 2, s, fade );
 	return y + INFO_LINE_HEIGHT + 10;
 }
 
@@ -738,7 +738,7 @@ qboolean CG_DrawScoreboard( void ) {
 	if ( cg.killerName[0] ) {
 		s = va( "Killed by %s", cg.killerName );
 		w = CG_DrawStrlen( s ) * BIGCHAR_WIDTH;
-		x = ( SCREEN_WIDTH - w ) / 2;
+		x = ( cgs.virtualWidth - w ) / 2;
 		y = 40;
 		CG_DrawBigString( x, y, s, fade );
 	}
@@ -753,7 +753,7 @@ qboolean CG_DrawScoreboard( void ) {
 						CG_PlaceString( cg.snap->ps.persistant[PERS_RANK] + 1 ),
 						cg.snap->ps.persistant[PERS_SCORE] );
 				w = CG_DrawStrlen( s ) * BIGCHAR_WIDTH;
-				x = ( SCREEN_WIDTH - w ) / 2;
+				x = ( cgs.virtualWidth - w ) / 2;
 				y = 60;
 				CG_DrawBigString( x, y, s, fade );
 			} else {
@@ -766,14 +766,14 @@ qboolean CG_DrawScoreboard( void ) {
 				}
 
 				w = CG_DrawStrlen( s ) * BIGCHAR_WIDTH;
-				x = ( SCREEN_WIDTH - w ) / 2;
+				x = ( cgs.virtualWidth - w ) / 2;
 				y = 60;
 				CG_DrawBigString( x, y, s, fade );
 			}
 		}
 
 		// scoreboard
-		x = 320 - SCOREBOARD_WIDTH / 2;
+		x = CG_VIRTUAL_CENTER_X - SCOREBOARD_WIDTH / 2;
 		y = 86;
 
 		CG_DrawPic( x + 1 * 16, y, 64, 32, cgs.media.scoreboardScore );
@@ -795,7 +795,7 @@ qboolean CG_DrawScoreboard( void ) {
 		INFO_BORDER         = 2;
 		INFO_TOTAL_WIDTH    = INFO_PLAYER_WIDTH + INFO_CLASS_WIDTH + INFO_SCORE_WIDTH + INFO_LATENCY_WIDTH;
 
-		x = 20;
+		x = 20 + (int)( CG_CENTER_OFFSET_X );
 		y = 10;
 
 		WM_DrawObjectives( x, y, 595, fade );
@@ -804,13 +804,13 @@ qboolean CG_DrawScoreboard( void ) {
 			y = WM_DrawInfoLine( x, 155, fade );
 
 			WM_TeamScoreboard( x, y, TEAM_RED, fade, 18 );
-			x = 335;
+			x = 335 + (int)( CG_CENTER_OFFSET_X );
 			WM_TeamScoreboard( x, y, TEAM_BLUE, fade, 18 );
 		} else {
 			y = 155;
 
 			WM_TeamScoreboard( x, y, TEAM_RED, fade, 20 );
-			x = 335;
+			x = 335 + (int)( CG_CENTER_OFFSET_X );
 			WM_TeamScoreboard( x, y, TEAM_BLUE, fade, 20 );
 		}
 	}
@@ -872,6 +872,7 @@ Draw the oversize scoreboard for tournements
 void CG_DrawTourneyScoreboard( void ) {
 	vec4_t color;
 	int x,y;
+	float fsx, fsw;
 
 	// request more scores regularly
 	if ( cg.scoresRequestTime + 2000 < cg.time ) {
@@ -882,7 +883,8 @@ void CG_DrawTourneyScoreboard( void ) {
 	// draw the dialog background
 	color[0] = color[1] = color[2] = 0;
 	color[3] = 1;
-	CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, color );
+	CG_FullScreenRect( &fsx, &fsw );
+	CG_FillRect( fsx, 0, fsw, SCREEN_HEIGHT, color );
 
 	if ( cgs.gametype >= GT_WOLF ) {
 		INFO_PLAYER_WIDTH   = 140;
@@ -893,7 +895,7 @@ void CG_DrawTourneyScoreboard( void ) {
 		INFO_BORDER         = 2;
 		INFO_TOTAL_WIDTH    = INFO_PLAYER_WIDTH + INFO_CLASS_WIDTH + INFO_SCORE_WIDTH + INFO_LATENCY_WIDTH;
 
-		x = 20;
+		x = 20 + (int)( CG_CENTER_OFFSET_X );
 		y = 10;
 
 		WM_DrawObjectives( x, y, 595, 1.f );
@@ -902,13 +904,13 @@ void CG_DrawTourneyScoreboard( void ) {
 			y = WM_DrawInfoLine( x, 155, 1.f );
 
 			WM_TeamScoreboard( x, y, TEAM_RED, 1.f, 18 );
-			x = 335;
+			x = 335 + (int)( CG_CENTER_OFFSET_X );
 			WM_TeamScoreboard( x, y, TEAM_BLUE, 1.f, 18 );
 		} else {
 			y = 155;
 
 			WM_TeamScoreboard( x, y, TEAM_RED, 1.f, 20 );
-			x = 335;
+			x = 335 + (int)( CG_CENTER_OFFSET_X );
 			WM_TeamScoreboard( x, y, TEAM_BLUE, 1.f, 20 );
 		}
 	}

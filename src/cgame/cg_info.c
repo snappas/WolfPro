@@ -199,7 +199,7 @@ void CG_DrawStats( char *stats ) {
 	int varIndex;
 	char string[MAX_QPATH];
 
-	UI_DrawProportionalString( 320, 120, "MISSION STATS",
+	UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, 120, "MISSION STATS",
 							   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 
 	Q_strncpyz( string, stats, sizeof( string ) );
@@ -278,13 +278,17 @@ void CG_DrawInformation( void ) {
 
 	vec4_t color;
 
+	float fsx, fsw;
+
 	if ( cg.snap && ( strlen( cg_missionStats.string ) <= 1 ) ) {
 		return;     // we are in the world, no need to draw information
 	}
 
+	CG_FullScreenRect( &fsx, &fsw );
+
 	if(levelshot){
 		trap_R_SetColor( NULL );
-		CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelshot );
+		CG_DrawPic( fsx, 0, fsw, SCREEN_HEIGHT, levelshot );
 	}
 
 	
@@ -326,7 +330,7 @@ void CG_DrawInformation( void ) {
 		
 	}
 	trap_R_SetColor( NULL );
-	CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelshot );
+	CG_DrawPic( fsx, 0, fsw, SCREEN_HEIGHT, levelshot );
 
 	// blend a detail texture over it
 	//detail = trap_R_RegisterShader( "levelShotDetail" );
@@ -351,7 +355,7 @@ void CG_DrawInformation( void ) {
 
 		if ( cg_waitForFire.integer == 1 ) {
 			// waiting for server to finish loading the map
-			UI_DrawProportionalString( 320, xy[1] + wh[1] - 10, "press fire to continue",
+			UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, xy[1] + wh[1] - 10, "press fire to continue",
 									   UI_CENTER | UI_EXSMALLFONT | UI_DROPSHADOW, color );
 		} else if ( expectedHunk > 0 ) {
 			percentDone = (float)( cg_hunkUsed.integer + cg_soundAdjust.integer ) / (float)( expectedHunk );
@@ -362,11 +366,11 @@ void CG_DrawInformation( void ) {
 		} else if ( expectedHunk == -2 ) {
 			// we're ready, press a key to start playing
 			if ( ( ms % 1000 ) < 700 ) {  // flashing to get our attention
-				UI_DrawProportionalString( 320, xy[1] + wh[1] - 10, "press fire to begin",
+				UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, xy[1] + wh[1] - 10, "press fire to begin",
 										   UI_CENTER | UI_EXSMALLFONT | UI_DROPSHADOW, color );
 			}
 		} else {
-			UI_DrawProportionalString( 320, xy[1] + wh[1] - 10, "please wait",
+			UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, xy[1] + wh[1] - 10, "please wait",
 									   UI_CENTER | UI_EXSMALLFONT | UI_DROPSHADOW, color );
 		}
 
@@ -394,7 +398,7 @@ void CG_DrawInformation( void ) {
 		} else if ( expectedHunk == -2 ) {
 			// we're ready, press a key to start playing
 			if ( ( ms % 1000 ) < 700 ) {  // flashing to get our attention
-				UI_DrawProportionalString( 320, xy[1] - 2, "press fire to begin",
+				UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, xy[1] - 2, "press fire to begin",
 										   UI_CENTER | UI_EXSMALLFONT | UI_DROPSHADOW, color );
 			}
 		}
@@ -411,10 +415,10 @@ void CG_DrawInformation( void ) {
 	// the first 150 rows are reserved for the client connection
 	// screen to write into
 	if ( cg.infoScreenText[0] ) {
-		UI_DrawProportionalString( 320, 128, va( "Loading... %s", cg.infoScreenText ),
+		UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, 128, va( "Loading... %s", cg.infoScreenText ),
 								   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 	} else {
-		UI_DrawProportionalString( 320, 128, "Awaiting snapshot...",
+		UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, 128, "Awaiting snapshot...",
 								   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 	}
 
@@ -426,14 +430,14 @@ void CG_DrawInformation( void ) {
 	if ( !atoi( buf ) ) {
 		// server hostname
 		s = Info_ValueForKey( info, "sv_hostname" );
-		UI_DrawProportionalString( 320, y, s,
+		UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, s,
 								   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 		y += PROP_HEIGHT;
 
 		// server-specific message of the day
 		s = CG_ConfigString( CS_MOTD );
 		if ( s[0] ) {
-			UI_DrawProportionalString( 320, y, s,
+			UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, s,
 									   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 			y += PROP_HEIGHT;
 		}
@@ -445,7 +449,7 @@ void CG_DrawInformation( void ) {
 	// map-specific message (long map name)
 	s = CG_ConfigString( CS_MESSAGE );
 	if ( s[0] ) {
-		UI_DrawProportionalString( 320, y, s,
+		UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, s,
 								   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 		y += PROP_HEIGHT;
 	}
@@ -453,7 +457,7 @@ void CG_DrawInformation( void ) {
 	// cheats warning
 	s = Info_ValueForKey( sysInfo, "sv_cheats" );
 	if ( s[0] == '1' ) {
-		UI_DrawProportionalString( 320, y, "CHEATS ARE ENABLED",
+		UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, "CHEATS ARE ENABLED",
 								   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 		y += PROP_HEIGHT;
 	}
@@ -494,13 +498,13 @@ void CG_DrawInformation( void ) {
 		s = "Unknown Gametype";
 		break;
 	}
-	UI_DrawProportionalString( 320, y, s,
+	UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, s,
 							   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 	y += PROP_HEIGHT;
 
 	value = atoi( Info_ValueForKey( info, "timelimit" ) );
 	if ( value ) {
-		UI_DrawProportionalString( 320, y, va( "timelimit %i", value ),
+		UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, va( "timelimit %i", value ),
 								   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 		y += PROP_HEIGHT;
 	}
@@ -508,7 +512,7 @@ void CG_DrawInformation( void ) {
 	if ( cgs.gametype != GT_CTF) {
 		value = atoi( Info_ValueForKey( info, "fraglimit" ) );
 		if ( value ) {
-			UI_DrawProportionalString( 320, y, va( "fraglimit %i", value ),
+			UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, va( "fraglimit %i", value ),
 									   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 			y += PROP_HEIGHT;
 		}
@@ -517,7 +521,7 @@ void CG_DrawInformation( void ) {
 	if ( cgs.gametype == GT_CTF ) {
 		value = atoi( Info_ValueForKey( info, "capturelimit" ) );
 		if ( value ) {
-			UI_DrawProportionalString( 320, y, va( "capturelimit %i", value ),
+			UI_DrawProportionalString( CG_VIRTUAL_CENTER_X, y, va( "capturelimit %i", value ),
 									   UI_CENTER | UI_SMALLFONT | UI_DROPSHADOW, colorWhite );
 			y += PROP_HEIGHT;
 		}

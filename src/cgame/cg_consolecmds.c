@@ -733,7 +733,7 @@ void CG_DemoTimeline_f( void ) {
 	} else {
 		cg.demoTimelineShown = qtrue;
 		cg.wtvFollowListShown = qtrue;
-		cgs.cursorX = 320;
+		cgs.cursorX = CG_VIRTUAL_CENTER_X;
 		cgs.cursorY = 240;
 		cgs.demoTimelineHoverTime = -1;
 	}
