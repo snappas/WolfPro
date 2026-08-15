@@ -1708,7 +1708,11 @@ void ClientEndFrame( gentity_t *ent ) {
 		ent->props_frame_state = -1;
 	}
 
-	if ( ent->health > 0 && StuckInClient( ent ) ) {
+	// only a just-revived player (props_frame_state holds the reviver's
+	// entity number until the block above clears it) should get the
+	// temporary non-solid grace period; an ordinary live player merely
+	// overlapping another shouldn't be made non-solid by this check
+	if ( ent->health > 0 && ent->props_frame_state >= 0 && StuckInClient( ent ) ) {
 		G_DPrintf( "%s is stuck in a client.\n", ent->client->pers.username );
 		ent->r.contents = CONTENTS_CORPSE;
 	}

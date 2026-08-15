@@ -1577,6 +1577,9 @@ extern vmCvar_t g_statsRetryCount;
 extern vmCvar_t g_statsRetryDelay;
 extern vmCvar_t g_apiquery_curl_URL;
 extern vmCvar_t g_wtvdemos;
+extern vmCvar_t g_wtvDiscordWebhookURL;
+extern vmCvar_t g_wtvDiscordRetryCount;
+extern vmCvar_t g_wtvDiscordRetryDelay;
 
 extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
@@ -1836,6 +1839,7 @@ void trap_WTV_RecordStop( int aborted );
 void trap_WTV_RecordPlayerIdentity( int clientNum, const char *guid, const char *name );
 qboolean trap_WTV_IsRecording( void );
 void trap_WTV_RecordCommand( const char *text );
+void trap_WTV_SetDiscordScoreboard( const char *text );
 
 typedef enum
 {

@@ -1,5 +1,6 @@
 #include "server.h"
 #include "sv_wtvdemo.h"
+#include "sv_wtvdiscord.h"
 #include "../qcommon/threads.h"
 #include <lzma.h>
 
@@ -17,6 +18,8 @@ typedef struct {
 
 	qboolean hasEntityBaseline[MAX_GENTITIES];
 	entityState_t lastEntity[MAX_GENTITIES];
+
+	char discordScoreboard[WTV_DISCORD_SCOREBOARD_MAX]; // set via WTV_SetDiscordScoreboard; "" if never set this round
 } wtvRecorder_t;
 
 static wtvRecorder_t wtv;
@@ -33,6 +36,13 @@ void WTV_QueueBroadcastCommand( const char *cmd ) {
 	}
 	Q_strncpyz( wtvPendingCommands[wtvPendingCommandCount], cmd, MAX_STRING_CHARS );
 	wtvPendingCommandCount++;
+}
+
+void WTV_SetDiscordScoreboard( const char *text ) {
+	if ( !wtv.active ) {
+		return;
+	}
+	Q_strncpyz( wtv.discordScoreboard, text, sizeof( wtv.discordScoreboard ) );
 }
 
 // 2 * MAX_CLIENTS: a full-server map_restart reconnects every client in one
@@ -196,11 +206,12 @@ typedef struct {
 	char tempFilePath[MAX_OSPATH];
 	char finalBasePath[MAX_OSPATH];
 	entityState_t *mapBaselines; // heap copy of sv.svEntities[].baseline; see WTV_RecordStop
+	char *discordScoreboard; // heap copy of wtv.discordScoreboard; NULL if never set this round
 } wtvCompressThreadArgs_t;
 
 static void *WTV_CompressThreadFn( void *args ) {
 	wtvCompressThreadArgs_t *threadArgs = (wtvCompressThreadArgs_t *)args;
-	WTV_CompressRound( threadArgs->tempFilePath, threadArgs->finalBasePath, threadArgs->mapBaselines );
+	WTV_CompressRound( threadArgs->tempFilePath, threadArgs->finalBasePath, threadArgs->mapBaselines, threadArgs->discordScoreboard );
 	free( threadArgs );
 	return NULL;
 }
@@ -226,6 +237,18 @@ void WTV_RecordStop( int aborted ) {
 				}
 				Com_sprintf( threadArgs->tempFilePath, sizeof( threadArgs->tempFilePath ), "%s.wtvtmp", wtv.basePath );
 				Q_strncpyz( threadArgs->finalBasePath, wtv.basePath, sizeof( threadArgs->finalBasePath ) );
+				// NULL if no scoreboard was ever set this round (not an allocation
+				// failure worth aborting the round over) — treated the same as an
+				// empty webhook cvar: upload the file(s) with no message text.
+				if ( wtv.discordScoreboard[0] ) {
+					size_t len = strlen( wtv.discordScoreboard ) + 1;
+					threadArgs->discordScoreboard = (char *)malloc( len );
+					if ( threadArgs->discordScoreboard ) {
+						Com_Memcpy( threadArgs->discordScoreboard, wtv.discordScoreboard, len );
+					}
+				} else {
+					threadArgs->discordScoreboard = NULL;
+				}
 				Threads_Create( WTV_CompressThreadFn, threadArgs );
 			} else {
 				Com_Printf( "WTV: failed to allocate baseline snapshot — recording for this round left as an unprocessed temp file\n" );
@@ -480,6 +503,14 @@ typedef struct {
 	qboolean rolloverPending; // threshold crossed; actual rollover deferred to the next tick boundary
 } wtvCompressState_t;
 
+void WTV_BuildFragmentPath( const char *finalBasePath, int partNumber, char *out, int outSize ) {
+	if ( partNumber == 1 ) {
+		Com_sprintf( out, outSize, "%s.wtv", finalBasePath );
+	} else {
+		Com_sprintf( out, outSize, "%s.part%i.wtv", finalBasePath, partNumber );
+	}
+}
+
 // Opens fragment partNumber (finalBasePath + ".wtv" for part 1, "+.partN.wtv"
 // after) and writes its header with placeholder index fields — those get
 // patched by WTV_CloseFinalFragment once the fragment's real values are known.
@@ -491,11 +522,7 @@ static qboolean WTV_OpenFinalFragment( wtvCompressState_t *cs, int partNumber ) 
 		return qfalse;
 	}
 
-	if ( partNumber == 1 ) {
-		Com_sprintf( filePath, sizeof( filePath ), "%s.wtv", cs->finalBasePath );
-	} else {
-		Com_sprintf( filePath, sizeof( filePath ), "%s.part%i.wtv", cs->finalBasePath, partNumber );
-	}
+	WTV_BuildFragmentPath( cs->finalBasePath, partNumber, filePath, sizeof( filePath ) );
 	cs->fragmentFile = fopen( filePath, "wb" );
 	if ( !cs->fragmentFile ) {
 		Com_Printf( "WTV: failed to open %s for compressed output\n", filePath );
@@ -917,7 +944,8 @@ static void WTV_DecodeAndWriteTick( msg_t *msg, wtvDecodeState_t *decodeState, w
 
 // mapBaselines: heap array of MAX_GENTITIES entityState_t, ownership passed
 // in — this function frees it on every return path (see WTV_RecordStop).
-void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, entityState_t *mapBaselines ) {
+// discordScoreboard: heap string (or NULL), same ownership rule.
+void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, entityState_t *mapBaselines, char *discordScoreboard ) {
 	FILE *tempFile;
 	wtvDecodeState_t *decodeState;
 	wtvCompressState_t cs;
@@ -928,6 +956,7 @@ void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, ent
 	if ( !tempFile ) {
 		Com_Printf( "WTV: WTV_CompressRound: couldn't open %s\n", tempFilePath );
 		free( mapBaselines );
+		free( discordScoreboard );
 		return;
 	}
 
@@ -938,6 +967,7 @@ void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, ent
 		Com_Printf( "WTV: WTV_CompressRound: out of memory\n" );
 		fclose( tempFile );
 		free( mapBaselines );
+		free( discordScoreboard );
 		return;
 	}
 	Com_Memset( decodeState, 0, sizeof( *decodeState ) );
@@ -950,6 +980,7 @@ void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, ent
 		free( decodeState );
 		fclose( tempFile );
 		free( mapBaselines );
+		free( discordScoreboard );
 		return;
 	}
 
@@ -973,7 +1004,9 @@ void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, ent
 
 	if ( !cs.failed ) {
 		remove( tempFilePath );
+		WTV_DiscordUploadRound( finalBasePath, cs.partNumber, discordScoreboard );
 	} else {
 		Com_Printf( "WTV: compression failed for %s — leaving %s in place for recovery\n", finalBasePath, tempFilePath );
 	}
+	free( discordScoreboard );
 }

@@ -924,6 +924,10 @@ intptr_t SV_GameSystemCalls(intptr_t* args ) {
 		WTV_QueueBroadcastCommand( (const char *)VMA( 1 ) );
 		return 0;
 
+	case G_WTV_SET_DISCORD_SCOREBOARD:
+		WTV_SetDiscordScoreboard( (const char *)VMA( 1 ) );
+		return 0;
+
 	default:
 		Com_Error( ERR_DROP, "Bad game system trap: %i", args[0] );
 	}

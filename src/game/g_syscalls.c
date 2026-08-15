@@ -835,6 +835,10 @@ void trap_WTV_RecordCommand( const char *text ) {
 	syscall( G_WTV_RECORD_COMMAND, text );
 }
 
+void trap_WTV_SetDiscordScoreboard( const char *text ) {
+	syscall( G_WTV_SET_DISCORD_SCOREBOARD, text );
+}
+
 qhandle_t trap_RegisterModel( char* name ){
 	return syscall( G_REGISTER_MODEL, name);
 }

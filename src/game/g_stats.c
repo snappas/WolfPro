@@ -901,10 +901,163 @@ static void WTV_CaptureMatchClockDump( void ) {
 	}
 }
 
-// WTV equivalent of G_printMatchInfo, recorded once (not per-client) since
-// every followed client sees the same replayed dump — no per-row highlight,
-// and rows use "sc" (not "usernamesc"/"netnamesc", which cgame only accepts
-// conditionally on cg_registeredPlayers) so playback isn't cvar-dependent.
+// Plain-text sibling of WTV_CaptureMatchClockDump, same computation, appended
+// to the Discord scoreboard buffer instead of recorded as an "sc" command.
+static void WTV_AppendDiscordClockDump( char *out, int outSize ) {
+	char *endofroundinfo;
+
+	if ( !level.intermissiontime ) {
+		return;
+	}
+
+	if ( g_currentRound.integer == 1 ) {
+		int roundTimeMinutes = g_nextTimeLimit.integer;
+		float roundTimeSeconds = ( g_nextTimeLimit.value - g_nextTimeLimit.integer ) * 60.0;
+
+		endofroundinfo = va( "Clock set to: %0d:%09.6f", roundTimeMinutes, roundTimeSeconds );
+	} else {
+		float val = (float)( ( level.timeCurrent - ( level.startTime + level.time - level.intermissiontime ) ) / 60000.0 );
+		int roundTimeMinutes = (int)val;
+		float roundTimeSeconds = ( val - (int)val ) * 60.0;
+		char *timeSet = va( "%0d:%09.6f", roundTimeMinutes, roundTimeSeconds );
+
+		if ( val < g_timelimit.value ) {
+			endofroundinfo = va( "Objective reached at %s (original: %s)", timeSet, g_preciseTimeSet.string );
+		} else {
+			endofroundinfo = va( "Objective NOT reached in time (original: %s)", g_preciseTimeSet.string );
+		}
+	}
+
+	Q_strcat( out, outSize, va( ">>> %s\n", endofroundinfo ) );
+}
+
+// Native copy buffer for the Discord scoreboard text; must match
+// WTV_DISCORD_SCOREBOARD_MAX in sv_wtvdemo.h (Discord's 2000-char content limit).
+#define WTV_DISCORD_SCOREBOARD_MAX 1990
+
+// Plain-text (no ^-color codes) copy of the scoreboard WTV_CaptureMatchInfo
+// records for playback — same per-team/per-player/totals shape plus the clock line.
+static void WTV_BuildDiscordScoreboardText( char *out, int outSize ) {
+	int i, j, cnt, eff;
+	float tot_acc;
+	int tot_rev, tot_kills, tot_deaths, tot_gp, tot_hs, tot_sui, tot_tk, tot_dg, tot_dr, tot_td, tot_hits, tot_shots, tot_gib;
+	gclient_t *cl;
+	char n3[MAX_NETNAME];
+	char n4[MAX_NETNAME];
+	char line[512];
+	qtime_t ct;
+
+	out[0] = '\0';
+	trap_RealTime( &ct );
+
+	Com_sprintf( line, sizeof( line ), "Mod: %s \nServer: %s  \nMap: %s\nTime: %02d:%02d:%02d (%02d %s %d)\n\n",
+		GAMEVERSION, sv_hostname.string, level.rawmapname, ct.tm_hour, ct.tm_min, ct.tm_sec, ct.tm_mday, dMonths[ct.tm_mon], 1900 + ct.tm_year );
+	Q_strcat( out, outSize, line );
+
+	// Placed before the per-team tables so it survives Q_strcat's truncation
+	// on a big roster — short and high-value, must never be the part that's dropped.
+	if ( g_gametype.integer == GT_WOLF_STOPWATCH ) {
+		WTV_AppendDiscordClockDump( out, outSize );
+	}
+
+	cnt = 0;
+	for ( i = TEAM_RED; i <= TEAM_BLUE; i++ ) {
+		if ( !TeamCount( -1, i ) ) {
+			continue;
+		}
+
+		tot_kills = 0;
+		tot_deaths = 0;
+		tot_hs = 0;
+		tot_sui = 0;
+		tot_tk = 0;
+		tot_dg = 0;
+		tot_dr = 0;
+		tot_td = 0;
+		tot_gib = 0;
+		tot_gp = 0;
+		tot_hits = 0;
+		tot_shots = 0;
+		tot_acc = 0;
+		tot_rev = 0;
+
+		Com_sprintf( line, sizeof( line ),
+			"%s Team\n--------------------------------------------------------------------------\n"
+			"Player          Kll Dth Sui TK Eff Gib Accrcy HS   DG   DR   TD  Rev Score\n"
+			"--------------------------------------------------------------------------\n",
+			( i == TEAM_RED ) ? "Axis" : "Allied" );
+		Q_strcat( out, outSize, line );
+
+		for ( j = 0; j < level.numPlayingClients; j++ ) {
+			cl = level.clients + level.sortedClients[j];
+
+			if ( cl->pers.connected != CON_CONNECTED || cl->sess.sessionTeam != i ) {
+				continue;
+			}
+
+			DecolorString( cl->pers.username, n3 );
+			SanitizeString( n3, n4 );
+			Q_CleanStr( n4 );
+			n4[15] = 0;
+
+			tot_kills += cl->sess.stats.kills;
+			tot_deaths += cl->sess.stats.deaths;
+			tot_sui += cl->sess.stats.suicides;
+			tot_tk += cl->sess.stats.team_kills;
+			tot_hs += cl->sess.stats.headshots;
+			tot_dg += cl->sess.stats.damage_given;
+			tot_gib += cl->sess.stats.gibs;
+			tot_dr += cl->sess.stats.damage_received;
+			tot_td += cl->sess.stats.team_damage;
+			tot_gp += cl->ps.persistant[PERS_SCORE];
+			tot_hits += cl->sess.stats.acc_hits;
+			tot_shots += cl->sess.stats.acc_shots;
+			tot_rev += cl->sess.stats.revives;
+
+			eff = ( cl->sess.stats.deaths + cl->sess.stats.kills == 0 ) ? 0 : 100 * cl->sess.stats.kills / ( cl->sess.stats.deaths + cl->sess.stats.kills );
+			if ( eff < 0 ) {
+				eff = 0;
+			}
+
+			cnt++;
+			Com_sprintf( line, sizeof( line ), "%-15s%4d%4d%4d%3d%4d%3d %6.2f%4d%5d%5d%5d%5d%5d\n",
+				n4,
+				cl->sess.stats.kills,
+				cl->sess.stats.deaths,
+				cl->sess.stats.suicides,
+				cl->sess.stats.team_kills,
+				eff,
+				cl->sess.stats.gibs,
+				( ( cl->sess.stats.acc_shots == 0 ) ? 0.00 : ( (float)cl->sess.stats.acc_hits / (float)cl->sess.stats.acc_shots ) * 100.00f ),
+				cl->sess.stats.headshots,
+				cl->sess.stats.damage_given,
+				cl->sess.stats.damage_received,
+				cl->sess.stats.team_damage,
+				cl->sess.stats.revives,
+				cl->ps.persistant[PERS_SCORE] );
+			Q_strcat( out, outSize, line );
+		}
+
+		eff = ( tot_kills + tot_deaths == 0 ) ? 0 : 100 * tot_kills / ( tot_kills + tot_deaths );
+		if ( eff < 0 ) {
+			eff = 0;
+		}
+		tot_acc = ( ( tot_shots == 0 ) ? 0.00 : ( (float)tot_hits / (float)tot_shots ) * 100.00f );
+
+		Com_sprintf( line, sizeof( line ),
+			"--------------------------------------------------------------------------\n"
+			"%-15s%4d%4d%4d%3d%4d%3d %6.2f%4d%5d%5d%5d%5d%5d\n\n",
+			"Totals", tot_kills, tot_deaths, tot_sui, tot_tk, eff, tot_gib, tot_acc, tot_hs, tot_dg, tot_dr, tot_td, tot_rev, tot_gp );
+		Q_strcat( out, outSize, line );
+	}
+
+	if ( !cnt ) {
+		Q_strcat( out, outSize, "\nNo scores to report.\n" );
+	}
+}
+
+// WTV equivalent of G_printMatchInfo, recorded once (not per-client) — no
+// per-row highlight, and "sc" rows only (not the cg_registeredPlayers-gated ones).
 static void WTV_CaptureMatchInfo( void ) {
 	int i, j, cnt, eff;
 	float tot_acc;
@@ -1107,6 +1260,14 @@ void G_matchInfoDump( unsigned int dwDumpType ) {
 
 	if ( dwDumpType == EOM_MATCHINFO && g_wtvdemos.integer ) {
 		WTV_CaptureMatchInfo();
+
+		// Only worth building/sending when a webhook is actually configured —
+		// skips the work entirely on servers that record locally but don't upload.
+		if ( g_wtvDiscordWebhookURL.string[0] ) {
+			char discordScoreboard[WTV_DISCORD_SCOREBOARD_MAX];
+			WTV_BuildDiscordScoreboardText( discordScoreboard, sizeof( discordScoreboard ) );
+			trap_WTV_SetDiscordScoreboard( discordScoreboard );
+		}
 	}
 
     if (g_gameStatslog.integer) {
