@@ -206,6 +206,9 @@ vmCvar_t g_statsRetryCount;
 vmCvar_t g_statsRetryDelay;
 vmCvar_t g_apiquery_curl_URL;
 vmCvar_t g_wtvdemos;
+vmCvar_t g_wtvDiscordWebhookURL;
+vmCvar_t g_wtvDiscordRetryCount;
+vmCvar_t g_wtvDiscordRetryDelay;
 
 vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
@@ -414,6 +417,9 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_statsRetryDelay, "g_statsRetryDelay", "2", CVAR_ARCHIVE, 0, qfalse  }, // delay in seconds to retry sending stats if first attempt fails
 	{ &g_apiquery_curl_URL, "g_apiquery_curl_URL", "https://rtcwproapi.donkanator.com/serverquery", CVAR_ARCHIVE, 0, qfalse  },
 	{ &g_wtvdemos, "g_wtvdemos", "0", CVAR_ARCHIVE, 0, qfalse  },
+	{ &g_wtvDiscordWebhookURL, "g_wtvDiscordWebhookURL", "", CVAR_ARCHIVE, 0, qfalse  }, // Discord webhook URL for WTV round uploads; empty = disabled
+	{ &g_wtvDiscordRetryCount, "g_wtvDiscordRetryCount", "3", CVAR_ARCHIVE, 0, qfalse  }, // number of attempts to upload a WTV fragment to Discord if the first attempt fails
+	{ &g_wtvDiscordRetryDelay, "g_wtvDiscordRetryDelay", "5", CVAR_ARCHIVE, 0, qfalse  }, // delay in seconds between WTV Discord upload retries
 
 	{ &g_disableDeadBodyFlagGrab, "g_disableDeadBodyFlagGrab", "1", CVAR_ARCHIVE, qtrue, qfalse },
 	{ &g_mapScriptDirectory, "g_mapScriptDirectory", "", CVAR_ARCHIVE, 0, qfalse },

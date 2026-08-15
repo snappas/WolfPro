@@ -5,19 +5,20 @@
 #define WTV_VERSION            3   // bumped: tick format gained identity-event and configstring-event blocks
 #define WTV_FULL_SNAPSHOT_INTERVAL_MS   8000 // mirrors NDP's FULL_SNAPSHOT_INTERVAL_MS
 
-// Sized for the worst case: every client + every entity, uncompressed, on a
-// full-snapshot tick — deliberately generous headroom over MAX_MSGLEN
-// (sized for one client's PVS-culled snapshot, not this aggregate).
+// Worst case: every client + every entity, uncompressed, on a full-snapshot
+// tick — generous headroom over MAX_MSGLEN (one client's PVS-culled snapshot).
 #define WTV_MAX_TICK_MSGLEN (256 * 1024)
 
-// Cap on real *compressed* output per final .wtv fragment, checked during the
-// intermission compression pass (WTV_FeedCompressor) — not the live/raw byte
-// count, which is no longer capped during recording itself.
-#define WTV_FRAGMENT_MAX_BYTES (10 * 1024 * 1024)
+// Cap on real *compressed* output per final .wtv fragment (WTV_FeedCompressor).
+// Decimal MB with ~1MB headroom for deferred-rollover/index-trailer overshoot.
+#define WTV_FRAGMENT_MAX_BYTES (9 * 1000 * 1000)
 
-// Max reliable/broadcast commands (chat/obituaries/etc.) queued in a single
-// tick. A wire-format-relevant constant: both the live recorder and the
-// client-side playback reader (CL_WTV_ReadTick) size fixed arrays against it.
+// Native copy buffer for the Discord scoreboard text; must match
+// WTV_DISCORD_SCOREBOARD_MAX in g_stats.c (Discord's 2000-char content limit).
+#define WTV_DISCORD_SCOREBOARD_MAX 1990
+
+// Max reliable/broadcast commands queued in a single tick — wire-format-
+// relevant, sizes fixed arrays in both the recorder and CL_WTV_ReadTick.
 #define WTV_MAX_QUEUED_COMMANDS 64
 
 typedef struct {
@@ -26,9 +27,8 @@ typedef struct {
 	char mapname[64];
 } wtvHeader_t;
 
-// Full-snapshot index entry for the final .wtv file. byteOffset is a position
-// in the DECOMPRESSED byte-aligned stream (see WTV_DecodeAndWriteTick), not
-// an on-disk compressed byte offset.
+// Full-snapshot index entry. byteOffset is a position in the DECOMPRESSED
+// byte-aligned stream (WTV_DecodeAndWriteTick), not an on-disk offset.
 typedef struct {
 	int byteOffset;
 	int serverTime;
@@ -36,9 +36,8 @@ typedef struct {
 
 #define WTV_MAX_INDEX_ENTRIES 512
 
-// On-disk header for a final, xz-compressed .wtv or .partN.wtv file.
-// Deliberately separate from wtvHeader_t (the temp file's minimal header) —
-// this format has fragments and an index, the temp file has neither.
+// On-disk header for a final, xz-compressed .wtv/.partN.wtv file — separate
+// from wtvHeader_t (the temp file's minimal header, no fragments/index).
 typedef struct {
 	unsigned int magic;
 	int version;
@@ -49,15 +48,8 @@ typedef struct {
 	int indexCount;
 } wtvFinalHeader_t;
 
-// Byte-aligned tick format fed to the xz compressor, one block per tick
-// (the DECOMPRESSED stream wtvIndexEntry_t.byteOffset points into):
-//   wtvIntermediateTickHeader_t
-//   commandCount     * { int length;    char text[length]; }  (no null terminator written)
-//   identityEventCount     * wtvIdentityEvent_t
-//   configstringEventCount * { int index; int length; char value[length]; }  (no null terminator written)
-//   playerStateCount * { int clientNum;  playerState_t ps; }  (changed only, memcmp dedup)
-//   entityCount      * { int entityNum;  entityState_t es; }  (changed only, memcmp dedup)
-// Commands have no dedup baseline — every command is written every tick.
+// Byte-aligned tick format fed to the xz compressor (wtvIndexEntry_t.byteOffset
+// points into this stream) — see WTV_DecodeAndWriteTick for the exact field layout.
 typedef struct {
 	int serverTime;
 	int commandCount;
@@ -67,50 +59,52 @@ typedef struct {
 	int entityCount;
 } wtvIntermediateTickHeader_t;
 
-// Called when a round transitions into GS_PLAYING (see G_InitGame's GS_PLAYING
-// block). roundNum is the game-side round counter (g_currentRound), passed
-// through because the engine has no notion of "round" on its own.
+// Called when a round transitions into GS_PLAYING. roundNum is the game-side
+// round counter (g_currentRound) — the engine has no notion of "round" itself.
 void WTV_RecordStart( int roundNum );
 
 // Called either 3 seconds after intermission begins (aborted == 0) or when a
 // round is ended abnormally via /ref resetmatch or team swap (aborted == 1).
 void WTV_RecordStop( int aborted );
 
-// Called once per server frame from SV_Frame, after SV_SendClientMessages has
-// (re)built svs.currFrame for this frame. No-ops unless a recording is active
-// and the tick-rate gate (paced by live sv_fps) says this is a recorded tick.
+// Called once per server frame from SV_Frame, after svs.currFrame is rebuilt.
+// No-ops unless a recording is active and the sv_fps-paced tick gate allows it.
 void WTV_RecordTick( void );
 
-// Called from SV_SendServerCommand whenever a command is broadcast to all
-// clients (cl == NULL) while a WTV recording is active. Queues the already-
-// formatted string for inclusion in the next recorded tick.
+// Called from SV_SendServerCommand for broadcasts (cl == NULL) while a WTV
+// recording is active — queues the string for the next recorded tick.
 void WTV_QueueBroadcastCommand( const char *cmd );
 
 // Lets the game module avoid calling WTV_RecordStart again for a round
 // that already has one in progress, without its own tracking state.
 qboolean WTV_IsRecording( void );
 
-// Wire-format contract with the client playback reader, hence lives here.
-// name uses MAX_NAME_LENGTH, not pers.netname's MAX_NETNAME (defined in a
-// QVM-only header this file can't include) — a small accepted truncation risk.
+// Wire-format contract with the client playback reader. name uses
+// MAX_NAME_LENGTH, not MAX_NETNAME (QVM-only header) — small truncation risk.
 typedef struct {
 	int clientNum;
 	char guid[GUID_LEN];
 	char name[MAX_NAME_LENGTH];
 } wtvIdentityEvent_t;
 
-// Called from ClientUserinfoChanged whenever a client's identity is
-// established/changes. clientNum is a slot index, not a stable identity —
-// lets playback detect a followed slot being reused by someone else.
+// Called from ClientUserinfoChanged when a client's identity is established/
+// changes. clientNum is a slot index — lets playback detect it being reused.
 void WTV_RecordPlayerIdentity( int clientNum, const char *guid, const char *name );
 
 // Called directly from SV_SetConfigstring (native-to-native, no syscall
 // needed) whenever a configstring changes while a WTV recording is active.
 void WTV_RecordConfigstringChange( int index, const char *value );
 
-// Decodes ".wtvtmp" into "<finalBasePath>.wtv" (+ ".partN.wtv" rollovers),
-// byte-aligned and xz-compressed. Callable from a background thread.
-// mapBaselines is a private heap snapshot; this function frees it.
-void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, entityState_t *mapBaselines );
+// Stores the scoreboard text the game module builds at intermission
+// (WTV_BuildDiscordScoreboardText) for the Discord upload; no-op if inactive.
+void WTV_SetDiscordScoreboard( const char *text );
+
+// Decodes ".wtvtmp" into "<finalBasePath>.wtv" (+ ".partN.wtv" rollovers).
+// mapBaselines and discordScoreboard (may be NULL) are heap snapshots this frees.
+void WTV_CompressRound( const char *tempFilePath, const char *finalBasePath, entityState_t *mapBaselines, char *discordScoreboard );
+
+// Builds fragment partNumber's path (".wtv" for part 1, ".partN.wtv" after).
+// Shared by WTV_OpenFinalFragment and WTV_DiscordUploadRound.
+void WTV_BuildFragmentPath( const char *finalBasePath, int partNumber, char *out, int outSize );
 
 #endif // SV_WTVDEMO_H
