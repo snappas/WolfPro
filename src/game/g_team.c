@@ -2124,13 +2124,13 @@ qboolean G_playersReady( void ) {
 		}
 	}
 
-	if(botPlayers == ready){
-		return qfalse; //dont start if there's only bots
-	}
-
 	notReady = ( notReady > 0 || ready > 0 ) ? notReady : match_minplayers.integer;
 	if ( g_minGameClients.integer != notReady ) {
 		trap_Cvar_Set( "g_minGameClients", va( "%d", notReady ) );
+	}
+
+	if(botPlayers == ready){
+		return qfalse; //dont start if there's only bots
 	}
 
 	// Do we have enough "ready" players?

@@ -1677,7 +1677,7 @@ void G_writeClosingJson(void)
             trap_Cvar_VariableStringBuffer("stats_matchid",buf,sizeof(buf));
             G_Printf("Stats API: Starting stats upload process.\n");
 
-            if ( level.jsonStatInfo.gameStatslogFile && strlen(buf) > 0 ) {
+            if ( strlen(level.jsonStatInfo.gameStatslogFileName) > 0 && strlen(buf) > 0 ) {
 
                 if (!CanAccessFile("Stats: writing closing json", level.jsonStatInfo.gameStatslogFileName))
                     return;

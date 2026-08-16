@@ -165,6 +165,15 @@ static qbool VKW_CreateWindow()
 
 		ShowWindow( g_wv.hWnd, SW_SHOW );
 		UpdateWindow( g_wv.hWnd );
+
+		// the window Windows actually hands back can differ from the requested
+		// client size (work-area clipping, border/DPI rounding); CreateSwapChain
+		// checks the real surface extent, so glInfo must reflect the real window.
+		RECT clientRect;
+		GetClientRect( g_wv.hWnd, &clientRect );
+		glInfo.winWidth = clientRect.right - clientRect.left;
+		glInfo.winHeight = clientRect.bottom - clientRect.top;
+
 		ri.Printf( PRINT_DEVELOPER, "...created window@%d,%d (%dx%d)\n", x, y, w, h );
 	}
 	else

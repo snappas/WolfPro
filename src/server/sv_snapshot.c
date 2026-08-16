@@ -431,6 +431,8 @@ static void SV_AddEntitiesVisibleFromPoint( const vec3_t origin, clientSnapshot_
 				if ( svs.currFrame->ents[h]->number == ent->s.otherEntityNum ) {
 					svEntity_t *master = &sv.svEntities[svs.currFrame->ents[h]->number];
 					if ( master->snapshotCounter != sv.snapshotCounter ) {
+						// master's index can be lower than indices already appended
+						eNums->unordered = qtrue;
 						SV_AddIndexToSnapshot( master, h, eNums );
 					}
 					break;
@@ -445,6 +447,8 @@ static void SV_AddEntitiesVisibleFromPoint( const vec3_t origin, clientSnapshot_
 				if ( ment->s.otherEntityNum == ent->s.number ) {
 					svEntity_t *master = &sv.svEntities[candidate->number];
 					if ( master->snapshotCounter != sv.snapshotCounter ) {
+						// master's index can be lower than indices already appended
+						eNums->unordered = qtrue;
 						SV_AddIndexToSnapshot( master, h, eNums );
 					}
 				}
