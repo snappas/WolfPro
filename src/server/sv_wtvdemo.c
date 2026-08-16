@@ -7,7 +7,8 @@
 typedef struct {
 	qboolean active;
 	FILE *file;
-	char basePath[MAX_OSPATH];   // "<homepath>/<game>/wtvdemos/<timestamp>_<map>_round<N>"
+	char basePath[MAX_OSPATH];   // "<homepath>/<game>/wtvdemos/<timestamp>_<map>_round<N>"; final
+	                              // compressed output additionally gets "_matchid<id>" appended — see WTV_RecordStop
 	int bytesWrittenThisFragment;
 
 	int lastTickTime;              // sv.time of the last recorded tick, for sv_fps pacing
@@ -121,7 +122,7 @@ static void WTV_BuildBasePath( int roundNum, char *out, int outSize ) {
 		hpath, game,
 		now.tm_year + 1900, now.tm_mon + 1, now.tm_mday,
 		now.tm_hour, now.tm_min, now.tm_sec,
-		mapname, roundNum );
+		mapname, roundNum + 1 ); // g_currentRound is 0-based; filenames use 1-based like gameStats json
 }
 
 static void WTV_OpenFragment( int partNumber ) {
@@ -236,7 +237,19 @@ void WTV_RecordStop( int aborted ) {
 					threadArgs->mapBaselines[i] = sv.svEntities[i].baseline;
 				}
 				Com_sprintf( threadArgs->tempFilePath, sizeof( threadArgs->tempFilePath ), "%s.wtvtmp", wtv.basePath );
-				Q_strncpyz( threadArgs->finalBasePath, wtv.basePath, sizeof( threadArgs->finalBasePath ) );
+				{
+					// Read fresh here rather than at RecordStart: InitGame sets
+					// stats_matchid for the round it's starting *after* it fires
+					// trap_WTV_RecordStart, so it's only current by round-end.
+					char matchId[64];
+					Cvar_VariableStringBuffer( "stats_matchid", matchId, sizeof( matchId ) );
+					if ( matchId[0] ) {
+						Com_sprintf( threadArgs->finalBasePath, sizeof( threadArgs->finalBasePath ),
+							"%s_matchid%s", wtv.basePath, matchId );
+					} else {
+						Q_strncpyz( threadArgs->finalBasePath, wtv.basePath, sizeof( threadArgs->finalBasePath ) );
+					}
+				}
 				// NULL if no scoreboard was ever set this round (not an allocation
 				// failure worth aborting the round over) — treated the same as an
 				// empty webhook cvar: upload the file(s) with no message text.

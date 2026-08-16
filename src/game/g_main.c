@@ -416,7 +416,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_statsRetryCount, "g_statsRetryCount", "3", CVAR_ARCHIVE, 0, qfalse  }, // number of attempts to send stats if first attempt fails
 	{ &g_statsRetryDelay, "g_statsRetryDelay", "2", CVAR_ARCHIVE, 0, qfalse  }, // delay in seconds to retry sending stats if first attempt fails
 	{ &g_apiquery_curl_URL, "g_apiquery_curl_URL", "https://rtcwproapi.donkanator.com/serverquery", CVAR_ARCHIVE, 0, qfalse  },
-	{ &g_wtvdemos, "g_wtvdemos", "0", CVAR_ARCHIVE, 0, qfalse  },
+	{ &g_wtvdemos, "g_wtvdemos", "1", CVAR_ARCHIVE, 0, qfalse  },
 	{ &g_wtvDiscordWebhookURL, "g_wtvDiscordWebhookURL", "", CVAR_ARCHIVE, 0, qfalse  }, // Discord webhook URL for WTV round uploads; empty = disabled
 	{ &g_wtvDiscordRetryCount, "g_wtvDiscordRetryCount", "3", CVAR_ARCHIVE, 0, qfalse  }, // number of attempts to upload a WTV fragment to Discord if the first attempt fails
 	{ &g_wtvDiscordRetryDelay, "g_wtvDiscordRetryDelay", "5", CVAR_ARCHIVE, 0, qfalse  }, // delay in seconds between WTV Discord upload retries
