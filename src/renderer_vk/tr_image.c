@@ -732,7 +732,7 @@ image_t *R_CreateImage( const char *name, const byte *pic, int width, int height
 	}
 
 	if ( tr.numImages == MAX_DRAWIMAGES ) {
-		ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit\n" );
+		ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit (%d) registering \"%s\"", MAX_DRAWIMAGES, name );
 	}
 
 	// Ridah

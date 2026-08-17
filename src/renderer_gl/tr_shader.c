@@ -39,7 +39,7 @@ static shader_t shader;
 static texModInfo_t texMods[MAX_SHADER_STAGES][TR_MAX_TEXMODS];
 static qboolean deferLoad;
 
-#define FILE_HASH_SIZE      4096
+#define FILE_HASH_SIZE      16384
 
 static shader_t*       hashTable[FILE_HASH_SIZE];
 
@@ -2686,7 +2686,7 @@ qhandle_t RE_RegisterShaderFromImage( const char *name, int lightmapIndex, image
 		// then a default shader is created with lightmapIndex == LIGHTMAP_NONE, so we
 		// have to check all default shaders otherwise for every call to R_FindShader
 		// with that same strippedName a new default shader is created.
-		if ( ( sh->lightmapIndex == lightmapIndex || sh->defaultShader ) &&
+		if ( ( ( sh->lightmapIndex == lightmapIndex ) || ( sh->lightmapIndex < 0 && lightmapIndex >= 0 ) || sh->defaultShader ) &&
 			 // index by name
 			 !Q_stricmp( sh->name, name ) ) {
 			// match found
@@ -2959,7 +2959,7 @@ void    R_ShaderList_f( void ) {
 
 // Ridah, optimized shader loading
 
-#define MAX_SHADER_STRING_POINTERS  100000
+#define MAX_SHADER_STRING_POINTERS  500000
 shaderStringPointer_t shaderStringPointerList[MAX_SHADER_STRING_POINTERS];
 
 /*
@@ -3008,7 +3008,7 @@ static void BuildShaderChecksumLookup( void ) {
 			shaderStringPointer_t *newStrPtr;
 
 			if ( numShaderStringPointers >= MAX_SHADER_STRING_POINTERS ) {
-				ri.Error( ERR_DROP, "MAX_SHADER_STRING_POINTERS exceeded, too many shaders" );
+				ri.Error( ERR_DROP, "MAX_SHADER_STRING_POINTERS exceeded (%d >= %d), too many shaders", numShaderStringPointers, MAX_SHADER_STRING_POINTERS );
 			}
 
 			newStrPtr = &shaderStringPointerList[numShaderStringPointers++]; //ri.Hunk_Alloc( sizeof( shaderStringPointer_t ), h_low );
