@@ -173,6 +173,7 @@ vmCvar_t cg_noVoiceText;            // NERVE - SMF
 vmCvar_t cg_drawStatus;
 vmCvar_t cg_animSpeed;
 vmCvar_t cg_drawSpreadScale;
+vmCvar_t cg_dmgKickPitchScale;
 vmCvar_t cg_debugAnim;
 vmCvar_t cg_debugPosition;
 vmCvar_t cg_debugEvents;
@@ -489,6 +490,7 @@ cvarTable_t cvarTable[] = {
 	{ &cg_gibs, "cg_gibs", "1", CVAR_ARCHIVE  },
 	{ &cg_draw2D, "cg_draw2D", "1", CVAR_CHEAT }, // JPW NERVE changed per atvi req to prevent sniper rifle zoom cheats
 	{ &cg_drawSpreadScale, "cg_drawSpreadScale", "1", CVAR_ARCHIVE },
+	{ &cg_dmgKickPitchScale, "cg_dmgKickPitchScale", "1", CVAR_ARCHIVE },
 	{ &cg_drawFrags, "cg_drawFrags", "1", CVAR_ARCHIVE },
 	{ &cg_drawStatus, "cg_drawStatus", "1", CVAR_ARCHIVE  },
 	{ &cg_drawTimer, "cg_drawTimer", "0", CVAR_ARCHIVE  },

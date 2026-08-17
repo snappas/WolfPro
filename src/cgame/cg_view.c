@@ -551,6 +551,7 @@ static void CG_OffsetFirstPersonView( void ) {
 	float delta;
 	float speed;
 	float f;
+	float dmgPitchScale;
 	vec3_t predictedVelocity;
 	int timeDelta;
 
@@ -581,15 +582,23 @@ static void CG_OffsetFirstPersonView( void ) {
 
 	// add angles based on damage kick
 	if ( cg.damageTime ) {
+		// cg_dmgKickPitchScale only tones down the vertical punch, not the screen roll/flash
+		dmgPitchScale = cg_dmgKickPitchScale.value;
+		if ( dmgPitchScale < 0 ) {
+			dmgPitchScale = 0;
+		} else if ( dmgPitchScale > 1 ) {
+			dmgPitchScale = 1;
+		}
+
 		ratio = cg.time - cg.damageTime;
 		if ( ratio < DAMAGE_DEFLECT_TIME ) {
 			ratio /= DAMAGE_DEFLECT_TIME;
-			angles[PITCH] += ratio * cg.v_dmg_pitch;
+			angles[PITCH] += ratio * cg.v_dmg_pitch * dmgPitchScale;
 			angles[ROLL] += ratio * cg.v_dmg_roll;
 		} else {
 			ratio = 1.0 - ( ratio - DAMAGE_DEFLECT_TIME ) / DAMAGE_RETURN_TIME;
 			if ( ratio > 0 ) {
-				angles[PITCH] += ratio * cg.v_dmg_pitch;
+				angles[PITCH] += ratio * cg.v_dmg_pitch * dmgPitchScale;
 				angles[ROLL] += ratio * cg.v_dmg_roll;
 			}
 		}
