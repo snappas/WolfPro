@@ -1950,6 +1950,7 @@ void FreePlayerCapsules(gentity_t *ent);
 
 
 qboolean IsHeadShot(gentity_t *attacker, gentity_t *targ, qboolean isAICharacter, vec3_t dir, vec3_t point, int mod );
+qboolean IsHeadShotWeapon( int mod, qboolean aicharacter );
 
 // Macros
 //

@@ -975,11 +975,7 @@ void SP_worldspawn( void ) {
 		level.warmupTime = 0;
 	}
 
-// JPW NERVE change minigun overheat time for single player -- this array gets reloaded every time the server is reset,
-// so this is as good a place as any to do stuff like this
-	
 	int i;
-	ammoTable[WP_VENOM].maxHeat *= 0.25;
 	for ( i = 0; i < strlen( testid2 ); i++ )
 		testid2[i] -= ( i + 1 );
 	ammoTable[WP_DYNAMITE].uses = 0; // regens based on recharge time

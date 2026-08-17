@@ -2247,6 +2247,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 	trace_t tr;
 	gentity_t   *tent;
 	gentity_t   *traceEnt;
+	int mod = ammoTable[attacker->s.weapon].mod;
 	damage *= s_quadFactor;
 
 	trap_Trace( &tr, start, NULL, NULL, end, source->s.number, MASK_SHOT );
@@ -2266,7 +2267,7 @@ void Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t start,
 		traceEnt = &g_entities[ traceEnt->r.ownerNum ];
 		if(traceEnt->health <= 0){
 			traceEnt = &g_entities[ tr.entityNum ];
-		}else{
+		}else if ( IsHeadShotWeapon( mod, qfalse ) ){
 			traceEnt->isHeadshot = qtrue;
 		}
 	}else if (traceEnt->s.eType == ET_TEMPHEAD &&
