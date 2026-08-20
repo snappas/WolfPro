@@ -227,7 +227,127 @@ void CG_DamageFeedback( int yawByte, int pitchByte, int damage ) {
 	cg.damageIndex = slot;
 }
 
+/*
+==============
+CG_DamageKickFeedback
 
+Companion to CG_DamageFeedback above for EV_DAMAGE_KICK: direction is
+yaw-only (hits are treated as level) and magnitude is a caller-supplied
+health-delta share rather than a transmitted damage amount.
+==============
+*/
+void CG_DamageKickFeedback( int yawByte, float magnitude ) {
+	float left, front, up;
+	float kick;
+	int health, healthMax;
+	float scale, t;
+	vec3_t dir;
+	vec3_t angles;
+	float dist;
+	float yaw;
+	int slot;
+	viewDamage_t *vd;
+
+	// show the attacking player's head and name in corner
+	cg.attackerTime = cg.time;
+
+	// the lower on health you are, the greater the view kick will be
+	health = cg.snap->ps.stats[STAT_HEALTH];
+	healthMax = cg.snap->ps.stats[STAT_MAX_HEALTH];
+	if ( healthMax < 2 ) {
+		healthMax = 2;
+	}
+	t = ( healthMax - health ) / (float)( healthMax - 1 );
+	if ( t < 0 ) {
+		t = 0;
+	} else if ( t > 1 ) {
+		t = 1;
+	}
+	scale = cgs.dmgFeedbackScaleMin + t * ( cgs.dmgFeedbackScaleMax - cgs.dmgFeedbackScaleMin );
+	kick = magnitude * scale;
+
+	if ( kick < cgs.dmgFeedbackFloor ) {
+		kick = cgs.dmgFeedbackFloor;
+	}
+	if ( kick > cgs.dmgFeedbackCeiling ) {
+		kick = cgs.dmgFeedbackCeiling;
+	}
+
+	// find a free slot
+	for ( slot = 0; slot < MAX_VIEWDAMAGE; slot++ ) {
+		if ( cg.viewDamage[slot].damageTime + cg.viewDamage[slot].damageDuration < cg.time ) {
+			break;
+		}
+	}
+
+	if ( slot == MAX_VIEWDAMAGE ) {
+		return;     // no free slots, never override or splats will suddenly disappear
+
+	}
+	vd = &cg.viewDamage[slot];
+
+	// yawByte 255 means world damage (falling, etc) -- centered instead of positional
+	if ( yawByte == 255 ) {
+		vd->damageX = 0;
+		vd->damageY = 0;
+		cg.v_dmg_roll = 0;
+		cg.v_dmg_pitch = -kick;
+	} else {
+		// attacker pitch isn't transmitted, so treat the hit as coming in level
+		yaw = yawByte / 254.0 * 360;
+
+		angles[PITCH] = 0;
+		angles[YAW] = yaw;
+		angles[ROLL] = 0;
+
+		AngleVectors( angles, dir, NULL, NULL );
+		VectorSubtract( vec3_origin, dir, dir );
+
+		front = DotProduct( dir, cg.refdef.viewaxis[0] );
+		left = DotProduct( dir, cg.refdef.viewaxis[1] );
+		up = DotProduct( dir, cg.refdef.viewaxis[2] );
+
+		dir[0] = front;
+		dir[1] = left;
+		dir[2] = 0;
+		dist = VectorLength( dir );
+		if ( dist < 0.1 ) {
+			dist = 0.1;
+		}
+
+		cg.v_dmg_roll = kick * left;
+
+		cg.v_dmg_pitch = -kick * front;
+
+		if ( front <= 0.1 ) {
+			front = 0.1;
+		}
+		vd->damageX = crandom() * 0.3 + -left / front;
+		vd->damageY = crandom() * 0.3 + up / dist;
+	}
+
+	// clamp the position
+	if ( vd->damageX > 1.0 ) {
+		vd->damageX = 1.0;
+	}
+	if ( vd->damageX < -1.0 ) {
+		vd->damageX = -1.0;
+	}
+
+	if ( vd->damageY > 1.0 ) {
+		vd->damageY = 1.0;
+	}
+	if ( vd->damageY < -1.0 ) {
+		vd->damageY = -1.0;
+	}
+
+	vd->damageValue = kick;
+	cg.v_dmg_time = cg.time + DAMAGE_TIME;
+	vd->damageTime = cg.snap->serverTime;
+	vd->damageDuration = kick * 50 * ( 1 + 2 * ( !vd->damageX && !vd->damageY ) );
+	cg.damageTime = cg.snap->serverTime;
+	cg.damageIndex = slot;
+}
 
 
 /*
@@ -326,6 +446,8 @@ void CG_CheckPlayerstateEvents_wolf( playerState_t *ps, playerState_t *ops ) {
 void CG_CheckPlayerstateEvents( playerState_t *ps, playerState_t *ops ) {
 	int i;
 	int event;
+	int dmgKickCount;
+	float healthDelta;
 	centity_t   *cent;
 
 	if ( ps->externalEvent && ps->externalEvent != ops->externalEvent ) {
@@ -333,6 +455,24 @@ void CG_CheckPlayerstateEvents( playerState_t *ps, playerState_t *ops ) {
 		cent->currentState.event = ps->externalEvent;
 		cent->currentState.eventParm = ps->externalEventParm;
 		CG_EntityEvent( cent, cent->lerpOrigin );
+	}
+
+	// pre-scan for queued EV_DAMAGE_KICK events so their combined health loss
+	// can be split evenly across however many are about to be dispatched below
+	dmgKickCount = 0;
+	for ( i = ps->eventSequence - MAX_EVENTS ; i < ps->eventSequence ; i++ ) {
+		if ( ( i >= ops->eventSequence
+			   || ( i > ops->eventSequence - MAX_EVENTS && ps->events[i & ( MAX_EVENTS - 1 )] != ops->events[i & ( MAX_EVENTS - 1 )] ) )
+			 && ( ps->events[i & ( MAX_EVENTS - 1 )] & ~EV_EVENT_BITS ) == EV_DAMAGE_KICK ) {
+			dmgKickCount++;
+		}
+	}
+	if ( dmgKickCount > 0 ) {
+		healthDelta = ops->stats[STAT_HEALTH] - ps->stats[STAT_HEALTH];
+		if ( healthDelta < 0 ) {
+			healthDelta = 0;
+		}
+		cg.dmgKickMagnitude = healthDelta / (float)dmgKickCount;
 	}
 
 	cent = &cg.predictedPlayerEntity; // cg_entities[ ps->clientNum ];

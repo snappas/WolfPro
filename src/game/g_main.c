@@ -158,6 +158,12 @@ vmCvar_t sv_screenshake;
 // Gordon
 vmCvar_t g_antilag;
 
+vmCvar_t g_dmgFeedbackScaleMin;
+vmCvar_t g_dmgFeedbackScaleMax;
+vmCvar_t g_dmgFeedbackFloor;
+vmCvar_t g_dmgFeedbackCeiling;
+vmCvar_t g_dmgFeedbackLegacy;
+
 vmCvar_t mod_url;
 vmCvar_t url;
 
@@ -376,6 +382,12 @@ cvarTable_t gameCvarTable[] = {
 	{&url, "URL", "", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
 	{&g_antilag, "g_antilag", "2", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+
+	{&g_dmgFeedbackScaleMin, "g_dmgFeedbackScaleMin", "0.4", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackScaleMax, "g_dmgFeedbackScaleMax", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackFloor, "g_dmgFeedbackFloor", "5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy", "0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
 	{&g_dbgRevive, "g_dbgRevive", "0", 0, 0, qfalse},
 

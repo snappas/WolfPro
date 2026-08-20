@@ -874,6 +874,7 @@ typedef enum {
 	EV_GIVEPAGE,    //----(SA)	added
 	EV_MG42BULLET_HIT_FLESH,    // Arnout: these two send the seed as well
 	EV_MG42BULLET_HIT_WALL,
+	EV_DAMAGE_KICK, // eventParm: yaw byte, 255 = centered/world damage
 	EV_MAX_EVENTS   // just added as an 'endcap'
 
 } entity_event_t;

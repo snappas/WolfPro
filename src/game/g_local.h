@@ -1544,6 +1544,12 @@ extern vmCvar_t g_swapteams;
 //Gordon
 extern vmCvar_t g_antilag;
 
+extern vmCvar_t g_dmgFeedbackScaleMin;
+extern vmCvar_t g_dmgFeedbackScaleMax;
+extern vmCvar_t g_dmgFeedbackFloor;
+extern vmCvar_t g_dmgFeedbackCeiling;
+extern vmCvar_t g_dmgFeedbackLegacy;
+
 extern vmCvar_t g_dbgRevive;
 
 extern vmCvar_t team_maxplayers;

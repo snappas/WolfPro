@@ -368,6 +368,10 @@ void CG_ParseServerinfo( void ) {
 	info = CG_ConfigString( CS_SERVERINFO );
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	cgs.antilag = atoi( Info_ValueForKey( info, "g_antilag" ) );
+	cgs.dmgFeedbackScaleMin = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleMin" ) );
+	cgs.dmgFeedbackScaleMax = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleMax" ) );
+	cgs.dmgFeedbackFloor = atof( Info_ValueForKey( info, "g_dmgFeedbackFloor" ) );
+	cgs.dmgFeedbackCeiling = atof( Info_ValueForKey( info, "g_dmgFeedbackCeiling" ) );
 	if ( !cgs.localServer ) {
 		trap_Cvar_Set( "g_gametype", va( "%i", cgs.gametype ) );
 		trap_Cvar_Set( "g_antilag", va( "%i", cgs.antilag ) );

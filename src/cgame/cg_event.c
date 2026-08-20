@@ -2272,6 +2272,12 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		}
 		break;
 
+	case EV_DAMAGE_KICK:
+		// only ever queued on our own predicted player entity
+		DEBUGNAME( "EV_DAMAGE_KICK" );
+		CG_DamageKickFeedback( es->eventParm, cg.dmgKickMagnitude );
+		break;
+
 	case EV_DEATH1:
 	case EV_DEATH2:
 	case EV_DEATH3:

@@ -875,6 +875,10 @@ typedef struct {
 	float v_dmg_pitch;
 	float v_dmg_roll;
 
+	// health lost since the last processed playerstate, split evenly across
+	// however many EV_DAMAGE_KICK events are being dispatched this pass
+	float dmgKickMagnitude;
+
 	vec3_t kick_angles;         // weapon kicks
 	vec3_t kick_origin;
 
@@ -1574,6 +1578,10 @@ typedef struct {
 	// parsed from serverinfo
 	gametype_t gametype;
 	int antilag;
+	float dmgFeedbackScaleMin;
+	float dmgFeedbackScaleMax;
+	float dmgFeedbackFloor;
+	float dmgFeedbackCeiling;
 
 	// Rafael gameskill
 	gameskill_t gameskill;
@@ -2482,6 +2490,7 @@ extern const char *aMonths[12];
 //
 void CG_Respawn( void );
 void CG_TransitionPlayerState( playerState_t *ps, playerState_t *ops );
+void CG_DamageKickFeedback( int yawByte, float magnitude );
 
 
 //===============================================
