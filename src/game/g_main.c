@@ -158,8 +158,8 @@ vmCvar_t sv_screenshake;
 // Gordon
 vmCvar_t g_antilag;
 
-vmCvar_t g_dmgFeedbackScaleMin;
-vmCvar_t g_dmgFeedbackScaleMax;
+vmCvar_t g_dmgFeedbackScaleFullHealth;
+vmCvar_t g_dmgFeedbackScaleLowHealth;
 vmCvar_t g_dmgFeedbackFloor;
 vmCvar_t g_dmgFeedbackCeiling;
 vmCvar_t g_dmgFeedbackLegacy;
@@ -383,8 +383,10 @@ cvarTable_t gameCvarTable[] = {
 
 	{&g_antilag, "g_antilag", "2", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
-	{&g_dmgFeedbackScaleMin, "g_dmgFeedbackScaleMin", "0.4", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_dmgFeedbackScaleMax, "g_dmgFeedbackScaleMax", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	// damage view-kick: health-scaled multiplier on the hit, then clamped
+	// to [Floor, Ceiling]
+	{&g_dmgFeedbackScaleFullHealth, "g_dmgFeedbackScaleFullHealth", "0.4", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_dmgFeedbackFloor, "g_dmgFeedbackFloor", "5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy", "0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},

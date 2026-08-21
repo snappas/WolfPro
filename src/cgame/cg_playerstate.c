@@ -263,7 +263,7 @@ void CG_DamageKickFeedback( int yawByte, float magnitude ) {
 	} else if ( t > 1 ) {
 		t = 1;
 	}
-	scale = cgs.dmgFeedbackScaleMin + t * ( cgs.dmgFeedbackScaleMax - cgs.dmgFeedbackScaleMin );
+	scale = cgs.dmgFeedbackScaleFullHealth + t * ( cgs.dmgFeedbackScaleLowHealth - cgs.dmgFeedbackScaleFullHealth );
 	kick = magnitude * scale;
 
 	if ( kick < cgs.dmgFeedbackFloor ) {

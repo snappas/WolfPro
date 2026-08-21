@@ -1578,8 +1578,8 @@ typedef struct {
 	// parsed from serverinfo
 	gametype_t gametype;
 	int antilag;
-	float dmgFeedbackScaleMin;
-	float dmgFeedbackScaleMax;
+	float dmgFeedbackScaleFullHealth;
+	float dmgFeedbackScaleLowHealth;
 	float dmgFeedbackFloor;
 	float dmgFeedbackCeiling;
 

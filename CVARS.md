@@ -15,11 +15,11 @@ diagnostics) are kept and marked **[debug/advanced]**.
 
 Flags shown are as passed to `Cvar_Get`/`trap_Cvar_Register` in source:
 `ARCHIVE` (saved to config), `LATCH` (takes effect on `vid_restart`/map
-change, not immediately — see the `CVAR_LATCH` invariant in
-[CLAUDE.md](CLAUDE.md)), `CHEAT` (requires `sv_cheats 1`), `SERVERINFO`
-/`SYSTEMINFO`/`USERINFO`/`WOLFINFO` (mirrored into the relevant info
-string), `ROM`/`INIT`/`TEMP`/`NORESTART` (engine-managed, not normally
-hand-set).
+change, not immediately — a pending value only applies once some
+`Cvar_Get` call for that cvar is reached again along that path), `CHEAT`
+(requires `sv_cheats 1`), `SERVERINFO`/`SYSTEMINFO`/`USERINFO`/`WOLFINFO`
+(mirrored into the relevant info string), `ROM`/`INIT`/`TEMP`/`NORESTART`
+(engine-managed, not normally hand-set).
 
 Where a cvar is registered from more than one module (common for cvars
 the UI/client needs before `cgame`/`game` loads), the primary
@@ -145,6 +145,11 @@ path (`g_svcmds.c`), not a settable cvar — there is no `g_refereePassword`.
 | `g_preciseBodyBox` | `1` | — | Enables a more precise body hitbox model versus the legacy capsule. |
 | `g_capsuleScale` | `1.0` | ARCHIVE | Global scale multiplier applied to player hit-capsule radius. |
 | `g_noSelfDamage` | `1` | ARCHIVE | Disables rocket/self-splash damage to the firer. |
+| `g_dmgFeedbackLegacy` | `0` | ARCHIVE\|SERVERINFO | Reverts the damage view-kick (screen punch on taking a hit) to the original single-value-per-tick delivery and hardcoded health curve, ignoring the four cvars below. |
+| `g_dmgFeedbackScaleFullHealth` | `0.4` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at full health. |
+| `g_dmgFeedbackScaleLowHealth` | `1.0` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at 1 HP; health in between linearly interpolates between the two. |
+| `g_dmgFeedbackFloor` | `5` | ARCHIVE\|SERVERINFO | Minimum final view-kick magnitude, after the health-scaled multiplier. |
+| `g_dmgFeedbackCeiling` | `10` | ARCHIVE\|SERVERINFO | Maximum final view-kick magnitude, after the health-scaled multiplier. |
 | `g_rocketMode` | `0` | SYSTEMINFO | Alternate rocket-launcher physics/handling mode. |
 | `g_rocketMidairInstagib` | `1` | ARCHIVE | Instantly kills a target hit by rocket splash while airborne (with lethal-adjacent damage). |
 | `g_rocketDamageMultiplier` | `0.34` | ARCHIVE | Multiplier applied to rocket self-damage; balance tuning for `g_rocketMode`. |
@@ -314,9 +319,9 @@ here in detail.
 ## Demo Playback & Spectator
 
 Covers both the client-side demo recorder/player and the NDP
-(non-destructive-playback, seek/scrub) system described in
-[CLAUDE.md](CLAUDE.md), plus the server-side WTV round-demo system
-(cvars listed under [Competitive & Anti-Cheat](#competitive--anti-cheat)).
+(non-destructive-playback, seek/scrub) system, plus the server-side WTV
+round-demo system (cvars listed under
+[Competitive & Anti-Cheat](#competitive--anti-cheat)).
 
 | Cvar | Default | Flags | Description |
 |---|---|---|---|
