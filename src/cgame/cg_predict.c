@@ -792,6 +792,9 @@ void CG_PredictPlayerState( void ) {
 		cg_pmove.medicChargeTime = cg_medicChargeTime.integer;
 		// -NERVE - SMF
 
+		cg_pmove.aimSpreadSmg = cg_spreadScaleSmg.value;
+		cg_pmove.aimSpreadSmgAdd = cg_spreadAddSmg.integer;
+
 		Com_Memcpy(&pmext, &oldpmext[cmdNum & cg.cmdMask], sizeof(pmoveExt_t));
 
 		Pmove( &cg_pmove );

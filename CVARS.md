@@ -147,7 +147,7 @@ path (`g_svcmds.c`), not a settable cvar — there is no `g_refereePassword`.
 | `g_noSelfDamage` | `1` | ARCHIVE | Disables rocket/self-splash damage to the firer. |
 | `g_dmgFeedbackLegacy` | `0` | ARCHIVE\|SERVERINFO | Reverts the damage view-kick (screen punch on taking a hit) to the original single-value-per-tick delivery and hardcoded health curve, ignoring the four cvars below. |
 | `g_dmgFeedbackScaleFullHealth` | `0.4` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at full health. |
-| `g_dmgFeedbackScaleLowHealth` | `1.0` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at 1 HP; health in between linearly interpolates between the two. |
+| `g_dmgFeedbackScaleLowHealth` | `0.5` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at 1 HP; health in between linearly interpolates between the two. |
 | `g_dmgFeedbackFloor` | `5` | ARCHIVE\|SERVERINFO | Minimum final view-kick magnitude, after the health-scaled multiplier. |
 | `g_dmgFeedbackCeiling` | `10` | ARCHIVE\|SERVERINFO | Maximum final view-kick magnitude, after the health-scaled multiplier. |
 | `g_rocketMode` | `0` | SYSTEMINFO | Alternate rocket-launcher physics/handling mode. |
@@ -166,6 +166,8 @@ path (`g_svcmds.c`), not a settable cvar — there is no `g_refereePassword`.
 | `g_showHeadshotRatio` | `0` | — | Toggles display of a player's headshot-percentage stat. |
 | `g_allowForceTapout` | `1` | ARCHIVE | Allows a downed player to force a "give up"/tapout instead of waiting for revive/bleed-out. |
 | `g_userAim` | `1` | CHEAT | Toggles the weapon-spread/accuracy-degradation ("aim spread scale") system. |
+| `g_spreadScaleSmg` | `0.6` | ARCHIVE\|SERVERINFO | MP40/Thompson aim-spread recovery-speed scale (lower = faster recovery/tighter spread). |
+| `g_spreadAddSmg` | `15` | ARCHIVE\|SERVERINFO | MP40/Thompson per-shot aim-spread increase base (a random 0-9 is still added on top each shot). |
 | `sv_minUserCmdInterval` | — | — | See [Server Administration](#server-administration) — command-rate anti-cheat. |
 
 ## Gameplay Rules

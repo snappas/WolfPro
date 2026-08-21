@@ -1091,6 +1091,9 @@ void ClientThink_real( gentity_t *ent ) {
 	pm.medicChargeTime = g_medicChargeTime.integer;
 	// -NERVE - SMF
 
+	pm.aimSpreadSmg = g_spreadScaleSmg.value;
+	pm.aimSpreadSmgAdd = g_spreadAddSmg.integer;
+
 	Pmove( &pm );
 
 	// server cursor hints

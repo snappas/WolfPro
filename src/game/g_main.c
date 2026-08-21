@@ -164,6 +164,9 @@ vmCvar_t g_dmgFeedbackFloor;
 vmCvar_t g_dmgFeedbackCeiling;
 vmCvar_t g_dmgFeedbackLegacy;
 
+vmCvar_t g_spreadScaleSmg;
+vmCvar_t g_spreadAddSmg;
+
 vmCvar_t mod_url;
 vmCvar_t url;
 
@@ -386,10 +389,14 @@ cvarTable_t gameCvarTable[] = {
 	// damage view-kick: health-scaled multiplier on the hit, then clamped
 	// to [Floor, Ceiling]
 	{&g_dmgFeedbackScaleFullHealth, "g_dmgFeedbackScaleFullHealth", "0.4", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_dmgFeedbackFloor, "g_dmgFeedbackFloor", "5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy", "0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+
+	// MP40/Thompson aim-spread tuning: recovery-speed scale + per-shot recoil-add base
+	{&g_spreadScaleSmg, "g_spreadScaleSmg", "0.6", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmg, "g_spreadAddSmg", "15", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
 	{&g_dbgRevive, "g_dbgRevive", "0", 0, 0, qfalse},
 

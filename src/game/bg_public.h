@@ -330,6 +330,9 @@ typedef struct {
 	int medicChargeTime;
 	// -NERVE - SMF
 
+	float aimSpreadSmg;             // MP40/Thompson recovery-speed scale
+	int aimSpreadSmgAdd;            // MP40/Thompson per-shot recoil-add base
+
 	// results (out)
 	int numtouch;
 	int touchents[MAXTOUCH];

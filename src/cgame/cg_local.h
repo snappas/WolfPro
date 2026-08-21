@@ -1858,6 +1858,8 @@ extern vmCvar_t cg_medicChargeTime;
 extern vmCvar_t cg_engineerChargeTime;
 extern vmCvar_t cg_LTChargeTime;
 extern vmCvar_t cg_soldierChargeTime;
+extern vmCvar_t cg_spreadScaleSmg;
+extern vmCvar_t cg_spreadAddSmg;
 extern vmCvar_t cg_redlimbotime;
 extern vmCvar_t cg_bluelimbotime;
 // jpw

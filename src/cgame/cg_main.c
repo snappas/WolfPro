@@ -265,6 +265,8 @@ vmCvar_t cg_medicChargeTime;
 vmCvar_t cg_engineerChargeTime;
 vmCvar_t cg_LTChargeTime;
 vmCvar_t cg_soldierChargeTime;
+vmCvar_t cg_spreadScaleSmg;
+vmCvar_t cg_spreadAddSmg;
 vmCvar_t cg_redlimbitime;
 vmCvar_t cg_bluelimbotime;
 // jpw
@@ -625,6 +627,8 @@ cvarTable_t cvarTable[] = {
 	{ &cg_LTChargeTime, "g_LTChargeTime", "30000", 0 }, // communicated by systeminfo
 	{ &cg_engineerChargeTime,   "g_engineerChargeTime", "30000", 0 }, // communicated by systeminfo
 	{ &cg_soldierChargeTime,    "g_soldierChargeTime", "20000", 0 }, // communicated by systeminfo
+	{ &cg_spreadScaleSmg, "g_spreadScaleSmg", "0.6", 0 }, // communicated by serverinfo
+	{ &cg_spreadAddSmg, "g_spreadAddSmg", "15", 0 }, // communicated by serverinfo
 	// DHM - TEMP FIX
 	{ &cg_bluelimbotime,        "", "30000", 0 }, // communicated by systeminfo
 	{ &cg_redlimbotime,         "", "30000", 0 }, // communicated by systeminfo
