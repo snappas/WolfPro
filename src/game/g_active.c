@@ -750,9 +750,9 @@ static void G_PlayerAnimation(gentity_t *ent){
 	BG_EvaluateTrajectory( &ent->s.pos, level.time, ent->client->animationInfo.lerpOrigin);
 
 	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.legs, (ent->s.legsAnim & ~ANIM_TOGGLEBIT),
-						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, 0);
+						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, qtrue, 0);
 	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.torso, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT),
-						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, 0);
+						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, qtrue, 0);
 	lerpInfo_t *li = &ent->client->animationInfo.lerpInfo;
 	lerpFrame_t *lfTorso = &ent->client->animationInfo.torso;
 	lerpFrame_t* lfLegs = &ent->client->animationInfo.legs;

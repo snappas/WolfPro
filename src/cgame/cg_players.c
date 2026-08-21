@@ -1242,7 +1242,7 @@ cg.time should be between oldFrameTime and frameTime after exit
 */
 void CG_RunLerpFrameRate( clientInfo_t *ci, lerpFrame_t *lf, int newAnimation, centity_t *cent, int recursion ) {
 	BG_RunLerpFrameRate(cg.latestSnapshotTime, cg.time, ci->clientNum, ci->modelInfo, lf, newAnimation, &cent->pe.torso, &cent->pe.legs,
-						 cent->currentState.pos.trBase, cent->lerpOrigin, cent->pe.animSpeed, recursion);
+						 cent->currentState.pos.trBase, cent->lerpOrigin, cent->pe.animSpeed, ( cg.nextSnap != NULL ), recursion);
 }
 
 /*
