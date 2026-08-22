@@ -1165,7 +1165,9 @@ static void ParseSkyParms( char **text ) {
 		for ( i = 0 ; i < 6 ; i++ ) {
 			Com_sprintf( pathname, sizeof( pathname ), "%s_%s.tga"
 						 , token, suf[i] );
-			shader.sky.outerbox[i] = R_FindImageFile( ( char * ) pathname, qtrue, qtrue, GL_CLAMP );
+			// sky box faces are always full resolution and unmipped: independently-generated
+			// mips per face don't match at the edges and mipmapping is a classic cube-seam cause
+			shader.sky.outerbox[i] = R_FindImageFile( ( char * ) pathname, qfalse, qfalse, GL_CLAMP_TO_EDGE );
 			if ( !shader.sky.outerbox[i] ) {
 				shader.sky.outerbox[i] = tr.defaultImage;
 			}
@@ -1195,7 +1197,9 @@ static void ParseSkyParms( char **text ) {
 		for ( i = 0 ; i < 6 ; i++ ) {
 			Com_sprintf( pathname, sizeof( pathname ), "%s_%s.tga"
 						 , token, suf[i] );
-			shader.sky.innerbox[i] = R_FindImageFile( ( char * ) pathname, qtrue, qtrue, GL_CLAMP );
+			// sky box faces are always full resolution and unmipped: independently-generated
+			// mips per face don't match at the edges and mipmapping is a classic cube-seam cause
+			shader.sky.innerbox[i] = R_FindImageFile( ( char * ) pathname, qfalse, qfalse, GL_CLAMP_TO_EDGE );
 			if ( !shader.sky.innerbox[i] ) {
 				shader.sky.innerbox[i] = tr.defaultImage;
 			}
