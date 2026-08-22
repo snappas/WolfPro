@@ -48,6 +48,7 @@ void P_DamageFeedback( gentity_t *player ) {
 	gclient_t   *client;
 	float count;
 	vec3_t angles;
+	int yawByte;
 
 	client = player->client;
 	if ( client->ps.pm_type == PM_DEAD ) {
@@ -64,19 +65,38 @@ void P_DamageFeedback( gentity_t *player ) {
 		count = 127;
 	}
 
-	// send the information to the client
+	if ( g_dmgFeedbackLegacy.integer ) {
+		// world damage (falling, slime, etc) uses a special code
+		// to make the blend blob centered instead of positional
+		if ( client->damage_fromWorld ) {
+			client->ps.damagePitch = 255;
+			client->ps.damageYaw = 255;
 
-	// world damage (falling, slime, etc) uses a special code
-	// to make the blend blob centered instead of positional
-	if ( client->damage_fromWorld ) {
-		client->ps.damagePitch = 255;
-		client->ps.damageYaw = 255;
+			client->damage_fromWorld = qfalse;
+		} else {
+			vectoangles( client->damage_from, angles );
+			client->ps.damagePitch = angles[PITCH] / 360.0 * 256;
+			client->ps.damageYaw = angles[YAW] / 360.0 * 256;
+		}
 
-		client->damage_fromWorld = qfalse;
+		client->ps.damageEvent++;   // Ridah, always increment this since we do multiple view damage anims
+		client->ps.damageCount = count;
 	} else {
-		vectoangles( client->damage_from, angles );
-		client->ps.damagePitch = angles[PITCH] / 360.0 * 256;
-		client->ps.damageYaw = angles[YAW] / 360.0 * 256;
+		// eventParm carries only the yaw byte; magnitude is derived client-side
+		if ( client->damage_fromWorld ) {
+			yawByte = 255; // centered/world damage sentinel
+			client->damage_fromWorld = qfalse;
+		} else {
+			vectoangles( client->damage_from, angles );
+			yawByte = (int)( angles[YAW] / 360.0 * 254 );
+			if ( yawByte < 0 ) {
+				yawByte = 0;
+			} else if ( yawByte > 254 ) {
+				yawByte = 254;
+			}
+		}
+
+		G_AddEvent( player, EV_DAMAGE_KICK, yawByte );
 	}
 
 	// play an apropriate pain sound
@@ -84,10 +104,6 @@ void P_DamageFeedback( gentity_t *player ) {
 		player->pain_debounce_time = level.time + 700;
 		G_AddEvent( player, EV_PAIN, player->health );
 	}
-
-	client->ps.damageEvent++;   // Ridah, always increment this since we do multiple view damage anims
-
-	client->ps.damageCount = count;
 
 	//
 	// clear totals
@@ -734,9 +750,9 @@ static void G_PlayerAnimation(gentity_t *ent){
 	BG_EvaluateTrajectory( &ent->s.pos, level.time, ent->client->animationInfo.lerpOrigin);
 
 	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.legs, (ent->s.legsAnim & ~ANIM_TOGGLEBIT),
-						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, 0);
+						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, qtrue, 0);
 	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.torso, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT),
-						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, 0);
+						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, qtrue, 0);
 	lerpInfo_t *li = &ent->client->animationInfo.lerpInfo;
 	lerpFrame_t *lfTorso = &ent->client->animationInfo.torso;
 	lerpFrame_t* lfLegs = &ent->client->animationInfo.legs;
@@ -1074,6 +1090,9 @@ void ClientThink_real( gentity_t *ent ) {
 	pm.engineerChargeTime = g_engineerChargeTime.integer;
 	pm.medicChargeTime = g_medicChargeTime.integer;
 	// -NERVE - SMF
+
+	pm.aimSpreadSmg = g_spreadScaleSmg.value;
+	pm.aimSpreadSmgAdd = g_spreadAddSmg.integer;
 
 	Pmove( &pm );
 

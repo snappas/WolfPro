@@ -330,6 +330,9 @@ typedef struct {
 	int medicChargeTime;
 	// -NERVE - SMF
 
+	float aimSpreadSmg;             // MP40/Thompson recovery-speed scale
+	int aimSpreadSmgAdd;            // MP40/Thompson per-shot recoil-add base
+
 	// results (out)
 	int numtouch;
 	int touchents[MAXTOUCH];
@@ -874,6 +877,7 @@ typedef enum {
 	EV_GIVEPAGE,    //----(SA)	added
 	EV_MG42BULLET_HIT_FLESH,    // Arnout: these two send the seed as well
 	EV_MG42BULLET_HIT_WALL,
+	EV_DAMAGE_KICK, // eventParm: yaw byte, 255 = centered/world damage
 	EV_MAX_EVENTS   // just added as an 'endcap'
 
 } entity_event_t;
@@ -1810,7 +1814,7 @@ void BG_PositionRotatedEntityOnTag(vec3_t entityOrigin, vec3_t entityAxis[3], co
 void BG_LerpCrouchingAnimation(int clientNum, lerpFrame_t *lf, lerpFrame_t *torsoLerpframe, lerpFrame_t *legsLerpFrame, int newAnimation, int oldAnimNum, animation_t *oldanim);
 void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 						 int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame,
-						 vec3_t currentOrigin, vec3_t lerpOrigin, float manualAnimSpeed, int recursion);
+						 vec3_t currentOrigin, vec3_t lerpOrigin, float manualAnimSpeed, qboolean haveNextSnap, int recursion);
 
 extern animStringItem_t animStateStr[];
 extern animStringItem_t animBodyPartsStr[];

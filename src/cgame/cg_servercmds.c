@@ -368,6 +368,10 @@ void CG_ParseServerinfo( void ) {
 	info = CG_ConfigString( CS_SERVERINFO );
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	cgs.antilag = atoi( Info_ValueForKey( info, "g_antilag" ) );
+	cgs.dmgFeedbackScaleFullHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleFullHealth" ) );
+	cgs.dmgFeedbackScaleLowHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleLowHealth" ) );
+	cgs.dmgFeedbackFloor = atof( Info_ValueForKey( info, "g_dmgFeedbackFloor" ) );
+	cgs.dmgFeedbackCeiling = atof( Info_ValueForKey( info, "g_dmgFeedbackCeiling" ) );
 	if ( !cgs.localServer ) {
 		trap_Cvar_Set( "g_gametype", va( "%i", cgs.gametype ) );
 		trap_Cvar_Set( "g_antilag", va( "%i", cgs.antilag ) );
@@ -388,6 +392,8 @@ void CG_ParseServerinfo( void ) {
 	trap_Cvar_Set( "g_engineerChargeTime",Info_ValueForKey( info,"g_engineerChargeTime" ) );
 	trap_Cvar_Set( "g_soldierChargeTime",Info_ValueForKey( info,"g_soldierChargeTime" ) );
 	trap_Cvar_Set( "g_LTChargeTime",Info_ValueForKey( info,"g_LTChargeTime" ) );
+	trap_Cvar_Set( "g_spreadScaleSmg",Info_ValueForKey( info,"g_spreadScaleSmg" ) );
+	trap_Cvar_Set( "g_spreadAddSmg",Info_ValueForKey( info,"g_spreadAddSmg" ) );
 	trap_Cvar_Set( "g_redlimbotime",Info_ValueForKey( info,"g_redlimbotime" ) );
 	// DHM - TEMP FIX
 	cg_redlimbotime.integer = atoi( Info_ValueForKey( info,"g_redlimbotime" ) );
