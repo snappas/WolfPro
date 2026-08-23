@@ -5096,6 +5096,14 @@ static void CG_Draw2D( void ) {
 		return;
 	}
 
+	if ( cg.demoPlayback && cg_draw2D.integer == 2 ) {
+		CG_DrawCrosshair();
+		CG_DrawNotify();
+		CG_DrawCenterString();
+		CG_DrawDemoTimeline();
+		return;
+	}
+
 	CG_ScreenFade();
 
 	if ( cg.cameraMode ) { //----(SA)	no 2d when in camera view
