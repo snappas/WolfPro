@@ -138,6 +138,7 @@ weaponInfo_t cg_weapons[MAX_WEAPONS];
 itemInfo_t cg_items[MAX_ITEMS];
 
 vmCvar_t cg_railTrailTime;
+vmCvar_t cg_railTrailColor;
 vmCvar_t cg_centertime;
 vmCvar_t cg_runpitch;
 vmCvar_t cg_runroll;
@@ -521,6 +522,7 @@ cvarTable_t cvarTable[] = {
 	{ &cg_markTime, "cg_marktime", "10000", CVAR_ARCHIVE },
 	{ &cg_lagometer, "cg_lagometer", "0", CVAR_ARCHIVE },
 	{ &cg_railTrailTime, "cg_railTrailTime", "400", CVAR_ARCHIVE  },
+	{ &cg_railTrailColor, "cg_railTrailColor", "FF0000FF", CVAR_ARCHIVE  },
 	{ &cg_gun_x, "cg_gunX", "0", CVAR_CHEAT },
 	{ &cg_gun_y, "cg_gunY", "0", CVAR_CHEAT },
 	{ &cg_gun_z, "cg_gunZ", "0", CVAR_CHEAT },
