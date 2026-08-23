@@ -1582,6 +1582,8 @@ typedef struct {
 	float dmgFeedbackScaleLowHealth;
 	float dmgFeedbackFloor;
 	float dmgFeedbackCeiling;
+	float camShakeScale;
+	float camShakeDuration;
 
 	// Rafael gameskill
 	gameskill_t gameskill;
@@ -1753,6 +1755,7 @@ extern vmCvar_t cg_debugPosition;
 extern vmCvar_t cg_debugEvents;
 extern vmCvar_t cg_drawSpreadScale;
 extern vmCvar_t cg_railTrailTime;
+extern vmCvar_t cg_railTrailColor;
 extern vmCvar_t cg_errorDecay;
 extern vmCvar_t cg_nopredict;
 extern vmCvar_t cg_noPlayerAnims;

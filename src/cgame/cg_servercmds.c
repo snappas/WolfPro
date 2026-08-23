@@ -372,6 +372,14 @@ void CG_ParseServerinfo( void ) {
 	cgs.dmgFeedbackScaleLowHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleLowHealth" ) );
 	cgs.dmgFeedbackFloor = atof( Info_ValueForKey( info, "g_dmgFeedbackFloor" ) );
 	cgs.dmgFeedbackCeiling = atof( Info_ValueForKey( info, "g_dmgFeedbackCeiling" ) );
+	{
+		const char *camShakeScaleStr = Info_ValueForKey( info, "g_camShakeScale" );
+		const char *camShakeDurationStr = Info_ValueForKey( info, "g_camShakeDuration" );
+		// older demos/servers predate these keys - default to the neutral 1.0 multiplier
+		// so camera shake still behaves as it always did, instead of vanishing to 0
+		cgs.camShakeScale = camShakeScaleStr[0] ? atof( camShakeScaleStr ) : 1.0f;
+		cgs.camShakeDuration = camShakeDurationStr[0] ? atof( camShakeDurationStr ) : 1.0f;
+	}
 	if ( !cgs.localServer ) {
 		trap_Cvar_Set( "g_gametype", va( "%i", cgs.gametype ) );
 		trap_Cvar_Set( "g_antilag", va( "%i", cgs.antilag ) );

@@ -234,7 +234,7 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `cg_debugevents` | `0` | CHEAT **[debug]** | Logs entity-event debug info. |
 | `cg_debugposition` | `0` | CHEAT **[debug]** | Logs entity position/interpolation debug info. |
 | `cg_deferPlayers` | `1` | ARCHIVE | Defer loading other players' models/skins (perf vs. pop-in tradeoff). |
-| `cg_draw2D` | `1` | CHEAT | Master HUD-overlay toggle; cheat-protected to stop it hiding the sniper-scope zoom overlay. `2` is a demo-playback-only minimal mode: crosshair, notify text, and center-print only, nothing else. |
+| `cg_draw2D` | `1` | CHEAT | Master HUD-overlay toggle; cheat-protected to stop it hiding the sniper-scope zoom overlay. `2` is a demo-playback-only minimal mode: crosshair, notify text, center-print, and the demo timeline only, nothing else. |
 | `cg_draw3dIcons` | `1` | ARCHIVE | 3D world-space item/pickup icons toggle. |
 | `cg_drawCI` | `1` | ARCHIVE | Toggles the "connection interrupted" text + icon shown when the client's command buffer is exhausted. |
 | `cg_drawCompass` | `1` | ARCHIVE | Compass HUD element toggle. |

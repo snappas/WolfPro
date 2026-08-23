@@ -5096,6 +5096,14 @@ static void CG_Draw2D( void ) {
 		return;
 	}
 
+	if ( cg.demoPlayback && cg_draw2D.integer == 2 ) {
+		CG_DrawCrosshair();
+		CG_DrawNotify();
+		CG_DrawCenterString();
+		CG_DrawDemoTimeline();
+		return;
+	}
+
 	CG_ScreenFade();
 
 	if ( cg.cameraMode ) { //----(SA)	no 2d when in camera view
@@ -5239,9 +5247,9 @@ static void CG_Draw2D( void ) {
 
 // NERVE - SMF
 void CG_StartShakeCamera( float p ) {
-	cg.cameraShakeScale = p;
+	cg.cameraShakeScale = p * cgs.camShakeScale;
 
-	cg.cameraShakeLength = 1000 * ( p * p );
+	cg.cameraShakeLength = 1000 * ( p * p ) * cgs.camShakeDuration;
 	cg.cameraShakeTime = cg.time + cg.cameraShakeLength;
 	cg.cameraShakePhase = crandom() * M_PI; // start chain in random dir
 }
@@ -5249,7 +5257,7 @@ void CG_StartShakeCamera( float p ) {
 void CG_ShakeCamera() {
 	float x, val;
 
-	if ( cg.time > cg.cameraShakeTime ) {
+	if ( cg.time > cg.cameraShakeTime || cg.cameraShakeLength <= 0 ) {
 		cg.cameraShakeScale = 0; // JPW NERVE all pending explosions resolved, so reset shakescale
 		return;
 	}
