@@ -2306,7 +2306,7 @@ void PM_AdjustAimSpreadScale( void ) {
 		wpnScale = pm->aimSpreadSmg;
 		break;
 	case WP_STEN:
-		wpnScale = 0.6f;
+		wpnScale = pm->aimSpreadSmg;
 		break;
 		//case WP_PANZERFAUST:
 		//case WP_ROCKET_LAUNCHER:
@@ -3127,13 +3127,9 @@ static void PM_Weapon( void ) {
 
 	case WP_MP40:
 	case WP_THOMPSON:
-		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = pm->aimSpreadSmgAdd + rand() % 10;
-		break;
-
 	case WP_STEN:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = 15 + rand() % 10;   // (SA) new values for DM
+		aimSpreadScaleAdd = pm->aimSpreadSmgAdd + rand() % 10;
 		break;
 
 	case WP_SILENCER:
