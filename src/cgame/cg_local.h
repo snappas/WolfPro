@@ -1582,6 +1582,8 @@ typedef struct {
 	float dmgFeedbackScaleLowHealth;
 	float dmgFeedbackFloor;
 	float dmgFeedbackCeiling;
+	float camShakeScale;
+	float camShakeDuration;
 
 	// Rafael gameskill
 	gameskill_t gameskill;

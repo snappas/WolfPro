@@ -1550,6 +1550,9 @@ extern vmCvar_t g_dmgFeedbackFloor;
 extern vmCvar_t g_dmgFeedbackCeiling;
 extern vmCvar_t g_dmgFeedbackLegacy;
 
+extern vmCvar_t g_camShakeScale;
+extern vmCvar_t g_camShakeDuration;
+
 extern vmCvar_t g_spreadScaleSmg;
 extern vmCvar_t g_spreadAddSmg;
 
