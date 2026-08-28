@@ -1069,11 +1069,11 @@ void Sys_QueEvent( int time, sysEventType_t type, int value, int value2, int ptr
 
 /*
 ================
-Sys_GetEvent
+Sys_GetCheapEvent
 
 ================
 */
-sysEvent_t Sys_GetEvent( void ) {
+sysEvent_t Sys_GetCheapEvent( void ) {
 	sysEvent_t ev;
 	char    *s;
 	msg_t netmsg;

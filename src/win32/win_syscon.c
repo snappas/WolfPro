@@ -41,6 +41,10 @@ If you have questions concerning this license or the applicable additional terms
 #define SYSCON_DEFAULT_WIDTH    540
 #define SYSCON_DEFAULT_HEIGHT   450
 
+// must match Conbuf_AppendTextImpl's CONSOLE_BUFFER_SIZE, or a long line
+// gets silently truncated before it gets there
+#define SYSCON_MAX_TEXT_LEN     16384
+
 #define COPY_ID         1
 #define QUIT_ID         2
 #define CLEAR_ID        3
@@ -76,7 +80,6 @@ typedef struct
 
 	char errorString[80];
 
-	char consoleText[512], returnedText[512];
 	int visLevel;
 	qboolean quitOnClose;
 	int windowWidth, windowHeight;
@@ -87,8 +90,115 @@ typedef struct
 
 static WinConData s_wcd;
 
+static void Sys_CreateConsoleImpl( void );
+static void Sys_DestroyConsoleImpl( void );
+static void Conbuf_AppendTextImpl( const char *pMsg );
+static void Sys_SetErrorTextImpl( const char *buf );
+
+// forwards a command line to the main thread instead of calling Cvar_Set
+// or Sys_QueEvent directly, which aren't safe to call off the main thread
+static void SysCon_QueueCommand( const char *text ) {
+	uint32_t len = (uint32_t)strlen( text );
+	uint64_t offset = WIN_PushString( &g_wv.conCmdStringBuffer, text, len );
+	WIN_PushWindowCommand( &g_wv.conCmdBuffer, WCMD_PROCESS_LINE, offset, len );
+}
+
+/*
+==================
+SysConThreadFunc
+
+Owns the early-console window's whole lifetime: creation, message pump,
+draining main-thread commands, and teardown on stop.
+==================
+*/
+static void SysConThreadFunc( thread_t *thread ) {
+	MSG msg;
+	qboolean profRegistered = qfalse;
+
+	Sys_CreateConsoleImpl();
+
+	if ( s_wcd.hWnd == NULL ) {
+		// no window means nothing will ever answer a Sys_Error's WM_QUIT wait --
+		// report the failure instead of pumping an empty queue forever
+		thread->exitedEarly = qtrue;
+		SetEvent( thread->initDoneEvent );
+		return;
+	}
+
+	SetEvent( thread->initDoneEvent );
+
+	while ( !thread->stopRequested ) {
+		// PROF_InitThread Z_Mallocs, but mainzone doesn't exist until Com_Init --
+		// this thread starts earlier, so poll com_zoneInitialized before calling it
+		if ( !profRegistered && com_zoneInitialized ) {
+			PROF_InitThread( "Syscon" );
+			profRegistered = qtrue;
+		}
+
+		PROF_BEGIN( "PeekMessage" );
+		while ( PeekMessage( &msg, NULL, 0, 0, PM_NOREMOVE ) ) {
+			if ( !GetMessage( &msg, NULL, 0, 0 ) ) {
+				// WM_QUIT (Quit button or a forced error dialog closing) --
+				// stop the loop ourselves, nothing else will
+				thread->stopRequested = qtrue;
+				break;
+			}
+			TranslateMessage( &msg );
+			DispatchMessage( &msg );
+		}
+		PROF_END();
+
+		{
+			ringBufferIter_t iter;
+			uint64_t i;
+
+			WIN_BeginReading( &iter, &g_wv.mainCmdBuffer.base );
+			for ( i = iter.begin; i < iter.end; i++ ) {
+				windowCommand_t *cmd = &g_wv.mainCmdBuffer.commands[ i % g_wv.mainCmdBuffer.base.size ];
+				char text[SYSCON_MAX_TEXT_LEN];
+				uint32_t len = cmd->dataLength < sizeof( text ) - 1 ? cmd->dataLength : sizeof( text ) - 1;
+				uint32_t j;
+
+				for ( j = 0; j < len; j++ ) {
+					text[j] = g_wv.mainCmdStringBuffer.data[ ( cmd->userData + j ) % g_wv.mainCmdStringBuffer.base.size ];
+				}
+				text[len] = 0;
+
+				if ( cmd->type == WCMD_APPEND_LINE ) {
+					Conbuf_AppendTextImpl( text );
+				} else if ( cmd->type == WCMD_SET_ERROR_TEXT ) {
+					Sys_SetErrorTextImpl( text );
+				}
+
+				g_wv.mainCmdStringBuffer.base.readIndex = cmd->userData + cmd->dataLength;
+			}
+			WIN_EndReading( &iter );
+		}
+
+		Sleep( 1 );
+	}
+
+	Sys_DestroyConsoleImpl();
+
+	PROF_ShutdownThread();
+}
+
+
+void WIN_StartSysconThread( void ) {
+	if ( !WIN_CreateThread( &g_wv.sysconThread, SysConThreadFunc ) ) {
+		// runs before Com_Init, and this thread is what would have displayed
+		// a Com_Error/Sys_Error message in the first place
+		MessageBox( NULL, "Failed to create the console window thread", "RTCW Error", MB_OK | MB_ICONERROR );
+		exit( 1 );
+	}
+}
+
+
+void WIN_StopSysconThread( qboolean forceExit ) {
+	WIN_DestroyThread( &g_wv.sysconThread, forceExit );
+}
+
 static LONG WINAPI ConWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
-	char *cmdString;
 	static qboolean s_timePolarity;
 	int cx, cy;
 	float sx;
@@ -143,11 +253,11 @@ static LONG WINAPI ConWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 			// if the viewlog is open, check to see if it's being minimized
 			if ( com_viewlog->integer == 1 ) {
 				if ( HIWORD( wParam ) ) {   // minimized flag
-					Cvar_Set( "viewlog", "2" );
+					SysCon_QueueCommand( "viewlog 2" );
 				}
 			} else if ( com_viewlog->integer == 2 )   {
 				if ( !HIWORD( wParam ) ) {      // minimized flag
-					Cvar_Set( "viewlog", "1" );
+					SysCon_QueueCommand( "viewlog 1" );
 				}
 			}
 		}
@@ -155,14 +265,13 @@ static LONG WINAPI ConWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 
 	case WM_CLOSE:
 		if ( ( com_dedicated && com_dedicated->integer ) ) {
-			cmdString = CopyString( "quit" );
-			Sys_QueEvent( 0, SE_CONSOLE, 0, 0, strlen( cmdString ) + 1, cmdString );
+			SysCon_QueueCommand( "quit" );
 		} else if ( s_wcd.quitOnClose )   {
 			PostQuitMessage( 0 );
 		} else
 		{
 			Sys_ShowConsole( 0, qfalse );
-			Cvar_Set( "viewlog", "0" );
+			SysCon_QueueCommand( "viewlog 0" );
 		}
 		return 0;
 	case WM_CTLCOLORSTATIC:
@@ -192,8 +301,7 @@ static LONG WINAPI ConWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 				PostQuitMessage( 0 );
 			} else
 			{
-				cmdString = CopyString( "quit" );
-				Sys_QueEvent( 0, SE_CONSOLE, 0, 0, strlen( cmdString ) + 1, cmdString );
+				SysCon_QueueCommand( "quit" );
 			}
 		} else if ( wParam == CLEAR_ID )   {
 			SendMessage( s_wcd.hwndBuffer, EM_SETSEL, 0, -1 );
@@ -238,12 +346,19 @@ LONG WINAPI InputLineWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
 	case WM_CHAR:
 		if ( wParam == 13 ) {
+			char echo[1100];
+
 			GetWindowText( s_wcd.hwndInputLine, inputBuffer, sizeof( inputBuffer ) );
-			strncat( s_wcd.consoleText, inputBuffer, sizeof( s_wcd.consoleText ) - strlen( s_wcd.consoleText ) - 5 );
-			strcat( s_wcd.consoleText, "\n" );
 			SetWindowText( s_wcd.hwndInputLine, "" );
 
-			Sys_Print( va( "]%s\n", inputBuffer ) );
+			// hand the line to the main thread the same way the quit/viewlog
+			// buttons do -- nothing here is shared with it unsynchronized
+			SysCon_QueueCommand( inputBuffer );
+
+			// echoes locally rather than via the cross-thread Conbuf_AppendText;
+			// Com_sprintf, since va()'s static buffer isn't thread-safe here
+			Com_sprintf( echo, sizeof( echo ), "]%s\n", inputBuffer );
+			Conbuf_AppendTextImpl( echo );
 
 			return 0;
 		}
@@ -253,9 +368,9 @@ LONG WINAPI InputLineWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 }
 
 /*
-** Sys_CreateConsole
+** Sys_CreateConsoleImpl
 */
-void Sys_CreateConsole( void ) {
+static void Sys_CreateConsoleImpl( void ) {
 	HDC hDC;
 	WNDCLASS wc;
 	RECT rect;
@@ -397,15 +512,22 @@ void Sys_CreateConsole( void ) {
 }
 
 /*
-** Sys_DestroyConsole
+** Sys_DestroyConsoleImpl
 */
-void Sys_DestroyConsole( void ) {
+static void Sys_DestroyConsoleImpl( void ) {
 	if ( s_wcd.hWnd ) {
 		ShowWindow( s_wcd.hWnd, SW_HIDE );
 		CloseWindow( s_wcd.hWnd );
 		DestroyWindow( s_wcd.hWnd );
 		s_wcd.hWnd = 0;
 	}
+}
+
+/*
+** Sys_DestroyConsole
+*/
+void Sys_DestroyConsole( qboolean waitForUser ) {
+	WIN_StopSysconThread( !waitForUser );
 }
 
 /*
@@ -443,23 +565,49 @@ void Sys_ShowConsole( int visLevel, qboolean quitOnClose ) {
 }
 
 /*
-** Sys_ConsoleInput
+==================
+WIN_ProcessConsoleWindowEvents
+
+Drains command lines the syscon thread forwarded and queues them as
+SE_CONSOLE events; called once per frame, independently of IN_Frame.
+==================
 */
-char *Sys_ConsoleInput( void ) {
-	if ( s_wcd.consoleText[0] == 0 ) {
-		return NULL;
+void WIN_ProcessConsoleWindowEvents( void ) {
+	if ( g_wv.sysconThread.exitedEarly ) {
+		Com_Error( ERR_FATAL, "The syscon thread exited early" );
 	}
 
-	strcpy( s_wcd.returnedText, s_wcd.consoleText );
-	s_wcd.consoleText[0] = 0;
+	{
+		ringBufferIter_t iter;
+		uint64_t i;
 
-	return s_wcd.returnedText;
+		WIN_BeginReading( &iter, &g_wv.conCmdBuffer.base );
+		for ( i = iter.begin; i < iter.end; i++ ) {
+			windowCommand_t *cmd = &g_wv.conCmdBuffer.commands[ i % g_wv.conCmdBuffer.base.size ];
+			char text[SYSCON_MAX_TEXT_LEN];
+			uint32_t len = cmd->dataLength < sizeof( text ) - 1 ? cmd->dataLength : sizeof( text ) - 1;
+			uint32_t j;
+
+			for ( j = 0; j < len; j++ ) {
+				text[j] = g_wv.conCmdStringBuffer.data[ ( cmd->userData + j ) % g_wv.conCmdStringBuffer.base.size ];
+			}
+			text[len] = 0;
+
+			if ( cmd->type == WCMD_PROCESS_LINE ) {
+				char *b = CopyString( text );
+				Sys_QueEvent( 0, SE_CONSOLE, 0, 0, strlen( b ) + 1, b );
+			}
+
+			g_wv.conCmdStringBuffer.base.readIndex = cmd->userData + cmd->dataLength;
+		}
+		WIN_EndReading( &iter );
+	}
 }
 
 /*
-** Conbuf_AppendText
+** Conbuf_AppendTextImpl
 */
-void Conbuf_AppendText( const char *pMsg ) {
+static void Conbuf_AppendTextImpl( const char *pMsg ) {
 #define CONSOLE_BUFFER_SIZE     16384
 
 	char buffer[CONSOLE_BUFFER_SIZE * 2];
@@ -531,9 +679,9 @@ void Conbuf_AppendText( const char *pMsg ) {
 }
 
 /*
-** Sys_SetErrorText
+** Sys_SetErrorTextImpl
 */
-void Sys_SetErrorText( const char *buf ) {
+static void Sys_SetErrorTextImpl( const char *buf ) {
 	Q_strncpyz( s_wcd.errorString, buf, sizeof( s_wcd.errorString ) );
 
 	if ( !s_wcd.hwndErrorBox ) {
@@ -548,4 +696,22 @@ void Sys_SetErrorText( const char *buf ) {
 		DestroyWindow( s_wcd.hwndInputLine );
 		s_wcd.hwndInputLine = NULL;
 	}
+}
+
+/*
+** Conbuf_AppendText
+*/
+void Conbuf_AppendText( const char *pMsg ) {
+	uint32_t len = (uint32_t)strlen( pMsg );
+	uint64_t offset = WIN_PushString( &g_wv.mainCmdStringBuffer, pMsg, len );
+	WIN_PushWindowCommand( &g_wv.mainCmdBuffer, WCMD_APPEND_LINE, offset, len );
+}
+
+/*
+** Sys_SetErrorText
+*/
+void Sys_SetErrorText( const char *buf ) {
+	uint32_t len = (uint32_t)strlen( buf );
+	uint64_t offset = WIN_PushString( &g_wv.mainCmdStringBuffer, buf, len );
+	WIN_PushWindowCommand( &g_wv.mainCmdBuffer, WCMD_SET_ERROR_TEXT, offset, len );
 }
