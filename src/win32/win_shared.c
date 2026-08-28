@@ -244,3 +244,245 @@ qboolean Sys_SetAffinityMask( const uint64_t mask )
 
 	return qfalse;
 }
+
+
+/*
+==================
+WIN_CreateThread
+
+Blocks until the new thread signals it has finished startup, so the
+caller never proceeds with a half-initialized thread.
+==================
+*/
+qboolean WIN_CreateThread( thread_t *thread, threadFunction_t function ) {
+	HANDLE waitHandles[2];
+
+	memset( thread, 0, sizeof( *thread ) );
+	thread->function = function;
+	thread->initDoneEvent = CreateEvent( NULL, FALSE, FALSE, NULL );
+	if ( !thread->initDoneEvent ) {
+		return qfalse;
+	}
+
+	thread->thread = CreateThread( NULL, 0, (LPTHREAD_START_ROUTINE)function, thread, 0, NULL );
+	if ( !thread->thread ) {
+		CloseHandle( thread->initDoneEvent );
+		thread->initDoneEvent = NULL;
+		return qfalse;
+	}
+
+	waitHandles[0] = thread->initDoneEvent;
+	waitHandles[1] = thread->thread;
+	WaitForMultipleObjects( 2, waitHandles, FALSE, INFINITE );
+
+	CloseHandle( thread->initDoneEvent );
+	thread->initDoneEvent = NULL;
+
+	return qtrue;
+}
+
+
+/*
+==================
+WIN_DestroyThread
+
+forceExit qfalse blocks without requesting a stop -- used on the Sys_Error
+path, where the console must stay open until the user closes it.
+==================
+*/
+void WIN_DestroyThread( thread_t *thread, qboolean forceExit ) {
+	if ( !thread->thread ) {
+		return;
+	}
+
+	if ( forceExit ) {
+		thread->stopRequested = qtrue;
+	}
+
+	WaitForSingleObject( thread->thread, INFINITE );
+	CloseHandle( thread->thread );
+	thread->thread = NULL;
+}
+
+
+/*
+==================
+WIN_InitRingBuffer
+==================
+*/
+void WIN_InitRingBuffer( spscRingBuffer_t *buffer, uint64_t arrayLength ) {
+	buffer->writeIndex = 0;
+	buffer->readIndex = 0;
+	buffer->size = arrayLength;
+	buffer->maxUsagePc = 0.0f;
+}
+
+
+/*
+==================
+WIN_WaitToWrite
+
+Spin-waits until there is at least one free slot to write into. Full
+buffers block the producer -- events are never dropped or overwritten.
+==================
+*/
+static void WIN_WaitToWrite( spscRingBuffer_t *buffer, uint64_t writeIndex ) {
+	while ( buffer->readIndex + buffer->size <= writeIndex ) {
+		YieldProcessor();
+	}
+}
+
+
+/*
+==================
+WIN_PushInputEventB
+
+Batched push: caller tracks writeIndex locally, calls this per event, then
+WIN_FlushInputEvents once to publish the whole batch atomically.
+==================
+*/
+void WIN_PushInputEventB( inputBuffer_t *buffer, uint64_t *writeIndex, int timestamp, int event, int arg1, int arg2 ) {
+	WIN_WaitToWrite( &buffer->base, *writeIndex );
+
+	inputEvent_t *slot = &buffer->inputs[ *writeIndex % buffer->base.size ];
+	slot->timestamp = timestamp;
+	slot->event = event;
+	slot->arg1 = arg1;
+	slot->arg2 = arg2;
+
+	( *writeIndex )++;
+}
+
+
+/*
+==================
+WIN_FlushInputEvents
+==================
+*/
+void WIN_FlushInputEvents( inputBuffer_t *buffer, uint64_t writeIndex ) {
+	buffer->base.writeIndex = writeIndex;
+}
+
+
+/*
+==================
+WIN_PushInputEvent
+
+Convenience wrapper for callers that push a single event without batching.
+==================
+*/
+void WIN_PushInputEvent( inputBuffer_t *buffer, int timestamp, int event, int arg1, int arg2 ) {
+	uint64_t writeIndex = buffer->base.writeIndex;
+	WIN_PushInputEventB( buffer, &writeIndex, timestamp, event, arg1, arg2 );
+	WIN_FlushInputEvents( buffer, writeIndex );
+}
+
+
+/*
+==================
+WIN_PushWindowEvent
+==================
+*/
+void WIN_PushWindowEvent( windowCommandBuffer_t *buffer, HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
+	uint64_t writeIndex = buffer->base.writeIndex;
+	windowCommand_t *slot;
+
+	WIN_WaitToWrite( &buffer->base, writeIndex );
+
+	slot = &buffer->commands[ writeIndex % buffer->base.size ];
+	slot->type = WCMD_WINDOW_MESSAGE;
+	slot->hWnd = hWnd;
+	slot->uMsg = uMsg;
+	slot->wParam = wParam;
+	slot->lParam = lParam;
+	slot->userData = 0;
+	slot->dataLength = 0;
+
+	buffer->base.writeIndex = writeIndex + 1;
+}
+
+
+/*
+==================
+WIN_PushWindowCommand
+==================
+*/
+void WIN_PushWindowCommand( windowCommandBuffer_t *buffer, windowCommandId_t command, uint64_t userData, uint32_t dataLength ) {
+	uint64_t writeIndex = buffer->base.writeIndex;
+	windowCommand_t *slot;
+
+	WIN_WaitToWrite( &buffer->base, writeIndex );
+
+	slot = &buffer->commands[ writeIndex % buffer->base.size ];
+	slot->type = command;
+	slot->hWnd = NULL;
+	slot->uMsg = 0;
+	slot->wParam = 0;
+	slot->lParam = 0;
+	slot->userData = userData;
+	slot->dataLength = dataLength;
+
+	buffer->base.writeIndex = writeIndex + 1;
+}
+
+
+/*
+==================
+WIN_PushString
+
+Handles wraparound by splitting the copy at the array boundary. Returns
+the start offset to pass as a windowCommand_t's userData.
+==================
+*/
+uint64_t WIN_PushString( stringBuffer_t *buffer, const char *string, uint32_t stringLength ) {
+	uint64_t writeIndex = buffer->base.writeIndex;
+	uint64_t startIndex;
+	uint64_t i;
+
+	for ( i = 0; i < (uint64_t)stringLength; i++ ) {
+		WIN_WaitToWrite( &buffer->base, writeIndex + i );
+	}
+
+	startIndex = writeIndex;
+	for ( i = 0; i < (uint64_t)stringLength; i++ ) {
+		buffer->data[ ( writeIndex + i ) % buffer->base.size ] = string[i];
+	}
+
+	buffer->base.writeIndex = writeIndex + stringLength;
+
+	return startIndex;
+}
+
+
+/*
+==================
+WIN_BeginReading
+
+Snapshots the currently-available range [readIndex, writeIndex) for the
+caller to iterate. Also updates maxUsagePc for diagnostic purposes.
+==================
+*/
+void WIN_BeginReading( ringBufferIter_t *iter, spscRingBuffer_t *buffer ) {
+	iter->buffer = buffer;
+	iter->begin = buffer->readIndex;
+	iter->end = buffer->writeIndex;
+
+	if ( iter->end > iter->begin ) {
+		float usagePc = 100.0f * (float)( iter->end - iter->begin ) / (float)buffer->size;
+		if ( usagePc > buffer->maxUsagePc ) {
+			buffer->maxUsagePc = usagePc;
+		}
+	}
+}
+
+
+/*
+==================
+WIN_EndReading
+
+Publishes the whole batch [begin, end) as consumed in one write.
+==================
+*/
+void WIN_EndReading( ringBufferIter_t *iter ) {
+	iter->buffer->readIndex = iter->end;
+}

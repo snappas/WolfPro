@@ -160,7 +160,6 @@ Show the early console as an error dialog
 void QDECL Sys_Error( const char *error, ... ) {
 	va_list argptr;
 	char text[4096];
-	MSG msg;
 
 	va_start( argptr, error );
 	vsprintf( text, error, argptr );
@@ -175,17 +174,8 @@ void QDECL Sys_Error( const char *error, ... ) {
 	WIN_EndTimePeriod();
 
 	IN_Shutdown();
-
-	// wait for the user to quit
-	while ( 1 ) {
-		if ( !GetMessage( &msg, NULL, 0, 0 ) ) {
-			Com_Quit(1);
-		}
-		TranslateMessage( &msg );
-		DispatchMessage( &msg );
-	}
-
-	Sys_DestroyConsole();
+	WIN_StopWindowThread( qtrue );
+	Sys_DestroyConsole( qtrue );
 
 	exit( 1 );
 }
@@ -198,7 +188,8 @@ Sys_Quit
 void Sys_Quit( int status ) {
 	WIN_EndTimePeriod();
 	IN_Shutdown();
-	Sys_DestroyConsole();
+	WIN_StopWindowThread( qtrue );
+	Sys_DestroyConsole( qfalse );
 
 	exit( status );
 }
@@ -1008,57 +999,17 @@ void Sys_QueEvent( int time, sysEventType_t type, int value, int value2, int ptr
 
 /*
 ================
-Sys_GetEvent
+Sys_GetCheapEvent
 
 ================
 */
-sysEvent_t Sys_GetEvent( void ) {
-	MSG msg;
+sysEvent_t Sys_GetCheapEvent( void ) {
 	sysEvent_t ev;
-	char        *s;
 
-	// return if we have data
 	if ( eventHead > eventTail ) {
 		eventTail++;
 		return eventQue[ ( eventTail - 1 ) & MASK_QUED_EVENTS ];
 	}
-
-	// pump the message loop
-	PROF_BEGIN( "PeekMessage" );
-	while ( PeekMessage( &msg, NULL, 0, 0, PM_NOREMOVE ) ) {
-		if ( !GetMessage( &msg, NULL, 0, 0 ) ) {
-			Com_Quit(0);
-		}
-
-		// save the msg time, because wndprocs don't have access to the timestamp
-		g_wv.sysMsgTime = msg.time;
-
-		TranslateMessage( &msg );
-		DispatchMessage( &msg );
-	}
-	PROF_END();
-
-	// check for console commands
-	PROF_BEGIN( "Sys_ConsoleInput" );
-	s = Sys_ConsoleInput();
-	if ( s ) {
-		char    *b;
-		int len;
-
-		len = strlen( s ) + 1;
-		b = Z_Malloc( len );
-		Q_strncpyz( b, s, len - 1 );
-		Sys_QueEvent( 0, SE_CONSOLE, 0, 0, len, b );
-	}
-	PROF_END();
-
-	// return if we have data
-	if ( eventHead > eventTail ) {
-		eventTail++;
-		return eventQue[ ( eventTail - 1 ) & MASK_QUED_EVENTS ];
-	}
-
-	// create an empty event to return
 
 	memset( &ev, 0, sizeof( ev ) );
 	ev.evTime = timeGetTime();
@@ -1146,6 +1097,7 @@ void SetDpiAware(void){
 		FreeLibrary(libHandle);
 	}
 }
+
 /*
 ==================
 WinMain
@@ -1180,10 +1132,23 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 
 	g_wv.hInstance = hInstance;
+
+	PROF_Init();
+
+	WIN_InitRingBuffer( &g_wv.mainWndCmdBuffer.base, ARRAY_LEN( g_wv.mainWndCmdBuffer.commands ) );
+	WIN_InitRingBuffer( &g_wv.legacyInputBuffer.base, ARRAY_LEN( g_wv.legacyInputBuffer.inputs ) );
+	WIN_InitRingBuffer( &g_wv.inputThreadBuffer.base, ARRAY_LEN( g_wv.inputThreadBuffer.inputs ) );
+	WIN_StartWindowThread();
+
 	Q_strncpyz( sys_cmdline, lpCmdLine, sizeof( sys_cmdline ) );
 
+	WIN_InitRingBuffer( &g_wv.conCmdBuffer.base, ARRAY_LEN( g_wv.conCmdBuffer.commands ) );
+	WIN_InitRingBuffer( &g_wv.conCmdStringBuffer.base, ARRAY_LEN( g_wv.conCmdStringBuffer.data ) );
+	WIN_InitRingBuffer( &g_wv.mainCmdBuffer.base, ARRAY_LEN( g_wv.mainCmdBuffer.commands ) );
+	WIN_InitRingBuffer( &g_wv.mainCmdStringBuffer.base, ARRAY_LEN( g_wv.mainCmdStringBuffer.data ) );
+
 	// done before Com/Sys_Init since we need this for error output
-	Sys_CreateConsole();
+	WIN_StartSysconThread();
 
 
 
@@ -1209,7 +1174,11 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		Sys_ShowConsole( 0, qfalse );
 	}
 
-	SetFocus( g_wv.hWnd );
+	// SetForegroundWindow works cross-thread and gives keyboard focus too;
+	// SetFocus would be a no-op here since the window thread owns g_wv.hWnd
+	if ( g_wv.hWnd ) {
+		SetForegroundWindow( g_wv.hWnd );
+	}
 
 	// main game loop
 	while ( 1 ) {
@@ -1243,6 +1212,10 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 		IN_Frame();
 		PROF_END();
 		PROF_MOMENT_C( "Input Sample", 0x00B4DCFFu ); // cyan
+
+		// not IN_Frame -- wolfded links a stub IN_Frame (src/null/null_input.c)
+		// with no client input subsystem, but still needs the syscon drain
+		WIN_ProcessConsoleWindowEvents();
 
 		// run the game
 		Com_Frame();

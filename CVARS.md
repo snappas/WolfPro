@@ -163,7 +163,7 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `g_rocketMode` | `0` | SYSTEMINFO | Alternate rocket-launcher physics/handling mode. |
 | `g_showHeadshotRatio` | `0` | — | Toggles display of a player's headshot-percentage stat. |
 | `g_smoothClients` | `1` | — | Extrapolates other players' movement between snapshots for smoother rendering. |
-| `g_spreadAddSmg` | `27` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten per-shot aim-spread increase base (a random 0-9 is still added on top each shot). |
+| `g_spreadAddSmg` | `24` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten per-shot aim-spread increase base (a random 0-9 is still added on top each shot). |
 | `g_spreadScaleSmg` | `0.5` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten aim-spread recovery-speed scale (lower = faster recovery/tighter spread). |
 | `g_stats_curl_submit` | `0` | ARCHIVE | Enables curl-based automatic submission of end-of-match stats to a remote API. |
 | `g_stats_curl_submit_URL` | `https://rtcwproapi.donkanator.com/submit` | ARCHIVE | Target URL for stats submission. |
@@ -580,8 +580,9 @@ with little relevance on modern hardware, kept for completeness.
 | `in_joyBallScale` | `0.02` | ARCHIVE | Joystick trackball sensitivity scale (Windows). |
 | `in_joystick` | `0` | ARCHIVE\|LATCH | Enables joystick/gamepad input. |
 | `in_midi` / `in_midiport` / `in_midichannel` / `in_mididevice` **(Windows)** | `0`/`1`/`1`/`0` | ARCHIVE | Legacy MIDI music playback device selection. |
-| `in_mouse` | `1` | ARCHIVE\|LATCH | Master enable for mouse input (Windows); the Linux/SDL backend registers the same name with default `1` and plain `ARCHIVE` (no `LATCH`). |
+| `in_mouse` **(Linux)** | `1` | ARCHIVE | Master enable for mouse input. On Windows, see `in_raw` instead. |
 | `in_nograb` **(Linux)** | `0` | — **[debug]** | Disables input grabbing, so the mouse stays free over a windowed client (dev/testing). |
+| `in_raw` **(Windows)** | `1` | ARCHIVE\|LATCH | `0` = legacy Win32 keyboard/mouse input, `1` = raw input via a dedicated input thread. |
 | `joy_threshold` | `0.15` | ARCHIVE | Joystick axis dead-zone threshold. |
 | `m_filter` | `0` | ARCHIVE | Mouse input filtering/smoothing toggle. |
 | `m_forward` / `m_side` | `0.25` / `0.25` | ARCHIVE | Mouse forward-movement/strafe scale (forward rarely used). |
@@ -615,7 +616,6 @@ with little relevance on modern hardware, kept for completeness.
 | `con_scale` | `1.0` | ARCHIVE\|LATCH | Console/HUD font scale — drives the vector-font atlas bake size. |
 | `con_type` | `0` | ARCHIVE | Console rendering style variant. |
 | `fixedtime` | `0` | CHEAT **[debug]** | Forces a fixed per-frame time delta. |
-| `journal` (`com_journal`) | `0` | INIT **[debug]** | Records/replays input events to a journal file, for deterministic playback debugging. |
 | `logfile` (`com_logfile`) | `0` | TEMP **[debug]** | Writes console output to `qconsole.log`. |
 | `r_hudFontEnabled` | `1` | ARCHIVE\|LATCH | Master toggle for the TTF-baked vector font system vs. the classic bitmap `hudchars.tga`. |
 | `r_hudFontFile` | `hudchars.ttf` | ARCHIVE\|LATCH | Path (under `fonts/`) of the TTF baked into the hudchars/console atlas. |

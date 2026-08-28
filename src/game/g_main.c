@@ -403,7 +403,7 @@ cvarTable_t gameCvarTable[] = {
 
 	// MP40/Thompson aim-spread tuning: recovery-speed scale + per-shot recoil-add base
 	{&g_spreadScaleSmg, "g_spreadScaleSmg", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_spreadAddSmg, "g_spreadAddSmg", "27", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmg, "g_spreadAddSmg", "24", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
 	{&g_dbgRevive, "g_dbgRevive", "0", 0, 0, qfalse},
 

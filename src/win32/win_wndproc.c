@@ -34,6 +34,148 @@ If you have questions concerning this license or the applicable additional terms
 WinVars_t g_wv;
 
 
+static volatile windowRequest_t s_windowRequest = WINREQ_NONE;
+static volatile qboolean        s_windowRequestDone = qfalse;
+static volatile qboolean        s_windowRequestResult = qfalse;
+static windowCreateParams_t     s_windowCreateParams;
+
+
+/*
+==================
+WIN_ProcessWindowRequest
+
+Runs on the window thread. Performs the actual CreateWindowEx/DestroyWindow
+call in response to a pending request, then signals completion.
+==================
+*/
+static void WIN_ProcessWindowRequest( void ) {
+	if ( s_windowRequest == WINREQ_CREATE ) {
+		g_wv.hWnd = CreateWindowEx(
+			s_windowCreateParams.exStyle,
+			s_windowCreateParams.className,
+			s_windowCreateParams.windowName,
+			s_windowCreateParams.style,
+			s_windowCreateParams.x, s_windowCreateParams.y,
+			s_windowCreateParams.w, s_windowCreateParams.h,
+			NULL, NULL,
+			s_windowCreateParams.hInstance,
+			NULL );
+
+		if ( g_wv.hWnd ) {
+			ShowWindow( g_wv.hWnd, SW_SHOW );
+			UpdateWindow( g_wv.hWnd );
+		}
+
+		s_windowRequestResult = ( g_wv.hWnd != NULL );
+	} else if ( s_windowRequest == WINREQ_DESTROY ) {
+		if ( g_wv.hWnd ) {
+			ShowWindow( g_wv.hWnd, SW_HIDE );
+			DestroyWindow( g_wv.hWnd );
+			g_wv.hWnd = NULL;
+		}
+		s_windowRequestResult = qtrue;
+	}
+
+	s_windowRequest = WINREQ_NONE;
+	s_windowRequestDone = qtrue;
+}
+
+
+/*
+==================
+WIN_RequestWindow
+
+Blocking call from the main thread: asks the window thread to create
+g_wv.hWnd, then spin-waits. Only called during vid_restart, so that's fine.
+==================
+*/
+qboolean WIN_RequestWindow( const windowCreateParams_t *params ) {
+	s_windowCreateParams = *params;
+	s_windowRequestDone = qfalse;
+	s_windowRequest = WINREQ_CREATE;
+
+	while ( !s_windowRequestDone ) {
+		Sleep( 1 );
+	}
+
+	return s_windowRequestResult;
+}
+
+
+/*
+==================
+WIN_RequestWindowDestroy
+==================
+*/
+void WIN_RequestWindowDestroy( void ) {
+	s_windowRequestDone = qfalse;
+	s_windowRequest = WINREQ_DESTROY;
+
+	while ( !s_windowRequestDone ) {
+		Sleep( 1 );
+	}
+}
+
+
+/*
+==================
+WIN_MainWindowThreadFunc
+
+Pumps g_wv.hWnd's message queue and services create/destroy requests;
+signals initDoneEvent immediately since no window exists until requested.
+==================
+*/
+static void WIN_MainWindowThreadFunc( thread_t *thread ) {
+	MSG msg;
+	qboolean profRegistered = qfalse;
+
+	SetEvent( thread->initDoneEvent );
+
+	while ( !thread->stopRequested ) {
+		// PROF_InitThread Z_Mallocs, but mainzone doesn't exist until Com_Init --
+		// this thread starts earlier, so poll com_zoneInitialized before calling it
+		if ( !profRegistered && com_zoneInitialized ) {
+			PROF_InitThread( "Window" );
+			profRegistered = qtrue;
+		}
+
+		PROF_BEGIN( "PeekMessage" );
+		while ( PeekMessage( &msg, NULL, 0, 0, PM_NOREMOVE ) ) {
+			if ( !GetMessage( &msg, NULL, 0, 0 ) ) {
+				break; // WM_QUIT -- not something this codebase posts today, but don't spin forever if it ever is
+			}
+			g_wv.sysMsgTime = msg.time;
+			TranslateMessage( &msg );
+			DispatchMessage( &msg );
+		}
+		PROF_END();
+
+		if ( s_windowRequest != WINREQ_NONE ) {
+			WIN_ProcessWindowRequest();
+		}
+
+		Sleep( 1 );
+	}
+
+	PROF_ShutdownThread();
+}
+
+
+void WIN_StartWindowThread( void ) {
+	if ( !WIN_CreateThread( &g_wv.mainWindowThread, WIN_MainWindowThreadFunc ) ) {
+		// runs before Com_Init and before the console window exists, so
+		// Com_Error/Sys_Error have nowhere to report this yet
+		MessageBox( NULL, "Failed to create the window thread", "RTCW Error", MB_OK | MB_ICONERROR );
+		exit( 1 );
+	}
+}
+
+
+void WIN_StopWindowThread( qboolean forceExit ) {
+	WIN_DestroyThread( &g_wv.mainWindowThread, forceExit );
+}
+
+
 #ifndef WM_MOUSEWHEEL
 #define WM_MOUSEWHEEL ( WM_MOUSELAST + 1 )  // message that will be supported by the OS
 #endif
@@ -101,8 +243,11 @@ static void VID_AppActivate( BOOL fActive, BOOL minimize ) {
 		g_wv.activeApp = qfalse;
 	}
 	
-	if ( r_fullscreen->integer )
-		SetWindowPos( g_wv.hWnd, fActive ? HWND_TOPMOST : HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+	if ( r_fullscreen->integer ) {
+		// HWND_BOTTOM only reorders the Z-band -- it can't clear the WS_EX_TOPMOST
+		// style set at window creation; HWND_NOTOPMOST does.
+		SetWindowPos( g_wv.hWnd, fActive ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+	}
 
 	// minimize/restore mouse-capture on demand
 	if ( !g_wv.activeApp ) {
@@ -226,44 +371,32 @@ static byte s_scantokey_italian[128] =
 };
 /*
 =======
-MapKey
+MapKeyFromScanCode
 
-Map from windows to quake keynums
+Shared core for MapKey (lParam-based) and IN_GetQuakeKey (RAWKEYBOARD-based)
+so the language scan-code tables below aren't duplicated.
 =======
 */
-static int MapKey( int key ) {
+static int MapKeyFromScanCode( int scanCode, qboolean isExtended ) {
 	int result;
-	int modified;
-	qboolean is_extended;
 
-//	Com_Printf( "0x%x\n", key);
-
-	modified = ( key >> 16 ) & 255;
-
-	if ( modified > 127 ) {
+	if ( scanCode > 127 ) {
 		return 0;
 	}
 
-	if ( key & ( 1 << 24 ) ) {
-		is_extended = qtrue;
-	} else
-	{
-		is_extended = qfalse;
-	}
-
-	result = s_scantokey[modified];
+	result = s_scantokey[scanCode];
 
 	if ( cl_language->integer - 1 == LANGUAGE_FRENCH ) {
-		result = s_scantokey_french[modified];
+		result = s_scantokey_french[scanCode];
 	} else if ( cl_language->integer - 1 == LANGUAGE_GERMAN ) {
-		result = s_scantokey_german[modified];
+		result = s_scantokey_german[scanCode];
 	} else if ( cl_language->integer - 1 == LANGUAGE_ITALIAN ) {
-		result = s_scantokey_italian[modified];
+		result = s_scantokey_italian[scanCode];
 	} else if ( cl_language->integer - 1 == LANGUAGE_SPANISH ) {
-		result = s_scantokey_spanish[modified];
+		result = s_scantokey_spanish[scanCode];
 	}
 
-	if ( !is_extended ) {
+	if ( !isExtended ) {
 		switch ( result )
 		{
 		case K_HOME:
@@ -306,6 +439,32 @@ static int MapKey( int key ) {
 	}
 }
 
+/*
+=======
+MapKey
+
+Map from windows lParam to quake keynums
+=======
+*/
+static int MapKey( int key ) {
+	int modified = ( key >> 16 ) & 255;
+	qboolean is_extended = ( key & ( 1 << 24 ) ) ? qtrue : qfalse;
+	return MapKeyFromScanCode( modified, is_extended );
+}
+
+/*
+=======
+IN_GetQuakeKey
+
+vkCode is unused -- kept for signature symmetry with cnq3's original and
+possible future use; every table lookup here is scan-code-driven.
+=======
+*/
+int IN_GetQuakeKey( int vkCode, int scanCode, qboolean isExtended ) {
+	(void)vkCode;
+	return MapKeyFromScanCode( scanCode & 0xFF, isExtended );
+}
+
 
 /*
 ====================
@@ -321,44 +480,33 @@ static LRESULT CALLBACK MainWndProc_Impl(
 	LPARAM lParam ) {
 
 	if ( uMsg == MSH_MOUSEWHEEL ) {
-		if ( ( ( int ) wParam ) > 0 ) {
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qtrue, 0, NULL );
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qfalse, 0, NULL );
-		} else
-		{
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qtrue, 0, NULL );
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qfalse, 0, NULL );
+		if ( !g_wv.rawInput ) {
+			if ( ( (int)wParam ) > 0 ) {
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qtrue );
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qfalse );
+			} else {
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qtrue );
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qfalse );
+			}
 		}
 		return DefWindowProc( hWnd, uMsg, wParam, lParam );
 	}
 
 	switch ( uMsg )
 	{
-		// RTCWPro - raw input
-#ifndef DEDICATED
-	case WM_INPUT:
-		IN_RawInput_MouseRead((HANDLE)lParam);
-		break;
-#endif
-		// raw input end
 	case WM_MOUSEWHEEL:
-		//
-		//
-		// this chunk of code theoretically only works under NT4 and Win98
-		// since this message doesn't exist under Win95
-		//
-		if ( ( short ) HIWORD( wParam ) > 0 ) {
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qtrue, 0, NULL );
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qfalse, 0, NULL );
-		} else
-		{
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qtrue, 0, NULL );
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qfalse, 0, NULL );
+		if ( !g_wv.rawInput ) {
+			if ( ( short ) HIWORD( wParam ) > 0 ) {
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qtrue );
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qfalse );
+			} else {
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qtrue );
+				WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qfalse );
+			}
 		}
 		break;
 
 	case WM_CREATE:
-
 		g_wv.hWnd = hWnd;
 
 		vid_xpos = Cvar_Get( "vid_xpos", "3", CVAR_ARCHIVE );
@@ -366,48 +514,14 @@ static LRESULT CALLBACK MainWndProc_Impl(
 		r_fullscreen = Cvar_Get( "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH );
 
 		MSH_MOUSEWHEEL = RegisterWindowMessage( "MSWHEEL_ROLLMSG" );
+		break;
 
-		break;
-#if 0
-	case WM_DISPLAYCHANGE:
-		Com_DPrintf( "WM_DISPLAYCHANGE\n" );
-		// we need to force a vid_restart if the user has changed
-		// their desktop resolution while the game is running,
-		// but don't do anything if the message is a result of
-		// our own calling of ChangeDisplaySettings
-		if ( com_insideVidInit ) {
-			break;      // we did this on purpose
-		}
-		// something else forced a mode change, so restart all our gl stuff
-		Cbuf_AddText( "vid_restart\n" );
-		break;
-#endif
 	case WM_DESTROY:
-		// let sound and input know about this?
 		g_wv.hWnd = NULL;
 		break;
 
-	case WM_CLOSE:
-		Cbuf_ExecuteText( EXEC_APPEND, "quit" );
-		break;
-
-	case WM_ACTIVATE:
-	{
-		int fActive, fMinimized;
-
-		fActive = LOWORD( wParam );
-		fMinimized = (BOOL) HIWORD( wParam );
-
-		VID_AppActivate( fActive != WA_INACTIVE, fMinimized );
-#ifndef DOOMSOUND   ///// (SA) DOOMSOUND
-		SNDDMA_Activate();
-#endif  ///// (SA) DOOMSOUND
-	}
-	break;
-
 	case WM_WINDOWPOSCHANGING:
-		if (g_wv.noborder)
-		{
+		if ( g_wv.noborder ) {
 			WINDOWPOS* pos = (LPWINDOWPOS)lParam;
 			const int threshold = 10;
 			HMONITOR hMonitor;
@@ -419,60 +533,28 @@ static LRESULT CALLBACK MainWndProc_Impl(
 			rr.right = pos->x + pos->cx;
 			rr.top = pos->y;
 			rr.bottom = pos->y + pos->cy;
-			hMonitor = MonitorFromRect(&rr, MONITOR_DEFAULTTOPRIMARY);
+			hMonitor = MonitorFromRect( &rr, MONITOR_DEFAULTTOPRIMARY );
 
-			if (hMonitor)
-			{
-				mi.cbSize = sizeof(mi);
-				GetMonitorInfo(hMonitor, &mi);
+			if ( hMonitor ) {
+				mi.cbSize = sizeof( mi );
+				GetMonitorInfo( hMonitor, &mi );
 				r = &mi.rcWork;
 
-				if (pos->x >= (r->left - threshold) && pos->x <= (r->left + threshold))
+				if ( pos->x >= ( r->left - threshold ) && pos->x <= ( r->left + threshold ) )
 					pos->x = r->left;
-				else if ((pos->x + pos->cx) >= (r->right - threshold) && (pos->x + pos->cx) <= (r->right + threshold))
-					pos->x = (r->right - pos->cx);
+				else if ( ( pos->x + pos->cx ) >= ( r->right - threshold ) && ( pos->x + pos->cx ) <= ( r->right + threshold ) )
+					pos->x = ( r->right - pos->cx );
 
-				if (pos->y >= (r->top - threshold) && pos->y <= (r->top + threshold))
+				if ( pos->y >= ( r->top - threshold ) && pos->y <= ( r->top + threshold ) )
 					pos->y = r->top;
-				else if ((pos->y + pos->cy) >= (r->bottom - threshold) && (pos->y + pos->cy) <= (r->bottom + threshold))
-					pos->y = (r->bottom - pos->cy);
+				else if ( ( pos->y + pos->cy ) >= ( r->bottom - threshold ) && ( pos->y + pos->cy ) <= ( r->bottom + threshold ) )
+					pos->y = ( r->bottom - pos->cy );
 
 				return 0;
 			}
 		}
 		break;
 
-	case WM_MOVE:
-	{
-		int xPos, yPos;
-		RECT r;
-		int style;
-
-		if ( !r_fullscreen->integer ) {
-			xPos = (short) LOWORD( lParam );      // horizontal position
-			yPos = (short) HIWORD( lParam );      // vertical position
-
-			r.left   = 0;
-			r.top    = 0;
-			r.right  = 1;
-			r.bottom = 1;
-
-			style = GetWindowLongPtr( hWnd, GWL_STYLE );
-			AdjustWindowRect( &r, style, FALSE );
-
-			Cvar_SetValue( "vid_xpos", xPos + r.left );
-			Cvar_SetValue( "vid_ypos", yPos + r.top );
-			vid_xpos->modified = qfalse;
-			vid_ypos->modified = qfalse;
-			if ( g_wv.activeApp ) {
-				IN_Activate( qtrue );
-			}
-		}
-	}
-	break;
-
-// this is complicated because Win32 seems to pack multiple mouse events into
-// one update sometimes, so we always check all states and look for events
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:
 	case WM_RBUTTONDOWN:
@@ -480,34 +562,20 @@ static LRESULT CALLBACK MainWndProc_Impl(
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONUP:
 	case WM_MOUSEMOVE:
-	{
-		int temp;
+		if ( !g_wv.rawInput ) {
+			int temp = 0;
+			if ( wParam & MK_LBUTTON ) temp |= 1;
+			if ( wParam & MK_RBUTTON ) temp |= 2;
+			if ( wParam & MK_MBUTTON ) temp |= 4;
+			if ( wParam & MK_XBUTTON1 ) temp |= 8;
+			if ( wParam & MK_XBUTTON2 ) temp |= 16;
+			IN_MouseEvent( temp ); // pushes to g_wv.legacyInputBuffer
 
-		temp = 0;
-
-		if ( wParam & MK_LBUTTON ) {
-			temp |= 1;
+			if ( uMsg == WM_MOUSEMOVE ) {
+				IN_LegacyMouseMove();
+			}
 		}
-
-		if ( wParam & MK_RBUTTON ) {
-			temp |= 2;
-		}
-
-		if ( wParam & MK_MBUTTON ) {
-			temp |= 4;
-		}
-
-		if (wParam & MK_XBUTTON1) {
-			temp |= 8;
-		}
-
-		if (wParam & MK_XBUTTON2) {
-			temp |= 16;
-		}
-
-		IN_MouseEvent( temp );
-	}
-	break;
+		break;
 
 	case WM_SYSCOMMAND:
 		if ( wParam == SC_SCREENSAVE ) {
@@ -517,31 +585,53 @@ static LRESULT CALLBACK MainWndProc_Impl(
 
 	case WM_SYSKEYDOWN:
 		if ( wParam == 13 ) {
-			if ( r_fullscreen ) {
-				Cvar_SetValue( "r_fullscreen", !r_fullscreen->integer );
-				Cbuf_AddText( "vid_restart\n" );
-			}
+			WIN_PushWindowEvent( &g_wv.mainWndCmdBuffer, hWnd, uMsg, wParam, lParam );
 			return 0;
 		}
 		// fall through
 	case WM_KEYDOWN:
-		Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, MapKey( lParam ), qtrue, 0, NULL );
+		if ( !g_wv.inputThreadReady ) {
+			WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, MapKey( lParam ), qtrue );
+		}
 		break;
 
 	case WM_SYSKEYUP:
 	case WM_KEYUP:
-		Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, MapKey( lParam ), qfalse, 0, NULL );
+		if ( !g_wv.inputThreadReady ) {
+			WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, MapKey( lParam ), qfalse );
+		}
 		break;
 
 	case WM_CHAR:
-		Sys_QueEvent( g_wv.sysMsgTime, SE_CHAR, wParam, 0, 0, NULL );
+		WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_CHAR, wParam, 0 );
 		break;
 
 	case WM_NCHITTEST:
-		if (g_wv.noborder && GetKeyState(VK_CONTROL) & (1 << 15))
-		{
+		if ( g_wv.noborder && GetKeyState( VK_CONTROL ) & ( 1 << 15 ) ) {
 			return HTCAPTION;
 		}
+		break;
+
+	case WM_SETCURSORVIS:
+		while ( ShowCursor( wParam ? TRUE : FALSE ) < ( wParam ? 0 : -1 ) ) {
+			// drain the counter to exactly 0 (visible) or -1 (hidden)
+		}
+		break;
+
+	case WM_SETMOUSECAPTURE:
+		// SetCapture requires the calling thread to own the window, which is
+		// why IN_ActivateWin32Mouse/IN_DeactivateWin32Mouse route it here
+		if ( wParam ) {
+			SetCapture( hWnd );
+		} else {
+			ReleaseCapture();
+		}
+		break;
+
+	case WM_CLOSE:
+	case WM_ACTIVATE:
+	case WM_MOVE:
+		WIN_PushWindowEvent( &g_wv.mainWndCmdBuffer, hWnd, uMsg, wParam, lParam );
 		break;
 	}
 
@@ -550,13 +640,13 @@ static LRESULT CALLBACK MainWndProc_Impl(
 
 /*
 ====================
-MainWndProc
+MWT_MainWndProc
 
 thin wrapper around MainWndProc_Impl so the profiler can bracket
 every message without touching the switch's many case-block returns
 ====================
 */
-LRESULT CALLBACK MainWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
+LRESULT CALLBACK MWT_MainWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam ) {
 #if defined( ENABLE_PROFILER )
 	LRESULT result;
 
@@ -567,4 +657,70 @@ LRESULT CALLBACK MainWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 #else
 	return MainWndProc_Impl( hWnd, uMsg, wParam, lParam );
 #endif
+}
+
+
+/*
+==================
+WIN_ProcessMainWindowEvents
+
+Drains window commands the window thread forwarded and re-runs their
+original handling here, where it's safe to touch cvars/Cbuf/sound state.
+==================
+*/
+void WIN_ProcessMainWindowEvents( void ) {
+	ringBufferIter_t iter;
+	uint64_t i;
+
+	WIN_BeginReading( &iter, &g_wv.mainWndCmdBuffer.base );
+	for ( i = iter.begin; i < iter.end; i++ ) {
+		windowCommand_t *cmd = &g_wv.mainWndCmdBuffer.commands[ i % g_wv.mainWndCmdBuffer.base.size ];
+
+		switch ( cmd->uMsg ) {
+		case WM_CLOSE:
+			Cbuf_ExecuteText( EXEC_APPEND, "quit" );
+			break;
+
+		case WM_ACTIVATE:
+		{
+			int fActive = LOWORD( cmd->wParam );
+			int fMinimized = (BOOL)HIWORD( cmd->wParam );
+			VID_AppActivate( fActive != WA_INACTIVE, fMinimized );
+#ifndef DOOMSOUND
+			SNDDMA_Activate();
+#endif
+		}
+		break;
+
+		case WM_MOVE:
+			if ( !r_fullscreen->integer ) {
+				int xPos = (short)LOWORD( cmd->lParam );
+				int yPos = (short)HIWORD( cmd->lParam );
+				RECT r = { 0, 0, 1, 1 };
+				int style = GetWindowLongPtr( cmd->hWnd, GWL_STYLE );
+				AdjustWindowRect( &r, style, FALSE );
+
+				Cvar_SetValue( "vid_xpos", xPos + r.left );
+				Cvar_SetValue( "vid_ypos", yPos + r.top );
+				vid_xpos->modified = qfalse;
+				vid_ypos->modified = qfalse;
+				if ( g_wv.activeApp ) {
+					IN_Activate( qtrue );
+				}
+			}
+			break;
+
+		case WM_SYSKEYDOWN: // Alt+Enter fullscreen toggle -- only forwarded case for this uMsg
+			if ( r_fullscreen ) {
+				Cvar_SetValue( "r_fullscreen", !r_fullscreen->integer );
+				Cbuf_AddText( "vid_restart\n" );
+			}
+			break;
+		}
+	}
+	WIN_EndReading( &iter );
+
+	if ( g_wv.mainWindowThread.exitedEarly ) {
+		Com_Error( ERR_FATAL, "The window thread exited early" );
+	}
 }

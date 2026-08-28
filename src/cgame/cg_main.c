@@ -630,7 +630,7 @@ cvarTable_t cvarTable[] = {
 	{ &cg_engineerChargeTime,   "g_engineerChargeTime", "30000", 0 }, // communicated by systeminfo
 	{ &cg_soldierChargeTime,    "g_soldierChargeTime", "20000", 0 }, // communicated by systeminfo
 	{ &cg_spreadScaleSmg, "g_spreadScaleSmg", "0.5", 0 }, // communicated by serverinfo
-	{ &cg_spreadAddSmg, "g_spreadAddSmg", "27", 0 }, // communicated by serverinfo
+	{ &cg_spreadAddSmg, "g_spreadAddSmg", "24", 0 }, // communicated by serverinfo
 	// DHM - TEMP FIX
 	{ &cg_bluelimbotime,        "", "30000", 0 }, // communicated by systeminfo
 	{ &cg_redlimbotime,         "", "30000", 0 }, // communicated by systeminfo

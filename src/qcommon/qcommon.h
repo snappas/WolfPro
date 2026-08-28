@@ -883,7 +883,7 @@ void QDECL Com_Error( int code, const char *fmt, ... );
 void		Com_Quit(int status);
 void        Com_Quit_f( void );
 int         Com_EventLoop( void );
-int         Com_Milliseconds( void );   // will be journaled properly
+int         Com_Milliseconds( void );
 unsigned    Com_BlockChecksum( const void *buffer, int length );
 int         Com_HashKey( char *string, int maxlen );
 int         Com_Filter( char *filter, char *name, int casesensitive );
@@ -911,7 +911,6 @@ extern cvar_t  *com_viewlog;            // 0 = hidden, 1 = visible, 2 = minimize
 extern cvar_t  *com_version;
 extern cvar_t  *com_blood;
 extern cvar_t  *com_buildScript;        // for building release pak files
-extern cvar_t  *com_journal;
 extern cvar_t  *com_cameraMode;
 
 // both client and server must agree to pause
@@ -932,9 +931,7 @@ extern int time_backend;            // renderer backend time
 extern int com_frameTime;
 
 extern qboolean com_errorEntered;
-
-extern fileHandle_t com_journalFile;
-extern fileHandle_t com_journalDataFile;
+extern volatile qboolean com_zoneInitialized; // set once mainzone exists -- other threads must not Z_Malloc before this
 
 typedef enum {
 	TAG_FREE,
@@ -1133,7 +1130,7 @@ typedef struct {
 	void            *evPtr;         // this must be manually freed if not NULL
 } sysEvent_t;
 
-sysEvent_t  Sys_GetEvent( void );
+sysEvent_t  Sys_GetCheapEvent( void );
 
 void    Sys_Init( void );
 
