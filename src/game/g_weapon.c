@@ -391,8 +391,8 @@ void Weapon_Syringe( gentity_t *ent ) {
 				}
 
 				traceEnt->s.effect3Time = level.time;
-				traceEnt->r.contents = CONTENTS_CORPSE;
-				trap_LinkEntity( ent );
+				traceEnt->r.contents = CONTENTS_BODY;
+				trap_LinkEntity( traceEnt );
 
 				// DHM - Nerve :: Let the person being revived know about it
 				trap_SendServerCommand( traceEnt - g_entities, va( "cp \"You have been revived by [lof]%s!\n\"", ent->client->pers.netname ) );
@@ -2047,7 +2047,10 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
 		if ( ent->health <= 0 || ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
 			continue;
 		}
-		
+		if ( ent->client->ps.powerups[PW_INVULNERABLE] > level.time ) {
+			continue;
+		}
+
 		VectorCopy( ent->r.currentOrigin, targetEye );
 		targetEye[2] += ent->client->ps.viewheight;
 
@@ -2122,6 +2125,9 @@ void UnlinkPlayerBodies( gentity_t *skip ) {
         }
 
 		if ( ent->health <= 0 || ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+		if ( ent->client->ps.powerups[PW_INVULNERABLE] > level.time ) {
 			continue;
 		}
 
