@@ -716,7 +716,7 @@ int SV_RemainingGameState( void )
 		if ( start == CS_WOLFINFO ) {
 			MSG_WriteByte( &msg, svc_configstring );
 			MSG_WriteShort( &msg, start );
-			MSG_WriteBigString( &msg, Cvar_InfoString( CS_WOLFINFO, NULL ) );
+			MSG_WriteBigString( &msg, Cvar_InfoString( CVAR_WOLFINFO, NULL ) );
 			continue;
 		}
 		if ( sv.configstrings[start][0] ) {

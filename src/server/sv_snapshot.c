@@ -809,6 +809,11 @@ void SV_SendClientSnapshot( client_t *client ) {
 	if ( msg.overflowed ) {
 		Com_Printf( "WARNING: msg overflowed for %s\n", client->name );
 		MSG_Clear( &msg );
+
+		if ( sv_dropClientOnOverflow->integer ) {
+			SV_DropClient( client, "Msg overflowed" );
+			return;
+		}
 	}
 
 	SV_SendMessageToClient( &msg, client );

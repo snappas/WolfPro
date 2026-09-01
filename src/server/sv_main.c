@@ -92,6 +92,8 @@ cvar_t* sv_referencedPakNames;
 
 cvar_t *sv_levelTimeReset;
 
+cvar_t *sv_dropClientOnOverflow;
+
 void SVC_GameCompleteStatus( const netadr_t *from );       // NERVE - SMF
 
 /*

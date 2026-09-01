@@ -365,6 +365,8 @@ extern	cvar_t	*sv_referencedPakNames;
 
 extern	cvar_t *sv_levelTimeReset;
 
+extern cvar_t *sv_dropClientOnOverflow; // drop client instead of sending a cleared/corrupt message when a snapshot overflows MAX_MSGLEN
+
 
 //===========================================================
 

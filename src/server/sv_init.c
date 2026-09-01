@@ -1067,6 +1067,8 @@ void SV_Init( void ) {
 
 	sv_levelTimeReset = Cvar_Get( "sv_levelTimeReset", "0", CVAR_ARCHIVE );
 
+	sv_dropClientOnOverflow = Cvar_Get( "sv_dropClientOnOverflow", "1", CVAR_ARCHIVE );
+
 	// initialize bot cvars so they are listed and can be set before loading the botlib
 	SV_BotInitCvars();
 
