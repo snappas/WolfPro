@@ -221,6 +221,7 @@ vmCvar_t g_wtvdemos;
 vmCvar_t g_wtvDiscordWebhookURL;
 vmCvar_t g_wtvDiscordRetryCount;
 vmCvar_t g_wtvDiscordRetryDelay;
+qboolean g_wtvSupported;
 
 vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
@@ -1389,6 +1390,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	G_RegisterCvars();
 
+	{
+		char wtvProbe[8];
+		trap_Cvar_VariableStringBuffer( "//trap_G_WTVSupported", wtvProbe, sizeof( wtvProbe ) );
+		g_wtvSupported = ( atoi( wtvProbe ) != 0 );
+	}
+
 	// Xian enforcemaxlives stuff
 	/*
 	we need to clear the list even if enforce maxlives is not active
@@ -1441,7 +1448,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	trap_Cvar_VariableStringBuffer( "mapname", mapName, sizeof(mapName) );
 
 
-	if ( g_wtvdemos.integer && !trap_WTV_IsRecording() && ( g_gamestate.integer == GS_PLAYING ) ) {
+	if ( g_wtvdemos.integer && g_wtvSupported && !trap_WTV_IsRecording() && ( g_gamestate.integer == GS_PLAYING ) ) {
 		level.wtvStopSignaled = qfalse;
 		trap_WTV_RecordStart( g_currentRound.integer );
 	}
@@ -2733,7 +2740,7 @@ void CheckGameState() {
 				trap_SetConfigstring( CS_READY, va( "%i", READY_NONE ));
 				trap_SetConfigstring( CS_WARMUP, va( "%i", level.warmupTime ) );
 				trap_Cvar_Set( "gamestate", va( "%i", GS_WARMUP_COUNTDOWN ) );
-				if ( g_wtvdemos.integer && !trap_WTV_IsRecording() ) {
+				if ( g_wtvdemos.integer && g_wtvSupported && !trap_WTV_IsRecording() ) {
 					trap_WTV_RecordStart( g_currentRound.integer );
 				}
 				// Prevents joining once countdown starts..
@@ -2763,7 +2770,7 @@ void CheckGameState() {
 			level.warmupTime = level.time + ( delay * 1000 );
 			trap_SetConfigstring( CS_WARMUP, va( "%i", level.warmupTime ) );
 			trap_Cvar_Set( "gamestate", va( "%i", GS_WARMUP_COUNTDOWN ) );
-			if ( g_wtvdemos.integer && !trap_WTV_IsRecording() ) {
+			if ( g_wtvdemos.integer && g_wtvSupported && !trap_WTV_IsRecording() ) {
 				trap_WTV_RecordStart( g_currentRound.integer );
 			}
 		}
@@ -3227,7 +3234,7 @@ void G_RunFrame( int levelTime ) {
 	// see if it is time to end the level
 	CheckExitRules();
 
-	if ( g_wtvdemos.integer && level.intermissiontime && !level.wtvStopSignaled
+	if ( g_wtvdemos.integer && g_wtvSupported && level.intermissiontime && !level.wtvStopSignaled
 		&& level.time >= level.intermissiontime + 3000 ) {
 		level.wtvStopSignaled = qtrue;
 		trap_WTV_RecordStop( 0 );
@@ -3236,7 +3243,7 @@ void G_RunFrame( int levelTime ) {
 	// update to team status?
 	CheckTeamStatus();
 
-	if ( g_wtvdemos.integer && level.time - level.lastWtvScoreboardCaptureTime > WTV_SCOREBOARD_CAPTURE_INTERVAL ) {
+	if ( g_wtvdemos.integer && g_wtvSupported && level.time - level.lastWtvScoreboardCaptureTime > WTV_SCOREBOARD_CAPTURE_INTERVAL ) {
 		level.lastWtvScoreboardCaptureTime = level.time;
 		WTV_CaptureScoreboardAndTeamInfo();
 	}

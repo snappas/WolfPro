@@ -956,6 +956,8 @@ void SV_BotInitBotLib( void );
 void SV_Init( void ) {
 	SV_AddOperatorCommands();
 
+	Cvar_Set( "//trap_G_WTVSupported", "1" );
+
 	// serverinfo vars
 	Cvar_Get( "dmflags", "0", /*CVAR_SERVERINFO*/ 0 );
 	Cvar_Get( "fraglimit", "0", /*CVAR_SERVERINFO*/ 0 );

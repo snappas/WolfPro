@@ -608,7 +608,7 @@ void Svcmd_ResetMatch_f(qboolean fDoReset, qboolean fDoRestart) {
         }
     }
 
-	if ( g_gamestate.integer == GS_PLAYING && g_wtvdemos.integer && !level.wtvStopSignaled ) {
+	if ( g_gamestate.integer == GS_PLAYING && g_wtvdemos.integer && g_wtvSupported && !level.wtvStopSignaled ) {
 		level.wtvStopSignaled = qtrue;
 		trap_WTV_RecordStop( 1 );
 	}
@@ -659,7 +659,7 @@ void Svcmd_SwapTeams_f() {
         G_writeGameEarlyExit();  // properly close current stats output
     }
 
-	if ( g_gamestate.integer == GS_PLAYING && g_wtvdemos.integer && !level.wtvStopSignaled ) {
+	if ( g_gamestate.integer == GS_PLAYING && g_wtvdemos.integer && g_wtvSupported && !level.wtvStopSignaled ) {
 		level.wtvStopSignaled = qtrue;
 		trap_WTV_RecordStop( 1 );
 	}

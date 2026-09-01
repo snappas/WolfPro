@@ -1592,6 +1592,7 @@ extern vmCvar_t g_wtvdemos;
 extern vmCvar_t g_wtvDiscordWebhookURL;
 extern vmCvar_t g_wtvDiscordRetryCount;
 extern vmCvar_t g_wtvDiscordRetryDelay;
+extern qboolean g_wtvSupported;    // set from G_InitGame; qfalse on an engine build that predates the WTV_* traps
 
 extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
