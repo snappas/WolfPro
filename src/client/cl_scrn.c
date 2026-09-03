@@ -261,12 +261,10 @@ void SCR_DrawDemoRecording( void ) {
 	Com_sprintf( string, sizeof(string), "RECORDING %s: %ik", clc.demoName, pos / 1024 );
 	float x = 5;
 	float y = 470;
-	float w = 8;
-	float h = 8;
+	float w, h;
 
-	SCR_AdjustFrom640(&x, &y, &w, &h);
-
-	w = h;
+	SCR_AdjustFrom640( &x, &y, NULL, NULL );
+	Con_GetCharSize( &w, &h );
 
 	SCR_DrawString( x, y, w, h, string, colorWhite, qtrue, qtrue );
 }

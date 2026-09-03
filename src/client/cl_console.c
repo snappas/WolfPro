@@ -73,6 +73,18 @@ extern console_t con;
 
 console_t con;
 
+/*
+================
+Con_GetCharSize
+
+Native pixel size of a console/chat character
+================
+*/
+void Con_GetCharSize( float *w, float *h ) {
+	*w = con.cw;
+	*h = con.ch;
+}
+
 cvar_t      *con_debug;
 cvar_t      *con_conspeed;
 cvar_t      *con_notifytime;
