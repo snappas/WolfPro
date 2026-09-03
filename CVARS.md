@@ -256,7 +256,7 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `cg_fov` | `90` | ARCHIVE | Player field-of-view. |
 | `cg_fragsY` / `cg_fragsWidth` | `0` / `16` | ARCHIVE | Frags counter position/width. |
 | `cg_gun_frame` | `0` | TEMP **[debug]** | Forces the view-weapon to a specific animation frame. |
-| `cg_gunX` / `cg_gunY` / `cg_gunZ` | `0` each | CHEAT **[debug]** | View-weapon position offset, for muzzle/viewmodel tuning. |
+| `cg_gunX` / `cg_gunY` / `cg_gunZ` | `0` each | ARCHIVE | View-weapon position offset, for muzzle/viewmodel tuning. |
 | `cg_hudAlpha` | `1` | ARCHIVE | Global HUD element opacity. |
 | `cg_hudFiles` | `ui_mp/hud.txt` | ARCHIVE | Path to the HUD layout definition file. |
 | `cg_lagometer` | `0` | ARCHIVE | Lagometer graph toggle. |
