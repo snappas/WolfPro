@@ -616,6 +616,7 @@ void Svcmd_ResetMatch_f(qboolean fDoReset, qboolean fDoRestart) {
 	if (fDoReset && g_gametype.integer == GT_WOLF_STOPWATCH) {
 		trap_Cvar_Set("g_currentRound", "0");
 		trap_Cvar_Set("g_nextTimeLimit", "0");
+		trap_Cvar_Set("g_preciseTimeSet", "0");
 	}
 
 	if ((fDoRestart && !g_noTeamSwitching.integer) || ( g_minGameClients.integer > 1 && level.numPlayingClients >= g_minGameClients.integer ) ) {
@@ -653,6 +654,7 @@ void Svcmd_SwapTeams_f() {
 	if ( g_gametype.integer == GT_WOLF_STOPWATCH ) {
 		trap_Cvar_Set( "g_currentRound", "0" );
 		trap_Cvar_Set( "g_nextTimeLimit", "0" );
+		trap_Cvar_Set( "g_preciseTimeSet", "0" );
 	}
 
 	if (g_gamestate.integer == GS_PLAYING && g_gameStatslog.integer) {
