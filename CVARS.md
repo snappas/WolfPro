@@ -492,7 +492,7 @@ These apply to both renderers unless marked otherwise.
 
 | Cvar | Default | Flags | Description |
 |---|---|---|---|
-| `r_alphaboost` | `1.0` | ARCHIVE | Alpha-blend intensity boost. |
+| `r_alphaboost` | `0` | ARCHIVE | Alpha-blend intensity boost. |
 | `r_anisotropy` | `16` | ARCHIVE\|LATCH | Anisotropic texture filtering level (VK's equivalent of GL's `r_ext_texture_filter_anisotropic`). |
 | `r_debugInput` | `0` | TEMP **[debug]** | Logs debug info about input events on the Vulkan renderer. |
 | `r_debugUI` | `0` | TEMP **[debug]** | Draws the Vulkan backend's ImGui debug UI. |
