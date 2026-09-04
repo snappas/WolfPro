@@ -1543,11 +1543,9 @@ into a more C friendly form.
 void SV_UserinfoChanged( client_t *cl ) {
 	const char    *val;
 	const char *ip;
-	int i;
 
 	if ( cl->netchan.remoteAddress.type == NA_BOT ) {
 		cl->lastSnapshotTime = svs.time - 9999; // generate a snapshot immediately
-		cl->snapshotMsec = 1000 / sv_fps->integer;
 		cl->rate = 0;
 		return;
 	}
@@ -1584,28 +1582,6 @@ void SV_UserinfoChanged( client_t *cl ) {
 		// 	if ( cl->rate < sv_minRate->integer )
 		// 		cl->rate = sv_minRate->integer;
 		// }
-	}
-
-	// snaps command
-	val = Info_ValueForKey( cl->userinfo, "snaps" );
-	if ( val[0] && !NET_IsLocalAddress(&cl->netchan.remoteAddress ) )
-		i = atoi( val );
-	else
-		i = sv_fps->integer; // sync with server
-
-	// range check
-	if ( i < 1 )
-		i = 1;
-	else if ( i > sv_fps->integer )
-		i = sv_fps->integer;
-
-	i = 1000 / i; // from FPS to milliseconds
-
-	if ( i != cl->snapshotMsec )
-	{
-		// Reset last sent snapshot so we avoid desync between server frame time and snapshot send time
-		cl->lastSnapshotTime = svs.time - 9999; // generate a snapshot immediately
-		cl->snapshotMsec = i;
 	}
 
 	// TTimo
