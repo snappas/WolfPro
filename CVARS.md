@@ -68,12 +68,10 @@
 | `sv_hostname` | `WolfHost` | SERVERINFO\|ARCHIVE | Server name shown in the browser/serverinfo. |
 | `sv_keywords` | `""` | SERVERINFO | Free-text server-browser search keywords. |
 | `sv_killserver` | `0` | — **[debug]** | Set nonzero to force an immediate server shutdown; the engine resets it to `0` after acting on it. |
-| `sv_lanForceRate` | `1` | ARCHIVE | Forces max rate for clients detected as LAN. |
 | `sv_levelTimeReset` | `0` | ARCHIVE | Controls whether level time resets across map/round transitions. |
 | `sv_master1`…`sv_master5` | `wolfmaster.idsoftware.com` / `""`×4 | ARCHIVE (master1: none) | Master server addresses for heartbeat/listing. |
 | `sv_maxclients` (`g_maxclients`) | `20` | SERVERINFO\|LATCH (ARCHIVE via `g_maxclients`) | Max client slots including bots/spectators; requires a map change/restart. |
 | `sv_maxclientsPerIP` | `3` | ARCHIVE | Caps simultaneous connections from one IP. |
-| `sv_maxRate` | `0` | ARCHIVE | Server-enforced ceiling on a client's `rate` cvar; `0` = no cap. |
 | `sv_minPing` / `sv_maxPing` | `0` / `0` | ARCHIVE | Reject/kick connections outside this ping band; `0` = disabled. |
 | `sv_padPackets` | `0` | — **[debug]** | Pads outgoing server packets by N bytes (netcode testing). |
 | `sv_privateClients` | `0` | SERVERINFO | Slots reserved for players who know `sv_privatePassword`. |

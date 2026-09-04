@@ -1541,7 +1541,6 @@ into a more C friendly form.
 =================
 */
 void SV_UserinfoChanged( client_t *cl ) {
-	const char    *val;
 	const char *ip;
 
 	if ( cl->netchan.remoteAddress.type == NA_BOT ) {
@@ -1560,29 +1559,7 @@ void SV_UserinfoChanged( client_t *cl ) {
 
 	
 
-	// rate command
-
-	// if the client is on the same subnet as the server and we aren't running an
-	// internet public server, assume they don't need a rate choke
-	if ( cl->netchan.remoteAddress.type == NA_LOOPBACK || (cl->netchan.isLANAddress && com_dedicated->integer != 2 && sv_lanForceRate->integer ) ) {
-		cl->rate = 0; // lans should not rate limit
-	} else {
-		val = Info_ValueForKey( cl->userinfo, "rate" );
-		if ( val[0] )
-			cl->rate = atoi( val );
-		else
-			cl->rate = 10000; // was 3000
-
-		if ( sv_maxRate->integer ) {
-			if ( cl->rate > sv_maxRate->integer )
-				cl->rate = sv_maxRate->integer;
-		}
-
-		// if ( sv_minRate->integer ) {
-		// 	if ( cl->rate < sv_minRate->integer )
-		// 		cl->rate = sv_minRate->integer;
-		// }
-	}
+	cl->rate = 0; // no bandwidth rate limiting
 
 	// TTimo
 	// maintain the IP information

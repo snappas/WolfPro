@@ -58,14 +58,12 @@ cvar_t  *sv_killserver;         // menu system can set to 1 to shut server down
 cvar_t  *sv_mapname;
 cvar_t  *sv_mapChecksum;
 cvar_t  *sv_serverid;
-cvar_t  *sv_maxRate;
 cvar_t  *sv_minPing;
 cvar_t  *sv_maxPing;
 cvar_t  *sv_gametype;
 cvar_t  *sv_pure;
 cvar_t  *sv_floodProtect;
 cvar_t  *sv_allowAnonymous;
-cvar_t  *sv_lanForceRate; // TTimo - dedicated 1 (LAN) server forces local client rates to 99999 (bug #491)
 cvar_t  *sv_onlyVisibleClients; // DHM - Nerve
 cvar_t  *sv_friendlyFire;       // NERVE - SMF
 cvar_t  *sv_maxlives;           // NERVE - SMF
