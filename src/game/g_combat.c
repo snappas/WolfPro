@@ -1028,6 +1028,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 
 		VectorScale( dir, g_knockback.value * (float)knockback / mass, kvel );
+		if ( kvel[2] < -800.0f ) {
+			kvel[2] = -800.0f;
+		}
 		VectorAdd( targ->client->ps.velocity, kvel, targ->client->ps.velocity );
 
 		if ( targ == attacker && attacker->s.weapon != WP_ROCKET_LAUNCHER && !(  mod != MOD_ROCKET &&
