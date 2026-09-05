@@ -419,10 +419,9 @@ void Weapon_Syringe( gentity_t *ent ) {
 				if ( g_fastres.integer > 0 ) {
 					BG_AnimScriptEvent( &traceEnt->client->ps, ANIM_ET_JUMP, qfalse, qtrue );
 				} else {
-					int reviveDuration = BG_AnimScriptEvent( &traceEnt->client->ps, ANIM_ET_REVIVE, qfalse, qtrue );
+					BG_AnimScriptEvent( &traceEnt->client->ps, ANIM_ET_REVIVE, qfalse, qtrue );
 					traceEnt->client->ps.pm_flags |= PMF_TIME_LOCKPLAYER;
 					traceEnt->client->ps.pm_time = 2100;
-					traceEnt->client->ps.pm_time = ( reviveDuration > 0 ) ? reviveDuration : 2100;
 				}
 
 
