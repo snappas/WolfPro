@@ -187,6 +187,7 @@ static void SV_Map_f( void ) {
 
 	Cvar_Set( "g_currentRound", "0" );            // NERVE - SMF - reset the current round
 	Cvar_Set( "g_nextTimeLimit", "0" );           // NERVE - SMF - reset the next time limit
+	Cvar_Set( "g_preciseTimeSet", "0" );          // clear stale round-1 baseline from a previous match
 
 	// force latched values to get set
 	// DHM - Nerve :: default to GT_WOLF

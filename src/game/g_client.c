@@ -1674,7 +1674,9 @@ void ClientUserinfoChanged( int clientNum ) {
 
 	trap_SetConfigstring( CS_PLAYERS + clientNum, s );
 
-	trap_WTV_RecordPlayerIdentity( clientNum, client->sess.guid, client->pers.netname );
+	if ( g_wtvSupported ) {
+		trap_WTV_RecordPlayerIdentity( clientNum, client->sess.guid, client->pers.netname );
+	}
 
 	if (!(ent->r.svFlags & SVF_BOT)) {
 		char *team;
@@ -1945,6 +1947,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	int savedPing;
 	int savedTeam;
 	qboolean savedVoted = qfalse;         // NERVE - SMF
+	trace_t tr;
 
 	index = ent - g_entities;
 	client = ent->client;
@@ -2188,6 +2191,16 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 		//use the precise origin for linking
 		VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
 		VectorCopy(ent->client->ps.origin, ent->client->sess.prevOrigin);
+
+		// Spawn selection (SpotWouldTelefrag) avoids occupied spots when it can,
+		// but falls back to a known-occupied one when every spot on the team is
+		// taken -- same anti-stuck mitigation as the syringe revive path: shrink
+		// to the crouch bbox instead of leaving two players wedged together.
+		trap_Trace( &tr, ent->client->ps.origin, ent->client->ps.mins, ent->client->ps.maxs, ent->client->ps.origin, ent->s.number, MASK_PLAYERSOLID );
+		if ( tr.allsolid ) {
+			ent->client->ps.pm_flags |= PMF_DUCKED;
+		}
+
 		trap_LinkEntity( ent );
 	}
 

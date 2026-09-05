@@ -1028,6 +1028,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 
 		VectorScale( dir, g_knockback.value * (float)knockback / mass, kvel );
+		if ( kvel[2] < -800.0f ) {
+			kvel[2] = -800.0f;
+		}
 		VectorAdd( targ->client->ps.velocity, kvel, targ->client->ps.velocity );
 
 		if ( targ == attacker && attacker->s.weapon != WP_ROCKET_LAUNCHER && !(  mod != MOD_ROCKET &&
@@ -1487,9 +1490,9 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 		}
 */
 // JPW NERVE
-		// if ( !ent->r.bmodel ) {
-		// 	VectorSubtract( ent->r.currentOrigin,origin,v ); // JPW NERVE simpler centroid check that doesn't have box alignment weirdness
-		// } else {
+		if ( !ent->r.bmodel ) {
+			VectorSubtract( ent->r.currentOrigin,origin,v ); // JPW NERVE simpler centroid check that doesn't have box alignment weirdness
+		} else {
 			for ( i = 0 ; i < 3 ; i++ ) {
 				if ( origin[i] < ent->r.absmin[i] ) {
 					v[i] = ent->r.absmin[i] - origin[i];
@@ -1499,7 +1502,7 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 					v[i] = 0;
 				}
 			}
-		//}
+		}
 // jpw
 		dist = VectorLength( v );
 		if ( dist >= radius ) {

@@ -68,12 +68,10 @@
 | `sv_hostname` | `WolfHost` | SERVERINFO\|ARCHIVE | Server name shown in the browser/serverinfo. |
 | `sv_keywords` | `""` | SERVERINFO | Free-text server-browser search keywords. |
 | `sv_killserver` | `0` | — **[debug]** | Set nonzero to force an immediate server shutdown; the engine resets it to `0` after acting on it. |
-| `sv_lanForceRate` | `1` | ARCHIVE | Forces max rate for clients detected as LAN. |
 | `sv_levelTimeReset` | `0` | ARCHIVE | Controls whether level time resets across map/round transitions. |
 | `sv_master1`…`sv_master5` | `wolfmaster.idsoftware.com` / `""`×4 | ARCHIVE (master1: none) | Master server addresses for heartbeat/listing. |
 | `sv_maxclients` (`g_maxclients`) | `20` | SERVERINFO\|LATCH (ARCHIVE via `g_maxclients`) | Max client slots including bots/spectators; requires a map change/restart. |
 | `sv_maxclientsPerIP` | `3` | ARCHIVE | Caps simultaneous connections from one IP. |
-| `sv_maxRate` | `0` | ARCHIVE | Server-enforced ceiling on a client's `rate` cvar; `0` = no cap. |
 | `sv_minPing` / `sv_maxPing` | `0` / `0` | ARCHIVE | Reject/kick connections outside this ping band; `0` = disabled. |
 | `sv_padPackets` | `0` | — **[debug]** | Pads outgoing server packets by N bytes (netcode testing). |
 | `sv_privateClients` | `0` | SERVERINFO | Slots reserved for players who know `sv_privatePassword`. |
@@ -256,7 +254,7 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `cg_fov` | `90` | ARCHIVE | Player field-of-view. |
 | `cg_fragsY` / `cg_fragsWidth` | `0` / `16` | ARCHIVE | Frags counter position/width. |
 | `cg_gun_frame` | `0` | TEMP **[debug]** | Forces the view-weapon to a specific animation frame. |
-| `cg_gunX` / `cg_gunY` / `cg_gunZ` | `0` each | CHEAT **[debug]** | View-weapon position offset, for muzzle/viewmodel tuning. |
+| `cg_gunX` / `cg_gunY` / `cg_gunZ` | `0` each | ARCHIVE | View-weapon position offset, for muzzle/viewmodel tuning. |
 | `cg_hudAlpha` | `1` | ARCHIVE | Global HUD element opacity. |
 | `cg_hudFiles` | `ui_mp/hud.txt` | ARCHIVE | Path to the HUD layout definition file. |
 | `cg_lagometer` | `0` | ARCHIVE | Lagometer graph toggle. |
@@ -492,7 +490,7 @@ These apply to both renderers unless marked otherwise.
 
 | Cvar | Default | Flags | Description |
 |---|---|---|---|
-| `r_alphaboost` | `1.0` | ARCHIVE | Alpha-blend intensity boost. |
+| `r_alphaboost` | `0` | ARCHIVE | Alpha-blend intensity boost. |
 | `r_anisotropy` | `16` | ARCHIVE\|LATCH | Anisotropic texture filtering level (VK's equivalent of GL's `r_ext_texture_filter_anisotropic`). |
 | `r_debugInput` | `0` | TEMP **[debug]** | Logs debug info about input events on the Vulkan renderer. |
 | `r_debugUI` | `0` | TEMP **[debug]** | Draws the Vulkan backend's ImGui debug UI. |

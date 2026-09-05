@@ -619,6 +619,7 @@ void Con_Top( void );
 void Con_Bottom( void );
 void Con_Close( void );
 void Con_SetFrac(const float conFrac);	// RTCWPro con height
+void Con_GetCharSize( float *w, float *h );
 
 
 //

@@ -524,21 +524,27 @@ void WTV_BuildFragmentPath( const char *finalBasePath, int partNumber, char *out
 	}
 }
 
+static void WTV_BuildFragmentTempPath( const char *finalBasePath, int partNumber, char *out, int outSize ) {
+	char realPath[MAX_OSPATH + 16];
+	WTV_BuildFragmentPath( finalBasePath, partNumber, realPath, sizeof( realPath ) );
+	Com_sprintf( out, outSize, "%s.tmp", realPath );
+}
+
 // Opens fragment partNumber (finalBasePath + ".wtv" for part 1, "+.partN.wtv"
 // after) and writes its header with placeholder index fields — those get
 // patched by WTV_CloseFinalFragment once the fragment's real values are known.
 static qboolean WTV_OpenFinalFragment( wtvCompressState_t *cs, int partNumber ) {
-	char filePath[MAX_OSPATH + 16];
+	char tempPath[MAX_OSPATH + 24];
 	wtvFinalHeader_t header;
 
 	if ( !WTV_InitEncoder( &cs->strm ) ) {
 		return qfalse;
 	}
 
-	WTV_BuildFragmentPath( cs->finalBasePath, partNumber, filePath, sizeof( filePath ) );
-	cs->fragmentFile = fopen( filePath, "wb" );
+	WTV_BuildFragmentTempPath( cs->finalBasePath, partNumber, tempPath, sizeof( tempPath ) );
+	cs->fragmentFile = fopen( tempPath, "wb" );
 	if ( !cs->fragmentFile ) {
-		Com_Printf( "WTV: failed to open %s for compressed output\n", filePath );
+		Com_Printf( "WTV: failed to open %s for compressed output\n", tempPath );
 		lzma_end( &cs->strm );
 		return qfalse;
 	}
@@ -548,7 +554,7 @@ static qboolean WTV_OpenFinalFragment( wtvCompressState_t *cs, int partNumber ) 
 	header.version = WTV_VERSION;
 	header.partNumber = partNumber;
 	if ( fwrite( &header, sizeof( header ), 1, cs->fragmentFile ) != 1 ) {
-		Com_Printf( "WTV: fwrite failed writing header to %s\n", filePath );
+		Com_Printf( "WTV: fwrite failed writing header to %s\n", tempPath );
 		cs->failed = qtrue;
 		fclose( cs->fragmentFile );
 		cs->fragmentFile = NULL;
@@ -664,6 +670,17 @@ static void WTV_CloseFinalFragment( wtvCompressState_t *cs, qboolean hasNextPart
 		cs->failed = qtrue;
 	}
 	cs->fragmentFile = NULL;
+
+	if ( !cs->failed ) {
+		char realPath[MAX_OSPATH + 16];
+		char tempPath[MAX_OSPATH + 24];
+		WTV_BuildFragmentPath( cs->finalBasePath, cs->partNumber, realPath, sizeof( realPath ) );
+		WTV_BuildFragmentTempPath( cs->finalBasePath, cs->partNumber, tempPath, sizeof( tempPath ) );
+		if ( rename( tempPath, realPath ) != 0 ) {
+			Com_Printf( "WTV: failed to rename %s to %s\n", tempPath, realPath );
+			cs->failed = qtrue;
+		}
+	}
 }
 
 // Streams data through cs->strm to the fragment file. Rollover is only

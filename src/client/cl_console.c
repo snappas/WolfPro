@@ -73,6 +73,18 @@ extern console_t con;
 
 console_t con;
 
+/*
+================
+Con_GetCharSize
+
+Native pixel size of a console/chat character
+================
+*/
+void Con_GetCharSize( float *w, float *h ) {
+	*w = con.cw;
+	*h = con.ch;
+}
+
 cvar_t      *con_debug;
 cvar_t      *con_conspeed;
 cvar_t      *con_notifytime;
@@ -639,12 +651,8 @@ void Con_DrawNotify( void ) {
 
 	// draw the chat line
 	if ( cls.keyCatchers & KEYCATCH_MESSAGE ) {
-		float width = BIGCHAR_WIDTH;
-		float height = BIGCHAR_HEIGHT;
-		float yscale = cls.glconfig.vidHeight / 480.0f;
-
-		width *= yscale;
-		height *= yscale;
+		float width = con.cw;
+		float height = con.ch;
 
 		if ( chat_team ) {
 			char buf[128];

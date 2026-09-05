@@ -809,6 +809,11 @@ void SV_SendClientSnapshot( client_t *client ) {
 	if ( msg.overflowed ) {
 		Com_Printf( "WARNING: msg overflowed for %s\n", client->name );
 		MSG_Clear( &msg );
+
+		if ( sv_dropClientOnOverflow->integer ) {
+			SV_DropClient( client, "Msg overflowed" );
+			return;
+		}
 	}
 
 	SV_SendMessageToClient( &msg, client );
@@ -847,7 +852,7 @@ void SV_SendClientMessages( void ) {
 		// 1. Local clients get snapshots every server frame
 		// 2. Remote clients get snapshots depending from rate and requested number of updates
 
-		if ( svs.time - c->lastSnapshotTime < c->snapshotMsec * com_timescale->value )
+		if ( svs.time - c->lastSnapshotTime < ( 1000 / sv_fps->integer ) * com_timescale->value )
 			continue;		// It's not time yet
 
 		if ( c->netchan.unsentFragments || c->netchan_start_queue )

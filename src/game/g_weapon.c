@@ -391,8 +391,8 @@ void Weapon_Syringe( gentity_t *ent ) {
 				}
 
 				traceEnt->s.effect3Time = level.time;
-				traceEnt->r.contents = CONTENTS_CORPSE;
-				trap_LinkEntity( ent );
+				traceEnt->r.contents = CONTENTS_BODY;
+				trap_LinkEntity( traceEnt );
 
 				// DHM - Nerve :: Let the person being revived know about it
 				trap_SendServerCommand( traceEnt - g_entities, va( "cp \"You have been revived by [lof]%s!\n\"", ent->client->pers.netname ) );
@@ -419,9 +419,10 @@ void Weapon_Syringe( gentity_t *ent ) {
 				if ( g_fastres.integer > 0 ) {
 					BG_AnimScriptEvent( &traceEnt->client->ps, ANIM_ET_JUMP, qfalse, qtrue );
 				} else {
-					BG_AnimScriptEvent( &traceEnt->client->ps, ANIM_ET_REVIVE, qfalse, qtrue );
+					int reviveDuration = BG_AnimScriptEvent( &traceEnt->client->ps, ANIM_ET_REVIVE, qfalse, qtrue );
 					traceEnt->client->ps.pm_flags |= PMF_TIME_LOCKPLAYER;
 					traceEnt->client->ps.pm_time = 2100;
+					traceEnt->client->ps.pm_time = ( reviveDuration > 0 ) ? reviveDuration : 2100;
 				}
 
 
@@ -1586,6 +1587,9 @@ void AddHeadEntities(gentity_t* skip, int content, int mask){
 		if (ent == skip){
 			continue;
 		}
+		if ( !ent->client || ent->health <= 0 || ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
 		if(ent->headBBox){
 			UpdateHeadPosition(ent);
 			ent->headBBox->r.contents = content;
@@ -2040,10 +2044,13 @@ void AddPlayerCapsules( gentity_t *skip, int contents, int mask ) {
 		if ( ent->client->ps.pm_type == PM_SPECTATOR ) {
     		continue;
 		}
-		if ( ent->health <= 0 && !( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+		if ( ent->health <= 0 || ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
 			continue;
 		}
-		
+		if ( ent->client->ps.powerups[PW_INVULNERABLE] > level.time ) {
+			continue;
+		}
+
 		VectorCopy( ent->r.currentOrigin, targetEye );
 		targetEye[2] += ent->client->ps.viewheight;
 
@@ -2117,7 +2124,10 @@ void UnlinkPlayerBodies( gentity_t *skip ) {
             continue;
         }
 
-		if ( ent->health <= 0 && !( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+		if ( ent->health <= 0 || ( ent->client->ps.pm_flags & PMF_LIMBO ) ) {
+			continue;
+		}
+		if ( ent->client->ps.powerups[PW_INVULNERABLE] > level.time ) {
 			continue;
 		}
 

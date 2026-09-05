@@ -716,7 +716,7 @@ int SV_RemainingGameState( void )
 		if ( start == CS_WOLFINFO ) {
 			MSG_WriteByte( &msg, svc_configstring );
 			MSG_WriteShort( &msg, start );
-			MSG_WriteBigString( &msg, Cvar_InfoString( CS_WOLFINFO, NULL ) );
+			MSG_WriteBigString( &msg, Cvar_InfoString( CVAR_WOLFINFO, NULL ) );
 			continue;
 		}
 		if ( sv.configstrings[start][0] ) {
@@ -1541,13 +1541,10 @@ into a more C friendly form.
 =================
 */
 void SV_UserinfoChanged( client_t *cl ) {
-	const char    *val;
 	const char *ip;
-	int i;
 
 	if ( cl->netchan.remoteAddress.type == NA_BOT ) {
 		cl->lastSnapshotTime = svs.time - 9999; // generate a snapshot immediately
-		cl->snapshotMsec = 1000 / sv_fps->integer;
 		cl->rate = 0;
 		return;
 	}
@@ -1562,51 +1559,7 @@ void SV_UserinfoChanged( client_t *cl ) {
 
 	
 
-	// rate command
-
-	// if the client is on the same subnet as the server and we aren't running an
-	// internet public server, assume they don't need a rate choke
-	if ( cl->netchan.remoteAddress.type == NA_LOOPBACK || (cl->netchan.isLANAddress && com_dedicated->integer != 2 && sv_lanForceRate->integer ) ) {
-		cl->rate = 0; // lans should not rate limit
-	} else {
-		val = Info_ValueForKey( cl->userinfo, "rate" );
-		if ( val[0] )
-			cl->rate = atoi( val );
-		else
-			cl->rate = 10000; // was 3000
-
-		if ( sv_maxRate->integer ) {
-			if ( cl->rate > sv_maxRate->integer )
-				cl->rate = sv_maxRate->integer;
-		}
-
-		// if ( sv_minRate->integer ) {
-		// 	if ( cl->rate < sv_minRate->integer )
-		// 		cl->rate = sv_minRate->integer;
-		// }
-	}
-
-	// snaps command
-	val = Info_ValueForKey( cl->userinfo, "snaps" );
-	if ( val[0] && !NET_IsLocalAddress(&cl->netchan.remoteAddress ) )
-		i = atoi( val );
-	else
-		i = sv_fps->integer; // sync with server
-
-	// range check
-	if ( i < 1 )
-		i = 1;
-	else if ( i > sv_fps->integer )
-		i = sv_fps->integer;
-
-	i = 1000 / i; // from FPS to milliseconds
-
-	if ( i != cl->snapshotMsec )
-	{
-		// Reset last sent snapshot so we avoid desync between server frame time and snapshot send time
-		cl->lastSnapshotTime = svs.time - 9999; // generate a snapshot immediately
-		cl->snapshotMsec = i;
-	}
+	cl->rate = 0; // no bandwidth rate limiting
 
 	// TTimo
 	// maintain the IP information

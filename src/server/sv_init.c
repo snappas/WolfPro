@@ -956,6 +956,8 @@ void SV_BotInitBotLib( void );
 void SV_Init( void ) {
 	SV_AddOperatorCommands();
 
+	Cvar_Set( "//trap_G_WTVSupported", "1" );
+
 	// serverinfo vars
 	Cvar_Get( "dmflags", "0", /*CVAR_SERVERINFO*/ 0 );
 	Cvar_Get( "fraglimit", "0", /*CVAR_SERVERINFO*/ 0 );
@@ -974,7 +976,6 @@ void SV_Init( void ) {
 	sv_hostname = Cvar_Get( "sv_hostname", "WolfHost", CVAR_SERVERINFO | CVAR_ARCHIVE );
 	sv_maxclients = Cvar_Get( "sv_maxclients", "20", CVAR_SERVERINFO | CVAR_LATCH );               // NERVE - SMF - changed to 20 from 8
 	sv_maxclientsPerIP = Cvar_Get( "sv_maxclientsPerIP", "3", CVAR_ARCHIVE );
-	sv_maxRate = Cvar_Get( "sv_maxRate", "0", CVAR_ARCHIVE);
 	sv_minPing = Cvar_Get( "sv_minPing", "0", CVAR_ARCHIVE);
 	sv_maxPing = Cvar_Get( "sv_maxPing", "0", CVAR_ARCHIVE);
 	sv_floodProtect = Cvar_Get( "sv_floodProtect", "1", CVAR_ARCHIVE | CVAR_SERVERINFO );
@@ -1011,7 +1012,6 @@ void SV_Init( void ) {
 	sv_padPackets = Cvar_Get( "sv_padPackets", "0", 0 );
 	sv_killserver = Cvar_Get( "sv_killserver", "0", 0 );
 	sv_mapChecksum = Cvar_Get( "sv_mapChecksum", "", CVAR_ROM );
-	sv_lanForceRate = Cvar_Get( "sv_lanForceRate", "1", CVAR_ARCHIVE );
 
 	sv_onlyVisibleClients = Cvar_Get( "sv_onlyVisibleClients", "0", 0 );       // DHM - Nerve
 
@@ -1064,6 +1064,8 @@ void SV_Init( void ) {
 	sv_dlRate = Cvar_Get( "sv_dlRate", "100", CVAR_ARCHIVE | CVAR_SERVERINFO ); //rate in kb/s
 
 	sv_levelTimeReset = Cvar_Get( "sv_levelTimeReset", "0", CVAR_ARCHIVE );
+
+	sv_dropClientOnOverflow = Cvar_Get( "sv_dropClientOnOverflow", "1", CVAR_ARCHIVE );
 
 	// initialize bot cvars so they are listed and can be set before loading the botlib
 	SV_BotInitCvars();
