@@ -2524,6 +2524,7 @@ void CL_InitRenderer( void ) {
 	// atlas's own pixel data being correct.
 	cls.charSetShader = re.RegisterShaderNoMip( Cvar_Get( "r_hudFontEnabled", "1", CVAR_ARCHIVE | CVAR_LATCH )->integer
 											? "gfx/2d/consolechars" : "gfx/2d/hudchars" );
+	cls.hudCharSetShader = re.RegisterShaderNoMip( "gfx/2d/hudchars" );
 	cls.whiteShader = re.RegisterShader( "white" );
 
 // JPW NERVE

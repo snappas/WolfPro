@@ -123,10 +123,10 @@ void SCR_DrawPic( float x, float y, float width, float height, qhandle_t hShader
 
 
 /*
-** SCR_DrawChar
+** SCR_DrawCharShader
 ** small chars are drawn at native screen resolution
 */
-void SCR_DrawChar( float x, float y, float w, float h, int ch ) {
+static void SCR_DrawCharShader( float x, float y, float w, float h, int ch, qhandle_t shader ) {
 	int row, col;
 	float frow, fcol;
 	float size;
@@ -151,7 +151,11 @@ void SCR_DrawChar( float x, float y, float w, float h, int ch ) {
 	re.DrawStretchPic( x, y, w, h,
 					   fcol, frow,
 					   fcol + size, frow + size,
-					   cls.charSetShader );
+					   shader );
+}
+
+void SCR_DrawChar( float x, float y, float w, float h, int ch ) {
+	SCR_DrawCharShader( x, y, w, h, ch, cls.charSetShader );
 }
 
 
@@ -166,7 +170,7 @@ to a fixed color.
 
 ==================
 */
-void SCR_DrawString(float x, float y, float w, float h, const char *string, float *setColor, qboolean forceColor, qboolean dropShadow ) {
+static void SCR_DrawStringShader(float x, float y, float w, float h, const char *string, float *setColor, qboolean forceColor, qboolean dropShadow, qhandle_t shader ) {
 	vec4_t color;
 	const char  *s;
 	int xx;
@@ -185,12 +189,12 @@ void SCR_DrawString(float x, float y, float w, float h, const char *string, floa
 				continue;
 			}
 
-			SCR_DrawChar( xx + offset, y + offset, w, h, *s );
+			SCR_DrawCharShader( xx + offset, y + offset, w, h, *s, shader );
 			xx += w;
 			s++;
 		}
 	}
-	
+
 
 	// draw the colored text
 	s = string;
@@ -206,11 +210,15 @@ void SCR_DrawString(float x, float y, float w, float h, const char *string, floa
 			s += 2;
 			continue;
 		}
-		SCR_DrawChar( xx, y, w, h, *s );
+		SCR_DrawCharShader( xx, y, w, h, *s, shader );
 		xx += w;
 		s++;
 	}
 	re.SetColor( NULL );
+}
+
+void SCR_DrawString(float x, float y, float w, float h, const char *string, float *setColor, qboolean forceColor, qboolean dropShadow ) {
+	SCR_DrawStringShader( x, y, w, h, string, setColor, forceColor, dropShadow, cls.charSetShader );
 }
 
 
@@ -261,12 +269,13 @@ void SCR_DrawDemoRecording( void ) {
 	Com_sprintf( string, sizeof(string), "RECORDING %s: %ik", clc.demoName, pos / 1024 );
 	float x = 5;
 	float y = 470;
-	float w, h;
+	float w = 8;
+	float h = 8;
 
-	SCR_AdjustFrom640( &x, &y, NULL, NULL );
-	Con_GetCharSize( &w, &h );
+	SCR_AdjustFrom640( &x, &y, &w, &h );
+	w = h;
 
-	SCR_DrawString( x, y, w, h, string, colorWhite, qtrue, qtrue );
+	SCR_DrawStringShader( x, y, w, h, string, colorWhite, qtrue, qtrue, cls.hudCharSetShader );
 }
 
 
