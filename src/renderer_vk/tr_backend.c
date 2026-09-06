@@ -1295,9 +1295,13 @@ const void  *RB_EndFrame( const void *data ) {
 	Prof_BridgeGPUPasses();
 	Prof_SetRendererFrameStats();
 #endif
-	ri.CL_ImGUI_Update();
+	if ( r_debugInput->integer ) {
+		ri.CL_ImGUI_Update();
+	}
 	DrawGUI_RHI();
-	ri.CL_CG_ImGUI_Update();
+	if ( r_debugInput->integer ) {
+		ri.CL_CG_ImGUI_Update();
+	}
 
 	RB_ImGUI_Draw(backEnd.colorBuffer);
 
