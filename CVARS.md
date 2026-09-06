@@ -114,6 +114,8 @@
 | `match_minplayers` | `2` | — | Minimum non-spectator players needed before ready-up/countdown can proceed. |
 | `match_mutespecs` | `0` | — | Mutes spectator chat during a match. |
 | `match_readypercent` | `100` | — | Percentage of players that must be ready to auto-start the match. |
+| `match_teamlock` | `1` | ARCHIVE | Master enforcement switch for team locks (manual `/lock`, pause auto-lock, ready-countdown auto-lock). `0` disables enforcement entirely, at all times — `/lock`/`/unlock` still track state, they just aren't checked. |
+| `match_teamlockwarmup` | `1` | ARCHIVE | When `match_teamlock` is enabled, `0` additionally exempts warmup (`GS_WARMUP`/`GS_WARMUP_COUNTDOWN`) from lock enforcement — e.g. lets a player who crashed and reconnected during the ready countdown rejoin their locked team before the match actually starts. No effect once `GS_PLAYING`. |
 | `match_timeoutcount` | `3` | — | Number of timeouts each team is allotted per match. |
 | `match_timeoutlength` | `180` | — | Length (seconds) of a called timeout/pause. |
 | `match_warmupDamage` | `1` | — | Whether damage is applied during warmup. |
