@@ -1889,6 +1889,8 @@ extern vmCvar_t match_minplayers;
 extern vmCvar_t match_readypercent;
 extern vmCvar_t match_latejoin;
 extern vmCvar_t match_warmupDamage;
+extern vmCvar_t match_teamlock;
+extern vmCvar_t match_teamlockwarmup;
 
 void G_ClientSwap( gclient_t *client );
 void G_matchPrintInfo(char *msg, qboolean printTime);

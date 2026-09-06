@@ -185,6 +185,8 @@ vmCvar_t match_readypercent;
 vmCvar_t match_latejoin;
 vmCvar_t match_warmupDamage;
 vmCvar_t match_mutespecs;
+vmCvar_t match_teamlock;
+vmCvar_t match_teamlockwarmup;
 
  // unlagged
 vmCvar_t g_floatPlayerPosition;
@@ -420,6 +422,8 @@ cvarTable_t gameCvarTable[] = {
 	{ &match_timeoutlength, "match_timeoutlength", "180", 0, 0, qfalse, qtrue },
 	{ &match_timeoutcount, "match_timeoutcount", "3", 0, 0, qfalse, qtrue },
 	{ &match_mutespecs, "match_mutespecs", "0", 0, 0, qfalse, qtrue },
+	{ &match_teamlock, "match_teamlock", "1", CVAR_ARCHIVE, 0, qfalse },
+	{ &match_teamlockwarmup, "match_teamlockwarmup", "1", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &g_allowForceTapout, "g_allowForceTapout", "1", CVAR_ARCHIVE, qtrue },
 
