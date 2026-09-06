@@ -472,6 +472,9 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 	//
 	// draw buffer stuff
 	//
+	// discard any commands orphaned by a frame that never reached RE_EndFrame
+	// (e.g. a Com_Error longjmp mid-frame)
+	backEndData[tr.smpFrame]->commands.used = 0;
 	cmd = R_GetCommandBuffer( sizeof( *cmd ) );
 	if ( !cmd ) {
 		return;

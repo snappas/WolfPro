@@ -627,6 +627,7 @@ void Con_GetCharSize( float *w, float *h );
 //
 void    SCR_Init( void );
 void    SCR_UpdateScreen( void );
+extern int scr_recursiveUpdate;
 
 void    SCR_DebugGraph( float value, int color );
 

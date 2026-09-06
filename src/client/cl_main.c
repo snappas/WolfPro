@@ -872,6 +872,8 @@ void CL_Disconnect( qboolean showMainMenu ) {
 
 	CL_ClearState();
 
+	scr_recursiveUpdate = 0;
+
 	// wipe the client connection
 	memset( &clc, 0, sizeof( clc ) );
 
