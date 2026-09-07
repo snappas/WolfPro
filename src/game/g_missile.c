@@ -181,6 +181,13 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace, int impactDamage ) {
 
 	other = &g_entities[trace->entityNum];
 
+	if ( other->s.eType == ET_TEMPHEAD && other->s.otherEntityNum2 == HITBOX_HEAD
+		 && g_entities[other->r.ownerNum].client ) {
+		if ( g_entities[other->r.ownerNum].health > 0 ) {
+			other = &g_entities[other->r.ownerNum];
+		}
+	}
+
 	// handle func_explosives
 	if ( other->classname && Q_stricmp( other->classname, "func_explosive" ) == 0 ) {
 		// the damage is sufficient to "break" the ent (health == 0 is non-breakable)
@@ -595,6 +602,7 @@ void G_RunMissile( gentity_t *ent ) {
 	vec3_t origin;
 	trace_t tr;
 	int impactDamage;
+	qboolean checkHeadHitbox;
 
 	// get current position
 	BG_EvaluateTrajectory( &ent->s.pos, level.time, origin );
@@ -607,10 +615,19 @@ void G_RunMissile( gentity_t *ent ) {
 		}
 	}
 
+	checkHeadHitbox = ( ent->s.weapon == WP_ROCKET_LAUNCHER || ent->s.weapon == WP_PANZERFAUST );
+	if ( checkHeadHitbox ) {
+		AddHeadEntities( &g_entities[ent->r.ownerNum], CONTENTS_BODY, MASK_PLAYERSOLID );
+	}
+
 	// trace a line from the previous position to the current position,
 	// ignoring interactions with the missile owner
 	trap_Trace( &tr, ent->r.currentOrigin, ent->r.mins, ent->r.maxs, origin,
 				ent->r.ownerNum, ent->clipmask );
+
+	if ( checkHeadHitbox ) {
+		RemoveHeadEntities( &g_entities[ent->r.ownerNum] );
+	}
 
 	VectorCopy( tr.endpos, ent->r.currentOrigin );
 
