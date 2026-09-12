@@ -580,7 +580,11 @@ qboolean BG_AnimParseAnimConfig( animModelInfo_t *animModelInfo, const char *fil
 	}
 
 	// read information for each frame
-	for ( i = 0 ; ( animModelInfo->version > 1 ) || ( i < MAX_ANIMATIONS ) ; i++ ) {
+	// the older fixed-list format (version < 2) indexes animStrings[], which only has
+	// MAX_ANIMATIONS entries; the newer named-animation format (version > 1) writes
+	// straight into animModelInfo->animations[], sized MAX_MODEL_ANIMATIONS -- cap each
+	// format at its own array's real size instead of overflowing either one.
+	for ( i = 0 ; i < MAX_MODEL_ANIMATIONS && ( animModelInfo->version > 1 || i < MAX_ANIMATIONS ) ; i++ ) {
 
 		token = COM_Parse( &text_p );
 		if ( !token ) {
