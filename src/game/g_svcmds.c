@@ -204,7 +204,7 @@ G_FilterPacket
 qboolean G_FilterPacket( const char *from ) {
 	int i;
 	unsigned in;
-	byte m[4];
+	byte m[4] = { 0 };
 	const char *p;
 
 	i = 0;
