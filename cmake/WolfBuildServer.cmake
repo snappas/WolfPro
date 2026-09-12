@@ -12,7 +12,9 @@ if(WIN32 AND NOT CMAKE_CROSSCOMPILE)
 		${LZMA_LIBRARIES}
 	)
 	if(ENABLE_ASAN)
-	target_link_options(wolfded PRIVATE /wholearchive:clang_rt.asan-x86_64.lib /STACK:8388608)
+	# clang_rt.asan-x86_64.lib is the clang-cl/LLVM static runtime name; MSVC's own bundled
+	# ASan only ships the dynamic runtime + thunk libs (see qagame/cgame/ui in WolfBuildMod.cmake).
+	target_link_options(wolfded PRIVATE /wholearchive:clang_rt.asan_dynamic_runtime_thunk-x86_64.lib /STACK:8388608)
 	endif()
 	target_link_options(wolfded PRIVATE /STACK:8388608)
 	target_include_directories(wolfded PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})

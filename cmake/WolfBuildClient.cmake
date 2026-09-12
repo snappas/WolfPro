@@ -30,12 +30,17 @@ if(WIN32)
 	if(ENABLE_ASAN)
 		target_link_options(${wolfmp_target} PRIVATE /O0 -g /LIBPATH:${CLANGRT} /EHsc)
 	endif()
+	# AddressSanitizer on MSVC needs the dynamic CRT across this EXE + DLL-module
+	# project (see WolfPlatform.cmake) -- forcing the static CRT here would undo
+	# that and re-trigger the static/dynamic ASan runtime thunk collision (LNK2005).
+	if(NOT ENABLE_ASAN)
 	if(CMAKE_BUILD_TYPE MATCHES "Debug")
 			set_property(TARGET ${wolfmp_target} PROPERTY
              MSVC_RUNTIME_LIBRARY "MultiThreadedDebug")
 	else()
 			 set_property(TARGET ${wolfmp_target} PROPERTY
              MSVC_RUNTIME_LIBRARY "MultiThreaded")
+	endif()
 	endif()
 	set_property(TARGET ${wolfmp_target} PROPERTY VS_STARTUP_PROJECT INSTALL)
 	
@@ -65,7 +70,9 @@ else()
 	)
 endif()
 if(ENABLE_ASAN)
-target_link_options(${wolfmp_target} PRIVATE /wholearchive:clang_rt.asan-x86_64.lib)
+# clang_rt.asan-x86_64.lib is the clang-cl/LLVM static runtime name; MSVC's own bundled
+# ASan only ships the dynamic runtime + thunk libs (see wolfded/qagame for the same fix).
+target_link_options(${wolfmp_target} PRIVATE /wholearchive:clang_rt.asan_dynamic_runtime_thunk-x86_64.lib)
 endif()
 
 target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})

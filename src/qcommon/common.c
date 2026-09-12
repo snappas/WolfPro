@@ -1153,6 +1153,13 @@ void Z_Free( void *ptr )
 	block->id = ZONE_ID;
 #endif
 
+#if defined( __SANITIZE_ADDRESS__ )
+	// Matches the Z_TagMalloc bypass above -- this block was malloc()'d individually,
+	// so free it directly instead of feeding it back into the internal free-list.
+	free( block );
+	return;
+#endif
+
 	other = block->prev;
 	if ( other->tag == TAG_FREE ) {
 #ifdef USE_MULTI_SEGMENT
@@ -1246,7 +1253,9 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 #endif
 	memblock_t	*base;
 	memzone_t	*zone;
+#if !defined( __SANITIZE_ADDRESS__ )
 	size_t		extra;
+#endif
 
 	if ( size > INT_MAX ) {
 		Com_Error( ERR_FATAL, "Z_TagMalloc: %"PRIz"u > INT_MAX", size );
@@ -1279,6 +1288,22 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 
 	size = PAD( size, sizeof( intptr_t ) );		// align to 32/64 bit boundary
 
+#if defined( __SANITIZE_ADDRESS__ )
+	// The multi-segment allocator below carves individual blocks out of a handful of
+	// large malloc()'d segments (see NewBlock) -- ASan only sees those outer segment
+	// allocations, not this allocator's own internal free-list bookkeeping, so a real
+	// overflow inside one block goes undetected until something later walks corrupted
+	// free-list links. Give every allocation its own real malloc() instead so ASan's
+	// redzones catch the actual out-of-bounds write immediately.
+	base = malloc( size );
+	if ( base == NULL ) {
+		Com_Error( ERR_FATAL, "Z_Malloc: failed on allocation of %u bytes from the %s zone",
+			size, zone->name );
+		return NULL;
+	}
+	base->size = size;
+	base->prev = base->next = NULL;
+#else
 #ifdef USE_MULTI_SEGMENT
 	base = SearchFree( zone, size );
 
@@ -1326,6 +1351,7 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 #ifndef USE_MULTI_SEGMENT
 	zone->rover = base->next;	// next allocation will start looking here
 #endif
+#endif // __SANITIZE_ADDRESS__
 	zone->used += base->size;
 
 	base->tag = tag;			// no longer a free block

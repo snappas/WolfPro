@@ -82,10 +82,12 @@ elseif(WIN32)
 
 	target_link_libraries(os_libraries INTERFACE wsock32 ws2_32 psapi winmm user32 gdi32 advapi32 shell32 version)
 
+	if(NOT ENABLE_ASAN)
 	if(CMAKE_BUILD_TYPE MATCHES "Debug" AND NOT CMAKE_CROSSCOMPILE)
 		target_link_libraries(os_libraries INTERFACE libcmtd)
 	else()
 		target_link_libraries(os_libraries INTERFACE libcmt)
+	endif()
 	endif()
 	
 	if(BUNDLED_SDL)
@@ -141,6 +143,12 @@ elseif(WIN32)
 			# 		MSVC_RUNTIME_LIBRARY "MultiThreaded")
 			# endif()
 
+			# AddressSanitizer on MSVC only supports the dynamic CRT (/MD, /MDd) across an
+			# EXE + DLL-module project like this one -- forcing the static CRT here makes the
+			# compiler auto-link clang_rt.asan_static_runtime_thunk, which collides (LNK2005) with
+			# the clang_rt.asan_dynamic_runtime_thunk WolfBuildMod.cmake links into the qagame/cgame/ui
+			# modules. Leave the CRT dynamic when ENABLE_ASAN is on.
+			if(NOT ENABLE_ASAN)
 			foreach(CompilerFlag ${CompilerFlags})
 				message("Compiler flag: ${CompilerFlag} ${${CompilerFlag}}")
 				if(CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -158,6 +166,7 @@ elseif(WIN32)
 			else()
 				set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /NODEFAULTLIB:MSVCRT.lib /NODEFAULTLIB:MSVCRTD.lib /NODEFAULTLIB:libcmtd.lib")
 				set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /NODEFAULTLIB:MSVCRT.lib /NODEFAULTLIB:MSVCRTD.lib /NODEFAULTLIB:libcmtd.lib")
+			endif()
 			endif()
 			message("Done ")
 
