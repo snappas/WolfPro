@@ -321,14 +321,14 @@ static void WTV_WritePlayerStates( msg_t *msg, qboolean fullSnapshot ) {
 
 	// msg is Huffman bit-packed here, so a byte doesn't land at a fixed
 	// offset — the count must be written once, up front, never patched later.
-	for ( i = 0; i < sv_maxclients->integer; i++ ) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		if ( svs.clients[i].state == CS_ACTIVE ) {
 			activeCount++;
 		}
 	}
 	MSG_WriteByte( msg, activeCount );
 
-	for ( i = 0; i < sv_maxclients->integer; i++ ) {
+	for ( i = 0; i < sv.maxclients; i++ ) {
 		if ( svs.clients[i].state != CS_ACTIVE ) {
 			continue;
 		}

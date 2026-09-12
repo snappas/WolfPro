@@ -478,8 +478,8 @@ void SV_DirectConnect( const netadr_t *from ) {
 			}
 			// if they're all bots
 			if (count >= sv.maxclients - startIndex) {
-				SV_DropClient(&svs.clients[sv_maxclients->integer - 1], "only bots on server");
-				newcl = &svs.clients[sv_maxclients->integer - 1];
+				SV_DropClient(&svs.clients[sv.maxclients - 1], "only bots on server");
+				newcl = &svs.clients[sv.maxclients - 1];
 			}
 			else {
 				Com_Error( ERR_DROP, "server is full on local connect" );
@@ -665,7 +665,7 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 			break;
 		}
 	}
-	if ( i == sv_maxclients->integer ) {
+	if ( i == sv.maxclients ) {
 		SV_Heartbeat_f();
 	}
 }

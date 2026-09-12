@@ -57,7 +57,7 @@ int SV_BotAllocateClient( void ) {
 	client_t    *cl;
 
 	// find a client slot
-	for ( i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++ ) {
+	for ( i = 0, cl = svs.clients; i < sv.maxclients; i++, cl++ ) {
 		// Wolfenstein, never use the first slot, otherwise if a bot connects before the first client on a listen server, game won't start
 		if ( i < 1 ) {
 			continue;
@@ -68,7 +68,7 @@ int SV_BotAllocateClient( void ) {
 		}
 	}
 
-	if ( i == sv_maxclients->integer ) {
+	if ( i == sv.maxclients ) {
 		return -1;
 	}
 
@@ -90,7 +90,7 @@ SV_BotFreeClient
 void SV_BotFreeClient( int clientNum ) {
 	client_t    *cl;
 
-	if ( clientNum < 0 || clientNum >= sv_maxclients->integer ) {
+	if ( clientNum < 0 || clientNum >= sv.maxclients ) {
 		Com_Error( ERR_DROP, "SV_BotFreeClient: bad clientNum: %i", clientNum );
 	}
 	cl = &svs.clients[clientNum];
