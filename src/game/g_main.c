@@ -169,6 +169,8 @@ vmCvar_t g_camShakeDuration;
 
 vmCvar_t g_spreadScaleSmg;
 vmCvar_t g_spreadAddSmg;
+vmCvar_t g_spreadAddSmgRand;
+vmCvar_t g_spreadAddPistol;
 
 vmCvar_t mod_url;
 vmCvar_t url;
@@ -249,6 +251,7 @@ vmCvar_t g_debugHitboxes;
 vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4;
 
 vmCvar_t g_capsuleScale;
+vmCvar_t g_preciseSpreadScale;
 
 vmCvar_t g_OmniBotPath;
 vmCvar_t g_OmniBotEnable;
@@ -407,6 +410,9 @@ cvarTable_t gameCvarTable[] = {
 	// MP40/Thompson aim-spread tuning: recovery-speed scale + per-shot recoil-add base
 	{&g_spreadScaleSmg, "g_spreadScaleSmg", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 	{&g_spreadAddSmg, "g_spreadAddSmg", "24", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmgRand, "g_spreadAddSmgRand", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	// Luger/Colt per-shot recoil-add base
+	{&g_spreadAddPistol, "g_spreadAddPistol", "20", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
 	{&g_dbgRevive, "g_dbgRevive", "0", 0, 0, qfalse},
 
@@ -485,6 +491,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
 
 	{ &g_capsuleScale, "g_capsuleScale", "1.0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_preciseSpreadScale, "g_preciseSpreadScale", "0.85", CVAR_ARCHIVE, 0, qtrue },
 
 	{ &g_OmniBotPath,               "omnibot_path",                 "./wolfpro/omni-bot",   CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotEnable,             "omnibot_enable",               "1",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },

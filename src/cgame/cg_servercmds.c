@@ -402,6 +402,8 @@ void CG_ParseServerinfo( void ) {
 	trap_Cvar_Set( "g_LTChargeTime",Info_ValueForKey( info,"g_LTChargeTime" ) );
 	trap_Cvar_Set( "g_spreadScaleSmg",Info_ValueForKey( info,"g_spreadScaleSmg" ) );
 	trap_Cvar_Set( "g_spreadAddSmg",Info_ValueForKey( info,"g_spreadAddSmg" ) );
+	trap_Cvar_Set( "g_spreadAddSmgRand",Info_ValueForKey( info,"g_spreadAddSmgRand" ) );
+	trap_Cvar_Set( "g_spreadAddPistol",Info_ValueForKey( info,"g_spreadAddPistol" ) );
 	trap_Cvar_Set( "g_redlimbotime",Info_ValueForKey( info,"g_redlimbotime" ) );
 	// DHM - TEMP FIX
 	cg_redlimbotime.integer = atoi( Info_ValueForKey( info,"g_redlimbotime" ) );

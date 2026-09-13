@@ -332,6 +332,8 @@ typedef struct {
 
 	float aimSpreadSmg;             // MP40/Thompson recovery-speed scale
 	int aimSpreadSmgAdd;            // MP40/Thompson per-shot recoil-add base
+	int aimSpreadSmgAddRand;        // MP40/Thompson per-shot recoil-add jitter modulus (0 disables)
+	int aimSpreadPistolAdd;         // Luger/Colt per-shot recoil-add base
 
 	// results (out)
 	int numtouch;

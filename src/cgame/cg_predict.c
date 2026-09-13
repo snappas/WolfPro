@@ -794,6 +794,8 @@ void CG_PredictPlayerState( void ) {
 
 		cg_pmove.aimSpreadSmg = cg_spreadScaleSmg.value;
 		cg_pmove.aimSpreadSmgAdd = cg_spreadAddSmg.integer;
+		cg_pmove.aimSpreadSmgAddRand = cg_spreadAddSmgRand.integer;
+		cg_pmove.aimSpreadPistolAdd = cg_spreadAddPistol.integer;
 
 		Com_Memcpy(&pmext, &oldpmext[cmdNum & cg.cmdMask], sizeof(pmoveExt_t));
 
