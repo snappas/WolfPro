@@ -1093,6 +1093,8 @@ void ClientThink_real( gentity_t *ent ) {
 
 	pm.aimSpreadSmg = g_spreadScaleSmg.value;
 	pm.aimSpreadSmgAdd = g_spreadAddSmg.integer;
+	pm.aimSpreadSmgAddRand = g_spreadAddSmgRand.integer;
+	pm.aimSpreadPistolAdd = g_spreadAddPistol.integer;
 
 	Pmove( &pm );
 

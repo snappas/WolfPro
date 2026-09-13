@@ -3065,12 +3065,12 @@ static void PM_Weapon( void ) {
 
 	case WP_LUGER:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = 35;
+		aimSpreadScaleAdd = pm->aimSpreadPistolAdd;
 		break;
 
 	case WP_COLT:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = 20;
+		aimSpreadScaleAdd = pm->aimSpreadPistolAdd;
 		break;
 
 //----(SA)	added
@@ -3129,7 +3129,10 @@ static void PM_Weapon( void ) {
 	case WP_THOMPSON:
 	case WP_STEN:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = pm->aimSpreadSmgAdd + rand() % 10;
+		aimSpreadScaleAdd = pm->aimSpreadSmgAdd;
+		if ( pm->aimSpreadSmgAddRand > 0 ) {
+			aimSpreadScaleAdd += rand() % pm->aimSpreadSmgAddRand;
+		}
 		break;
 
 	case WP_SILENCER:

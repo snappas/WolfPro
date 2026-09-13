@@ -268,6 +268,8 @@ vmCvar_t cg_LTChargeTime;
 vmCvar_t cg_soldierChargeTime;
 vmCvar_t cg_spreadScaleSmg;
 vmCvar_t cg_spreadAddSmg;
+vmCvar_t cg_spreadAddSmgRand;
+vmCvar_t cg_spreadAddPistol;
 vmCvar_t cg_redlimbitime;
 vmCvar_t cg_bluelimbotime;
 // jpw
@@ -631,6 +633,8 @@ cvarTable_t cvarTable[] = {
 	{ &cg_soldierChargeTime,    "g_soldierChargeTime", "20000", 0 }, // communicated by systeminfo
 	{ &cg_spreadScaleSmg, "g_spreadScaleSmg", "0.5", 0 }, // communicated by serverinfo
 	{ &cg_spreadAddSmg, "g_spreadAddSmg", "24", 0 }, // communicated by serverinfo
+	{ &cg_spreadAddSmgRand, "g_spreadAddSmgRand", "10", 0 }, // communicated by serverinfo
+	{ &cg_spreadAddPistol, "g_spreadAddPistol", "20", 0 }, // communicated by serverinfo
 	// DHM - TEMP FIX
 	{ &cg_bluelimbotime,        "", "30000", 0 }, // communicated by systeminfo
 	{ &cg_redlimbotime,         "", "30000", 0 }, // communicated by systeminfo

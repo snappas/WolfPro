@@ -378,6 +378,7 @@ typedef struct {
 	// rendering info
 	glconfig_t glconfig;
 	qhandle_t charSetShader;
+	qhandle_t hudCharSetShader;
 	qhandle_t whiteShader;
 	qhandle_t consoleShader;
 	qhandle_t consoleShader2;       // NERVE - SMF - merged from WolfSP
@@ -619,7 +620,6 @@ void Con_Top( void );
 void Con_Bottom( void );
 void Con_Close( void );
 void Con_SetFrac(const float conFrac);	// RTCWPro con height
-void Con_GetCharSize( float *w, float *h );
 
 
 //
@@ -627,6 +627,7 @@ void Con_GetCharSize( float *w, float *h );
 //
 void    SCR_Init( void );
 void    SCR_UpdateScreen( void );
+extern int scr_recursiveUpdate;
 
 void    SCR_DebugGraph( float value, int color );
 

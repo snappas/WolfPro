@@ -320,7 +320,7 @@ void SV_Startup( void ) {
 	if ( svs.initialized ) {
 		Com_Error( ERR_FATAL, "SV_Startup: svs.initialized" );
 	}
-	SV_AllocClients( sv_maxclients->integer );
+	SV_AllocClients( SV_BoundMaxClients( 1 ) );
 
 	sv_maxclients->modified = qfalse;
 

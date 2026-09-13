@@ -1555,6 +1555,8 @@ extern vmCvar_t g_camShakeDuration;
 
 extern vmCvar_t g_spreadScaleSmg;
 extern vmCvar_t g_spreadAddSmg;
+extern vmCvar_t g_spreadAddSmgRand;
+extern vmCvar_t g_spreadAddPistol;
 
 extern vmCvar_t g_dbgRevive;
 
@@ -1618,6 +1620,7 @@ extern vmCvar_t g_debugHitboxes;
 extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4;
 
 extern vmCvar_t g_capsuleScale;
+extern vmCvar_t g_preciseSpreadScale;
 
 //omnibot stuff
 extern vmCvar_t g_OmniBotPath;
@@ -1889,6 +1892,8 @@ extern vmCvar_t match_minplayers;
 extern vmCvar_t match_readypercent;
 extern vmCvar_t match_latejoin;
 extern vmCvar_t match_warmupDamage;
+extern vmCvar_t match_teamlock;
+extern vmCvar_t match_teamlockwarmup;
 
 void G_ClientSwap( gclient_t *client );
 void G_matchPrintInfo(char *msg, qboolean printTime);

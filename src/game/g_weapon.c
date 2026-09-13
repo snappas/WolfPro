@@ -1305,29 +1305,36 @@ int G_GetWeaponDamage( int weapon ) {
 
 // RF, wrote this so we can dynamically switch between old and new values while testing g_userAim
 float G_GetWeaponSpread( int weapon ) {
-	
+	float spread;
+
 		switch ( weapon ) {
-		case WP_LUGER: return 600;
-		case WP_SILENCER: return 900;
-		case WP_COLT: return 800;
-		case WP_AKIMBO: return 800;         //----(SA)added
-		case WP_VENOM: return 600;
-		case WP_MP40: return 400;
+		case WP_LUGER: spread = 600; break;
+		case WP_SILENCER: spread = 900; break;
+		case WP_COLT: spread = 800; break;
+		case WP_AKIMBO: spread = 800; break;         //----(SA)added
+		case WP_VENOM: spread = 600; break;
+		case WP_MP40: spread = 400; break;
 		case WP_FG42SCOPE:
-		case WP_FG42:   return 500;
+		case WP_FG42:   spread = 500; break;
 		case WP_BAR:
-		case WP_BAR2:   return 500;
-		case WP_THOMPSON: return 600;
-		case WP_STEN: return 200;
-		case WP_MAUSER: return 2000;
-		case WP_GARAND: return 600;
-		case WP_SNIPERRIFLE: return 700;         // was 300
-		case WP_SNOOPERSCOPE: return 700;
+		case WP_BAR2:   spread = 500; break;
+		case WP_THOMPSON: spread = 600; break;
+		case WP_STEN: spread = 200; break;
+		case WP_MAUSER: spread = 2000; break;
+		case WP_GARAND: spread = 600; break;
+		case WP_SNIPERRIFLE: spread = 700; break;         // was 300
+		case WP_SNOOPERSCOPE: spread = 700; break;
+		default:
+			G_Printf( "shouldn't ever get here (weapon %d)\n",weapon );
+			// jpw
+			return 0;   // shouldn't get here
 		}
-	
-	G_Printf( "shouldn't ever get here (weapon %d)\n",weapon );
-	// jpw
-	return 0;   // shouldn't get here
+
+	if ( g_preciseBodyBox.integer ) {
+		spread *= g_preciseSpreadScale.value;
+	}
+
+	return spread;
 }
 
 #define LUGER_SPREAD    G_GetWeaponSpread( WP_LUGER )

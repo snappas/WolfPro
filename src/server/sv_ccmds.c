@@ -915,7 +915,7 @@ void SV_ReloadRest(qboolean disableTime) {
 	}
 
 	// connect and begin all the clients
-	for (i = 0; i < sv_maxclients->integer; i++) {
+	for (i = 0; i < sv.maxclients; i++) {
 		client = &svs.clients[i];
 
 		// send the new gamestate to all connected clients

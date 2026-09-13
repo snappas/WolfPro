@@ -114,6 +114,8 @@
 | `match_minplayers` | `2` | — | Minimum non-spectator players needed before ready-up/countdown can proceed. |
 | `match_mutespecs` | `0` | — | Mutes spectator chat during a match. |
 | `match_readypercent` | `100` | — | Percentage of players that must be ready to auto-start the match. |
+| `match_teamlock` | `1` | ARCHIVE | Master enforcement switch for team locks (manual `/lock`, pause auto-lock, ready-countdown auto-lock). `0` disables enforcement entirely, at all times — `/lock`/`/unlock` still track state, they just aren't checked. |
+| `match_teamlockwarmup` | `1` | ARCHIVE | When `match_teamlock` is enabled, `0` additionally exempts warmup (`GS_WARMUP`/`GS_WARMUP_COUNTDOWN`) from lock enforcement — e.g. lets a player who crashed and reconnected during the ready countdown rejoin their locked team before the match actually starts. No effect once `GS_PLAYING`. |
 | `match_timeoutcount` | `3` | — | Number of timeouts each team is allotted per match. |
 | `match_timeoutlength` | `180` | — | Length (seconds) of a called timeout/pause. |
 | `match_warmupDamage` | `1` | — | Whether damage is applied during warmup. |
@@ -156,12 +158,15 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `g_ospmode` | `0` | ARCHIVE | Snaps/rounds the player's origin to integer precision for entity-state linking and antilag history, instead of WolfPro's normal float-precision origin — affects hit-detection precision. |
 | `g_preciseBodyBox` | `1` | — | Enables a more precise per-body-part capsule hitbox model versus the legacy single bounding box. |
 | `g_preciseHeadHitbox` | `1` | ARCHIVE | Enables the tag-based precise headshot hitbox instead of a bounding-box approximation. |
+| `g_preciseSpreadScale` | `0.85` | ARCHIVE | Multiplier applied to all hitscan weapon spread when `g_preciseBodyBox` is enabled, tightening the aim cone to compensate for the precise capsule model's smaller hit area (no arm capsules, no oblique-angle silhouette bonus versus the old full-body box). Tune alongside `g_capsuleScale`. |
 | `g_rocketDamageMultiplier` | `0.34` | ARCHIVE | Multiplier applied to rocket damage dealt to other players; the rocket launcher is only obtainable when `g_rocketMode` is enabled. |
 | `g_rocketMidairInstagib` | `1` | ARCHIVE | Instantly kills a target hit by rocket splash while airborne (with lethal-adjacent damage); the rocket launcher is only obtainable when `g_rocketMode` is enabled. |
 | `g_rocketMode` | `0` | SYSTEMINFO | Alternate rocket-launcher physics/handling mode. |
 | `g_showHeadshotRatio` | `0` | — | Toggles display of a player's headshot-percentage stat. |
 | `g_smoothClients` | `1` | — | Extrapolates other players' movement between snapshots for smoother rendering. |
-| `g_spreadAddSmg` | `24` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten per-shot aim-spread increase base (a random 0-9 is still added on top each shot). |
+| `g_spreadAddPistol` | `20` | ARCHIVE\|SERVERINFO | Luger/Colt per-shot aim-spread increase base. |
+| `g_spreadAddSmg` | `24` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten per-shot aim-spread increase base. |
+| `g_spreadAddSmgRand` | `10` | ARCHIVE\|SERVERINFO | Upper bound (exclusive) of the random jitter added on top of `g_spreadAddSmg` each shot; `0` disables the jitter. |
 | `g_spreadScaleSmg` | `0.5` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten aim-spread recovery-speed scale (lower = faster recovery/tighter spread). |
 | `g_stats_curl_submit` | `0` | ARCHIVE | Enables curl-based automatic submission of end-of-match stats to a remote API. |
 | `g_stats_curl_submit_URL` | `https://rtcwproapi.donkanator.com/submit` | ARCHIVE | Target URL for stats submission. |

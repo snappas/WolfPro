@@ -425,7 +425,7 @@ void SVC_GameCompleteStatus( const netadr_t *from ) {
 	status[0] = 0;
 	statusLength = 0;
 
-	for ( i = 0 ; i < sv_maxclients->integer ; i++ ) {
+	for ( i = 0 ; i < sv.maxclients ; i++ ) {
 		cl = &svs.clients[i];
 		if ( cl->state >= CS_CONNECTED ) {
 			ps = SV_GameClientNum( i );
