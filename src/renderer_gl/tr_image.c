@@ -864,7 +864,7 @@ image_t *R_CreateImage( const char *name, const byte *pic, int width, int height
 	}
 
 	if ( tr.numImages == MAX_DRAWIMAGES ) {
-		ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit\n" );
+		ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit (%d) registering \"%s\"", MAX_DRAWIMAGES, name );
 	}
 
 	// Ridah
@@ -3309,7 +3309,7 @@ qboolean R_TouchImage( image_t *inImage ) {
 		if ( bImage == inImage ) {
 			// add it to the current images
 			if ( tr.numImages == MAX_DRAWIMAGES ) {
-				ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit\n" );
+				ri.Error( ERR_DROP, "R_TouchImage: MAX_DRAWIMAGES hit (%d) restoring \"%s\"", MAX_DRAWIMAGES, inImage->imgName );
 			}
 
 			tr.images[tr.numImages] = bImage;
@@ -3471,7 +3471,7 @@ image_t *R_FindCachedImage( const char *name, int hash ) {
 		if ( !Q_stricmp( name, bImage->imgName ) ) {
 			// add it to the current images
 			if ( tr.numImages == MAX_DRAWIMAGES ) {
-				ri.Error( ERR_DROP, "R_CreateImage: MAX_DRAWIMAGES hit\n" );
+				ri.Error( ERR_DROP, "R_FindCachedImage: MAX_DRAWIMAGES hit (%d) restoring \"%s\"", MAX_DRAWIMAGES, name );
 			}
 
 			R_TouchImage( bImage );
@@ -3526,7 +3526,7 @@ void R_FindFreeTexnum( image_t *inImage ) {
 		inImage->texnum = 1024 + i;
 		texnumImages[i] = inImage;
 	} else {
-		ri.Error( ERR_DROP, "R_FindFreeTexnum: MAX_DRAWIMAGES hit\n" );
+		ri.Error( ERR_DROP, "R_FindFreeTexnum: MAX_DRAWIMAGES hit (%d) allocating texnum for \"%s\"", max, inImage->imgName );
 	}
 }
 

@@ -123,7 +123,7 @@ ammotable_t ammoTable[] = {
 	{   15,             1,      15,     1000,   DELAY_THROW,    1600,   0,      0,      MOD_GRENADE_LAUNCHER,	1		},  //	WP_GRENADE_LAUNCHER		// 6
 	{   5,              1,      1,      1000,   750,			2000,   0,      0,		MOD_PANZERFAUST,		4		},  //	WP_PANZERFAUST			// 7	// DHM - Nerve :: updated delay so prediction is correct
 //	{	MAX_AMMO_VENOM,	1,		500,	3000,	750,			30,		5000,	200,	MOD_VENOM,				4		},	//	WP_VENOM				// -
-	{   MAX_AMMO_VENOM, 1,      500,    3000,   750,            45,     5000,   200,    MOD_VENOM,				4		},  //	WP_VENOM				// 8	// JPW NOTE: changed next_shot 50->45 to genlock firing to every server frame (fire rate shouldn't be framerate dependent now)
+	{   MAX_AMMO_VENOM, 1,      500,    3000,   750,            45,     1350,   200,    MOD_VENOM,				4		},  //	WP_VENOM				// 8	// JPW NOTE: changed next_shot 50->45 to genlock firing to every server frame (fire rate shouldn't be framerate dependent now)
 	{   200,            1,      200,    1000,   DELAY_LOW,      50,     0,      0,      MOD_FLAMETHROWER,		1		},  //	WP_FLAMETHROWER			// 9 // JPW NOTE: changed maxclip for MP 500->150
 	{   300,            1,      300,    1000,   DELAY_LOW,      0,      0,      0,      MOD_TESLA,				1		},  //	WP_TESLA				// 10
 	{   50,             1,      50,     1000,   DELAY_LOW,      1200,   0,      0,      MOD_SPEARGUN,			4		},  //	WP_SPEARGUN				// 11

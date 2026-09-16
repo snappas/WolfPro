@@ -2855,7 +2855,7 @@ void CheckVote( void ) {
 		}
 
 	}
-	if ( !level.voteTime ) {
+	if ( !level.voteTime || level.time - level.voteTime < 1000 ) {
 		return;
 	}
 	if ( level.time - level.voteTime >= VOTE_TIME ) {
