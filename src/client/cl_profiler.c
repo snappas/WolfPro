@@ -429,11 +429,54 @@ static qboolean Timeline_FindFrameStartBefore( profThread_t *t, uint32_t count, 
 	return found;
 }
 
+// Raw order is startup-racy (pin "Main" to row 0) and gains a stale slot per
+// name each thread restart (e.g. in_raw) -- keep only each name's newest.
+static int32_t Timeline_BuildVisibleThreadList( profThread_t *outThreads[PROF_MAX_THREADS] ) {
+	int32_t rawCount = Prof_GetThreadCount();
+	int32_t visibleCount = 0;
+	int32_t i, j;
+	int32_t mainIndex = -1;
+
+	for ( i = 0; i < rawCount; i++ ) {
+		profThread_t *t = Prof_GetThread( i );
+		qboolean supersededByLater = qfalse;
+
+		if ( !t ) {
+			continue;
+		}
+		for ( j = i + 1; j < rawCount; j++ ) {
+			profThread_t *later = Prof_GetThread( j );
+			if ( later && !strcmp( later->name, t->name ) ) {
+				supersededByLater = qtrue;
+				break;
+			}
+		}
+		if ( supersededByLater ) {
+			continue;
+		}
+
+		if ( !strcmp( t->name, "Main" ) ) {
+			mainIndex = visibleCount;
+		}
+		outThreads[visibleCount++] = t;
+	}
+
+	if ( mainIndex > 0 ) {
+		profThread_t *tmp = outThreads[0];
+		outThreads[0] = outThreads[mainIndex];
+		outThreads[mainIndex] = tmp;
+	}
+
+	return visibleCount;
+}
+
+
 static void DrawTimelineTab( void ) {
 	ImVec2 origin;
 	ImVec2 avail;
 	ImDrawList *drawList;
-	int32_t threadCount = Prof_GetThreadCount();
+	profThread_t *visibleThreads[PROF_MAX_THREADS];
+	int32_t threadCount = Timeline_BuildVisibleThreadList( visibleThreads );
 	int32_t threadIndex;
 	int32_t frameCount = Prof_GetFrameCount();
 	const float boxHeight = 18.0f;
@@ -590,7 +633,7 @@ static void DrawTimelineTab( void ) {
 	int32_t frameStartCount = 0;
 
 	if ( threadCount > 0 ) {
-		profThread_t *mainThread = Prof_GetThread( 0 );
+		profThread_t *mainThread = visibleThreads[0];
 
 		if ( mainThread ) {
 			uint32_t evCount = mainThread->eventWriteIndex < PROF_MAX_EVENTS ? mainThread->eventWriteIndex : PROF_MAX_EVENTS;
@@ -729,7 +772,7 @@ static void DrawTimelineTab( void ) {
 	}
 
 	for ( threadIndex = 0; threadIndex < threadCount; threadIndex++ ) {
-		profThread_t *t = Prof_GetThread( threadIndex );
+		profThread_t *t = visibleThreads[threadIndex];
 		uint32_t count;
 		uint32_t i;
 		float rowY = origin.y + threadIndex * perThreadHeight;

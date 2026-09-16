@@ -368,6 +368,18 @@ void CG_ParseServerinfo( void ) {
 	info = CG_ConfigString( CS_SERVERINFO );
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	cgs.antilag = atoi( Info_ValueForKey( info, "g_antilag" ) );
+	cgs.dmgFeedbackScaleFullHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleFullHealth" ) );
+	cgs.dmgFeedbackScaleLowHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleLowHealth" ) );
+	cgs.dmgFeedbackFloor = atof( Info_ValueForKey( info, "g_dmgFeedbackFloor" ) );
+	cgs.dmgFeedbackCeiling = atof( Info_ValueForKey( info, "g_dmgFeedbackCeiling" ) );
+	{
+		const char *camShakeScaleStr = Info_ValueForKey( info, "g_camShakeScale" );
+		const char *camShakeDurationStr = Info_ValueForKey( info, "g_camShakeDuration" );
+		// older demos/servers predate these keys - default to the neutral 1.0 multiplier
+		// so camera shake still behaves as it always did, instead of vanishing to 0
+		cgs.camShakeScale = camShakeScaleStr[0] ? atof( camShakeScaleStr ) : 1.0f;
+		cgs.camShakeDuration = camShakeDurationStr[0] ? atof( camShakeDurationStr ) : 1.0f;
+	}
 	if ( !cgs.localServer ) {
 		trap_Cvar_Set( "g_gametype", va( "%i", cgs.gametype ) );
 		trap_Cvar_Set( "g_antilag", va( "%i", cgs.antilag ) );
@@ -388,6 +400,10 @@ void CG_ParseServerinfo( void ) {
 	trap_Cvar_Set( "g_engineerChargeTime",Info_ValueForKey( info,"g_engineerChargeTime" ) );
 	trap_Cvar_Set( "g_soldierChargeTime",Info_ValueForKey( info,"g_soldierChargeTime" ) );
 	trap_Cvar_Set( "g_LTChargeTime",Info_ValueForKey( info,"g_LTChargeTime" ) );
+	trap_Cvar_Set( "g_spreadScaleSmg",Info_ValueForKey( info,"g_spreadScaleSmg" ) );
+	trap_Cvar_Set( "g_spreadAddSmg",Info_ValueForKey( info,"g_spreadAddSmg" ) );
+	trap_Cvar_Set( "g_spreadAddSmgRand",Info_ValueForKey( info,"g_spreadAddSmgRand" ) );
+	trap_Cvar_Set( "g_spreadAddPistol",Info_ValueForKey( info,"g_spreadAddPistol" ) );
 	trap_Cvar_Set( "g_redlimbotime",Info_ValueForKey( info,"g_redlimbotime" ) );
 	// DHM - TEMP FIX
 	cg_redlimbotime.integer = atoi( Info_ValueForKey( info,"g_redlimbotime" ) );

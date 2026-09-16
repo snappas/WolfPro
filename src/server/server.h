@@ -216,7 +216,6 @@ typedef struct client_s {
 	clientSnapshot_t frames[PACKET_BACKUP];     // updates can be delta'd from here
 	int ping;
 	int rate;                           // bytes / second
-	int snapshotMsec;                   // requests a snapshot every snapshotMsec unless rate choked
 	int pureAuthentic;
 	qboolean gotCP;  // TTimo - additional flag to distinguish between a bad pure checksum, and no cp command at all
 	netchan_t netchan;
@@ -334,14 +333,12 @@ extern cvar_t  *sv_killserver;
 extern cvar_t  *sv_mapname;
 extern cvar_t  *sv_mapChecksum;
 extern cvar_t  *sv_serverid;
-extern cvar_t  *sv_maxRate;
 extern cvar_t  *sv_minPing;
 extern cvar_t  *sv_maxPing;
 extern cvar_t  *sv_gametype;
 extern cvar_t  *sv_pure;
 extern cvar_t  *sv_floodProtect;
 extern cvar_t  *sv_allowAnonymous;
-extern cvar_t  *sv_lanForceRate;
 extern cvar_t  *sv_onlyVisibleClients;
 
 extern cvar_t  *sv_minUserCmdInterval;
@@ -364,6 +361,8 @@ extern	cvar_t	*sv_dlRate;
 extern	cvar_t	*sv_referencedPakNames;
 
 extern	cvar_t *sv_levelTimeReset;
+
+extern cvar_t *sv_dropClientOnOverflow; // drop client instead of sending a cleared/corrupt message when a snapshot overflows MAX_MSGLEN
 
 
 //===========================================================

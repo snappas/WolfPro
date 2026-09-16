@@ -61,8 +61,6 @@ int		CPU_Flags = 0;
 
 FILE *debuglogfile;
 static fileHandle_t logfile;
-fileHandle_t com_journalFile;               // events are written here
-fileHandle_t com_journalDataFile;           // config files are written here
 
 cvar_t  *com_viewlog;
 cvar_t  *com_speeds;
@@ -71,7 +69,6 @@ cvar_t  *com_dedicated;
 cvar_t  *com_timescale;
 cvar_t  *com_fixedtime;
 cvar_t  *com_dropsim;       // 0.0 to 1.0, simulated packet drops
-cvar_t  *com_journal;
 cvar_t  *com_maxfps;
 cvar_t  *com_timedemo;
 cvar_t  *com_sv_running;
@@ -112,6 +109,7 @@ int64_t	com_nextTargetTimeUS = INT64_MIN;
 
 qboolean com_errorEntered = qfalse;
 qboolean com_fullyInitialized = qfalse;
+volatile qboolean com_zoneInitialized = qfalse; // set once mainzone exists -- other threads must not Z_Malloc before this
 
 // renderer window states
 qboolean	gw_minimized = qfalse; // this will be always true for dedicated servers
@@ -1155,6 +1153,13 @@ void Z_Free( void *ptr )
 	block->id = ZONE_ID;
 #endif
 
+#if defined( __SANITIZE_ADDRESS__ )
+	// Matches the Z_TagMalloc bypass above -- this block was malloc()'d individually,
+	// so free it directly instead of feeding it back into the internal free-list.
+	free( block );
+	return;
+#endif
+
 	other = block->prev;
 	if ( other->tag == TAG_FREE ) {
 #ifdef USE_MULTI_SEGMENT
@@ -1248,7 +1253,9 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 #endif
 	memblock_t	*base;
 	memzone_t	*zone;
+#if !defined( __SANITIZE_ADDRESS__ )
 	size_t		extra;
+#endif
 
 	if ( size > INT_MAX ) {
 		Com_Error( ERR_FATAL, "Z_TagMalloc: %"PRIz"u > INT_MAX", size );
@@ -1281,6 +1288,22 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 
 	size = PAD( size, sizeof( intptr_t ) );		// align to 32/64 bit boundary
 
+#if defined( __SANITIZE_ADDRESS__ )
+	// The multi-segment allocator below carves individual blocks out of a handful of
+	// large malloc()'d segments (see NewBlock) -- ASan only sees those outer segment
+	// allocations, not this allocator's own internal free-list bookkeeping, so a real
+	// overflow inside one block goes undetected until something later walks corrupted
+	// free-list links. Give every allocation its own real malloc() instead so ASan's
+	// redzones catch the actual out-of-bounds write immediately.
+	base = malloc( size );
+	if ( base == NULL ) {
+		Com_Error( ERR_FATAL, "Z_Malloc: failed on allocation of %u bytes from the %s zone",
+			size, zone->name );
+		return NULL;
+	}
+	base->size = size;
+	base->prev = base->next = NULL;
+#else
 #ifdef USE_MULTI_SEGMENT
 	base = SearchFree( zone, size );
 
@@ -1328,6 +1351,7 @@ void *Z_TagMalloc( size_t size, memtag_t tag ) {
 #ifndef USE_MULTI_SEGMENT
 	zone->rover = base->next;	// next allocation will start looking here
 #endif
+#endif // __SANITIZE_ADDRESS__
 	zone->used += base->size;
 
 	base->tag = tag;			// no longer a free block
@@ -1888,6 +1912,8 @@ static void Com_InitZoneMemory( void ) {
 		Com_Error( ERR_FATAL, "Zone data failed to allocate %i megs", mainZoneSize / (1024*1024) );
 	}
 	Z_Init( mainzone, mainZoneSize, "main");
+
+	com_zoneInitialized = qtrue;
 }
 
 
@@ -2328,10 +2354,8 @@ void Hunk_ClearTempMemory( void ) {
 /*
 ===================================================================
 
-EVENTS AND JOURNALING
+EVENTS
 
-In addition to these events, .cfg files are also copied to the
-journaled file
 ===================================================================
 */
 
@@ -2342,86 +2366,6 @@ static int com_pushedEventsHead = 0;
 static int com_pushedEventsTail = 0;
 // bk001129 - static
 static sysEvent_t com_pushedEvents[MAX_PUSHED_EVENTS];
-
-/*
-=================
-Com_InitJournaling
-=================
-*/
-void Com_InitJournaling( void ) {
-	Com_StartupVariable( "journal" );
-	com_journal = Cvar_Get( "journal", "0", CVAR_INIT );
-	if ( !com_journal->integer ) {
-		return;
-	}
-
-	if ( com_journal->integer == 1 ) {
-#ifdef __MACOS__    //DAJ MacOS file typing
-		{
-			extern _MSL_IMP_EXP_C long _fcreator, _ftype;
-			_ftype = 'TEXT';
-			_fcreator = 'WlfM';
-		}
-#endif
-		Com_Printf( "Journaling events\n" );
-		com_journalFile = FS_FOpenFileWrite( "journal.dat" );
-		com_journalDataFile = FS_FOpenFileWrite( "journaldata.dat" );
-	} else if ( com_journal->integer == 2 ) {
-		Com_Printf( "Replaying journaled events\n" );
-		FS_FOpenFileRead( "journal.dat", &com_journalFile, qtrue );
-		FS_FOpenFileRead( "journaldata.dat", &com_journalDataFile, qtrue );
-	}
-
-	if ( !com_journalFile || !com_journalDataFile ) {
-		Cvar_Set( "com_journal", "0" );
-		com_journalFile = 0;
-		com_journalDataFile = 0;
-		Com_Printf( "Couldn't open journal files\n" );
-	}
-}
-
-/*
-=================
-Com_GetRealEvent
-=================
-*/
-sysEvent_t  Com_GetRealEvent( void ) {
-	int r;
-	sysEvent_t ev;
-
-	// either get an event from the system or the journal file
-	if ( com_journal->integer == 2 ) {
-		r = FS_Read( &ev, sizeof( ev ), com_journalFile );
-		if ( r != sizeof( ev ) ) {
-			Com_Error( ERR_FATAL, "Error reading from journal file" );
-		}
-		if ( ev.evPtrLength ) {
-			ev.evPtr = Z_Malloc( ev.evPtrLength );
-			r = FS_Read( ev.evPtr, ev.evPtrLength, com_journalFile );
-			if ( r != ev.evPtrLength ) {
-				Com_Error( ERR_FATAL, "Error reading from journal file" );
-			}
-		}
-	} else {
-		ev = Sys_GetEvent();
-
-		// write the journal value out if needed
-		if ( com_journal->integer == 1 ) {
-			r = FS_Write( &ev, sizeof( ev ), com_journalFile );
-			if ( r != sizeof( ev ) ) {
-				Com_Error( ERR_FATAL, "Error writing to journal file" );
-			}
-			if ( ev.evPtrLength ) {
-				r = FS_Write( ev.evPtr, ev.evPtrLength, com_journalFile );
-				if ( r != ev.evPtrLength ) {
-					Com_Error( ERR_FATAL, "Error writing to journal file" );
-				}
-			}
-		}
-	}
-
-	return ev;
-}
 
 
 /*
@@ -2482,7 +2426,7 @@ sysEvent_t  Com_GetEvent( void ) {
 		com_pushedEventsTail++;
 		return com_pushedEvents[ ( com_pushedEventsTail - 1 ) & ( MAX_PUSHED_EVENTS - 1 ) ];
 	}
-	return Com_GetRealEvent();
+	return Sys_GetCheapEvent();
 }
 
 /*
@@ -2621,7 +2565,8 @@ int Com_EventLoop( void ) {
 ================
 Com_Milliseconds
 
-Can be used for profiling, but will be journaled accurately
+Drains pending system events first, so the time returned is the one that
+came with the last event rather than a fresh sample.
 ================
 */
 int Com_Milliseconds( void ) {
@@ -2630,7 +2575,7 @@ int Com_Milliseconds( void ) {
 	// get events and push them until we get a null event with the current time
 	do {
 
-		ev = Com_GetRealEvent();
+		ev = Sys_GetCheapEvent();
 		if ( ev.evType != SE_NONE ) {
 			Com_PushEvent( &ev );
 		}
@@ -3276,8 +3221,6 @@ void Com_Init( char *commandLine ) {
 	CL_InitKeyCommands();
 
 	FS_InitFilesystem();
-
-	Com_InitJournaling();
 
 	// DHM - Nerve
 #ifndef UPDATE_SERVER
@@ -3992,11 +3935,6 @@ void Com_Shutdown( void ) {
 	if ( logfile ) {
 		FS_FCloseFile( logfile );
 		logfile = 0;
-	}
-
-	if ( com_journalFile ) {
-		FS_FCloseFile( com_journalFile );
-		com_journalFile = 0;
 	}
 
 }

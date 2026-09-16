@@ -2290,7 +2290,7 @@ void PM_AdjustAimSpreadScale( void ) {
 		wpnScale = 0.5f;
 		break;
 	case WP_MP40:
-		wpnScale = 0.6f;        // 2 handed, but not as long as mauser, so harder to keep aim
+		wpnScale = pm->aimSpreadSmg;        // 2 handed, but not as long as mauser, so harder to keep aim
 		break;
 //----(SA)	added
 	case WP_BAR:
@@ -2303,10 +2303,10 @@ void PM_AdjustAimSpreadScale( void ) {
 		wpnScale = 0.6f;
 		break;
 	case WP_THOMPSON:
-		wpnScale = 0.6f;
+		wpnScale = pm->aimSpreadSmg;
 		break;
 	case WP_STEN:
-		wpnScale = 0.6f;
+		wpnScale = pm->aimSpreadSmg;
 		break;
 		//case WP_PANZERFAUST:
 		//case WP_ROCKET_LAUNCHER:
@@ -3065,12 +3065,12 @@ static void PM_Weapon( void ) {
 
 	case WP_LUGER:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = 35;
+		aimSpreadScaleAdd = pm->aimSpreadPistolAdd;
 		break;
 
 	case WP_COLT:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = 20;
+		aimSpreadScaleAdd = pm->aimSpreadPistolAdd;
 		break;
 
 //----(SA)	added
@@ -3121,16 +3121,18 @@ static void PM_Weapon( void ) {
 
 	case WP_FG42:
 	case WP_FG42SCOPE:
-
-	case WP_MP40:
-	case WP_THOMPSON:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
 		aimSpreadScaleAdd = 15 + rand() % 10;   // (SA) new values for DM
 		break;
 
+	case WP_MP40:
+	case WP_THOMPSON:
 	case WP_STEN:
 		addTime = ammoTable[pm->ps->weapon].nextShotTime;
-		aimSpreadScaleAdd = 15 + rand() % 10;   // (SA) new values for DM
+		aimSpreadScaleAdd = pm->aimSpreadSmgAdd;
+		if ( pm->aimSpreadSmgAddRand > 0 ) {
+			aimSpreadScaleAdd += rand() % pm->aimSpreadSmgAddRand;
+		}
 		break;
 
 	case WP_SILENCER:

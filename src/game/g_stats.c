@@ -1258,7 +1258,7 @@ void G_matchInfoDump( unsigned int dwDumpType ) {
 		}
 	}
 
-	if ( dwDumpType == EOM_MATCHINFO && g_wtvdemos.integer ) {
+	if ( dwDumpType == EOM_MATCHINFO && g_wtvdemos.integer && g_wtvSupported ) {
 		WTV_CaptureMatchInfo();
 
 		// Only worth building/sending when a webhook is actually configured —

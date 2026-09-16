@@ -375,12 +375,113 @@ static int sky_texorder[6] = {0,2,1,3,4,5};
 static vec3_t s_skyPoints[SKY_SUBDIVISIONS + 1][SKY_SUBDIVISIONS + 1];
 static float s_skyTexCoords[SKY_SUBDIVISIONS + 1][SKY_SUBDIVISIONS + 1][2];
 
+/*
+================
+RB_CreateSkyBoxStages
+
+Sky faces bind raw images, not a shader stage - this makes one persistent
+stage per box via FinishShader()'s own alloc/pipeline path, sharing its lifecycle.
+================
+*/
+void RB_CreateSkyBoxStages( shader_t *skyShader ) {
+	shader_t pipelineShader;
+
+	skyShader->sky.outerStage = ri.Hunk_Alloc( sizeof( shaderStage_t ), h_low );
+	memset( skyShader->sky.outerStage, 0, sizeof( shaderStage_t ) );
+	skyShader->sky.outerStage->active = qtrue;
+	skyShader->sky.outerStage->bundle[0].tcGen = TCGEN_TEXTURE;
+	skyShader->sky.outerStage->rgbGen = CGEN_IDENTITY_LIGHTING;
+	skyShader->sky.outerStage->alphaGen = AGEN_IDENTITY;
+	skyShader->sky.outerStage->stateBits = 0;
+
+	skyShader->sky.innerStage = ri.Hunk_Alloc( sizeof( shaderStage_t ), h_low );
+	memset( skyShader->sky.innerStage, 0, sizeof( shaderStage_t ) );
+	skyShader->sky.innerStage->active = qtrue;
+	skyShader->sky.innerStage->bundle[0].tcGen = TCGEN_TEXTURE;
+	skyShader->sky.innerStage->rgbGen = CGEN_IDENTITY_LIGHTING;
+	skyShader->sky.innerStage->alphaGen = AGEN_IDENTITY;
+	skyShader->sky.innerStage->stateBits = GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA;
+
+	memset( &pipelineShader, 0, sizeof( pipelineShader ) );
+	Q_strncpyz( pipelineShader.name, "<skybox>", sizeof( pipelineShader.name ) );
+	pipelineShader.cullType = CT_TWO_SIDED;
+
+	pipelineShader.stages[0] = skyShader->sky.outerStage;
+	RB_CreateGraphicsPipeline( &pipelineShader );
+
+	pipelineShader.stages[0] = skyShader->sky.innerStage;
+	RB_CreateGraphicsPipeline( &pipelineShader );
+}
+
+/*
+================
+RB_DrawSkyBoxFace
+
+Builds one face into tess, then draws it through the same
+RB_StageIteratorGeneric() path every shader stage uses - not a bespoke draw.
+================
+*/
+static void RB_DrawSkyBoxFace( shaderStage_t *stage, struct image_s *image, const int mins[2], const int maxs[2] ) {
+	shaderStage_t *faceStages[MAX_SHADER_STAGES];
+	int s, t;
+	int tHeight, sWidth;
+
+	tHeight = maxs[1] - mins[1] + 1;
+	sWidth = maxs[0] - mins[0] + 1;
+
+	if ( tHeight < 2 || sWidth < 2 ) {
+		return;
+	}
+
+	RB_BeginSurface( tess.shader, tess.fogNum );
+
+	for ( t = mins[1] + HALF_SKY_SUBDIVISIONS; t <= maxs[1] + HALF_SKY_SUBDIVISIONS; t++ )
+	{
+		for ( s = mins[0] + HALF_SKY_SUBDIVISIONS; s <= maxs[0] + HALF_SKY_SUBDIVISIONS; s++ )
+		{
+			VectorAdd( s_skyPoints[t][s], backEnd.viewParms.or.origin, tess.xyz[tess.numVertexes] );
+			tess.xyz[tess.numVertexes][3] = 1;
+
+			tess.texCoords[tess.numVertexes][0][0] = s_skyTexCoords[t][s][0];
+			tess.texCoords[tess.numVertexes][0][1] = s_skyTexCoords[t][s][1];
+
+			tess.numVertexes++;
+		}
+	}
+
+	for ( t = 0; t < tHeight - 1; t++ )
+	{
+		for ( s = 0; s < sWidth - 1; s++ )
+		{
+			tess.indexes[tess.numIndexes++] = s + t * sWidth;
+			tess.indexes[tess.numIndexes++] = s + ( t + 1 ) * sWidth;
+			tess.indexes[tess.numIndexes++] = s + 1 + t * sWidth;
+
+			tess.indexes[tess.numIndexes++] = s + ( t + 1 ) * sWidth;
+			tess.indexes[tess.numIndexes++] = s + 1 + ( t + 1 ) * sWidth;
+			tess.indexes[tess.numIndexes++] = s + 1 + t * sWidth;
+		}
+	}
+
+	stage->bundle[0].image[0] = image;
+
+	memset( faceStages, 0, sizeof( faceStages ) );
+	faceStages[0] = stage;
+	tess.xstages = faceStages;
+
+	RB_StageIteratorGeneric();
+
+	// faceStages is local; restore tess.xstages so it doesn't dangle for whatever
+	// runs next (e.g. the cloud-layer pass, which reads it without calling RB_BeginSurface)
+	tess.xstages = tess.shader->stages;
+}
+
 static void DrawSkySide( struct image_s *image, const int mins[2], const int maxs[2] ) {
-	//@TODO
+	RB_DrawSkyBoxFace( tess.shader->sky.outerStage, image, mins, maxs );
 }
 
 static void DrawSkySideInner( struct image_s *image, const int mins[2], const int maxs[2] ) {
-	//@TODO
+	RB_DrawSkyBoxFace( tess.shader->sky.innerStage, image, mins, maxs );
 }
 
 static void DrawSkyBox( shader_t *shader ) {
@@ -906,9 +1007,7 @@ void RB_StageIteratorSky( void ) {
 
 	// draw the outer skybox
 	if ( tess.shader->sky.outerbox[0] && tess.shader->sky.outerbox[0] != tr.defaultImage ) {
-		//@TODO translate position for skybox backEnd.viewParms.or.origin
 		DrawSkyBox( tess.shader );
-
 	}
 
 	// generate the vertexes for all the clouds, which will be drawn
@@ -920,9 +1019,7 @@ void RB_StageIteratorSky( void ) {
 	// draw the inner skybox
 	// Rafael - drawing inner skybox
 	if ( tess.shader->sky.innerbox[0] && tess.shader->sky.innerbox[0] != tr.defaultImage ) {
-		//@TODO translate position for skybox backEnd.viewParms.or.origin
 		DrawSkyBoxInner( tess.shader );
-
 	}
 	// Rafael - end
 

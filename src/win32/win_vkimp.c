@@ -86,7 +86,7 @@ static qbool VKW_CreateWindow()
 		memset( &wc, 0, sizeof( wc ) );
 
 		wc.style         = CS_OWNDC;
-		wc.lpfnWndProc   = MainWndProc;
+		wc.lpfnWndProc   = MWT_MainWndProc;
 		wc.cbClsExtra    = 0;
 		wc.cbWndExtra    = 0;
 		wc.hInstance     = g_wv.hInstance;
@@ -155,16 +155,22 @@ static qbool VKW_CreateWindow()
 		const int x = monRect.left + dx;
 		const int y = monRect.top + dy;
 
-		g_wv.duringCreateWindow = qtrue;
-		g_wv.hWnd = CreateWindowEx( exstyle, CLIENT_WINDOW_TITLE"-vk", " " CLIENT_WINDOW_TITLE"-vk", style,
-				x, y, w, h, NULL, NULL, g_wv.hInstance, NULL );
-		g_wv.duringCreateWindow = qfalse;
+		{
+			windowCreateParams_t params;
+			params.exStyle = exstyle;
+			params.className = CLIENT_WINDOW_TITLE"-vk";
+			params.windowName = " " CLIENT_WINDOW_TITLE"-vk";
+			params.style = style;
+			params.x = x; params.y = y; params.w = w; params.h = h;
+			params.hInstance = g_wv.hInstance;
+
+			g_wv.duringCreateWindow = qtrue;
+			WIN_RequestWindow( &params );
+			g_wv.duringCreateWindow = qfalse;
+		}
 
 		if ( !g_wv.hWnd )
 			ri.Error( ERR_FATAL, "VKW_CreateWindow() - Couldn't create window" );
-
-		ShowWindow( g_wv.hWnd, SW_SHOW );
-		UpdateWindow( g_wv.hWnd );
 
 		// the window Windows actually hands back can differ from the requested
 		// client size (work-area clipping, border/DPI rounding); CreateSwapChain
@@ -186,7 +192,6 @@ static qbool VKW_CreateWindow()
 	glConfig.stencilBits = 8;
 
 	SetForegroundWindow( g_wv.hWnd );
-	SetFocus( g_wv.hWnd );
 
 	return qtrue;
 }
@@ -242,8 +247,7 @@ void Sys_Vulkan_Shutdown(void)
 	if ( g_wv.hWnd ) {
 		ri.Printf( PRINT_ALL, "...destroying window\n" );
 		ShowWindow( g_wv.hWnd, SW_HIDE );
-		DestroyWindow( g_wv.hWnd );
-		g_wv.hWnd = NULL;
+		WIN_RequestWindowDestroy();
 		vkw_state.pixelFormatSet = qfalse;
 	}
 

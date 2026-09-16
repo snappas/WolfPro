@@ -23,6 +23,13 @@ static profiler_t prof;
 static PROF_THREAD_LOCAL profThread_t *prof_currentThread = NULL;
 
 void Prof_Init( void ) {
+	static qboolean initialized = qfalse;
+
+	if ( initialized ) {
+		return;
+	}
+	initialized = qtrue;
+
 	Com_Memset( &prof, 0, sizeof( prof ) );
 	prof.currentFrameIndex = -1; // sentinel: no frame started yet, distinct from slot 0
 }

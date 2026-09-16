@@ -1544,6 +1544,20 @@ extern vmCvar_t g_swapteams;
 //Gordon
 extern vmCvar_t g_antilag;
 
+extern vmCvar_t g_dmgFeedbackScaleFullHealth;
+extern vmCvar_t g_dmgFeedbackScaleLowHealth;
+extern vmCvar_t g_dmgFeedbackFloor;
+extern vmCvar_t g_dmgFeedbackCeiling;
+extern vmCvar_t g_dmgFeedbackLegacy;
+
+extern vmCvar_t g_camShakeScale;
+extern vmCvar_t g_camShakeDuration;
+
+extern vmCvar_t g_spreadScaleSmg;
+extern vmCvar_t g_spreadAddSmg;
+extern vmCvar_t g_spreadAddSmgRand;
+extern vmCvar_t g_spreadAddPistol;
+
 extern vmCvar_t g_dbgRevive;
 
 extern vmCvar_t team_maxplayers;
@@ -1580,6 +1594,7 @@ extern vmCvar_t g_wtvdemos;
 extern vmCvar_t g_wtvDiscordWebhookURL;
 extern vmCvar_t g_wtvDiscordRetryCount;
 extern vmCvar_t g_wtvDiscordRetryDelay;
+extern qboolean g_wtvSupported;    // set from G_InitGame; qfalse on an engine build that predates the WTV_* traps
 
 extern vmCvar_t g_disableDeadBodyFlagGrab;
 extern vmCvar_t g_mapScriptDirectory;
@@ -1605,6 +1620,7 @@ extern vmCvar_t g_debugHitboxes;
 extern vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4;
 
 extern vmCvar_t g_capsuleScale;
+extern vmCvar_t g_preciseSpreadScale;
 
 //omnibot stuff
 extern vmCvar_t g_OmniBotPath;
@@ -1876,6 +1892,8 @@ extern vmCvar_t match_minplayers;
 extern vmCvar_t match_readypercent;
 extern vmCvar_t match_latejoin;
 extern vmCvar_t match_warmupDamage;
+extern vmCvar_t match_teamlock;
+extern vmCvar_t match_teamlockwarmup;
 
 void G_ClientSwap( gclient_t *client );
 void G_matchPrintInfo(char *msg, qboolean printTime);

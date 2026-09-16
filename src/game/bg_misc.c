@@ -170,8 +170,9 @@ ammotable_t ammoTable[] = {
 	{   999,            0,      999,    0,      50,             0,      0,      0,      0,		1					},  //	WP_MEDKIT				// 42
 	{   999,            0,      999,    0,      50,             0,      0,      0,      0,		1					},  //	WP_PLIERS				// 43
 	{   999,            0,      999,    0,      50,             0,      0,      0,      0,		1                   },  //	WP_SMOKE_GRENADE		// 44
-	{   999,            0,      999,    0,      50,             0,      0,      0,      0,		1                   },  //	WP_SMOKE_GRENADE		// 44
+	{   999,            0,      999,    0,      50,             0,      0,      0,      0,		1                   },  //	WP_SMOKE_GRENADE		// 45
 	// -NERVE - SMF
+	{   999,            0,      999,    0,      50,             0,      0,      0,      0,		1                   },  //	WP_BINOCULARS			// 46
 };
 
 
@@ -3991,6 +3992,7 @@ char *eventnames[] = {
 	"EV_GIVEPAGE",
 	"EV_MG42BULLET_HIT_FLESH",
 	"EV_MG42BULLET_HIT_WALL",
+	"EV_DAMAGE_KICK",
 
 	"EV_MAX_EVENTS"
 };

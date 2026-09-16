@@ -32,26 +32,49 @@ If you have questions concerning this license or the applicable additional terms
 #include "../client/client.h"
 #include "win_local.h"
 
+// WinUser.h's NEXTRAWINPUTBLOCK/RAWINPUT_ALIGN macros need QWORD on x64, but
+// no header this project already includes defines it.
+#ifndef QWORD
+typedef unsigned __int64 QWORD;
+#endif
+
 // RTCWPro - raw input begin - source: quake
 // defines
 #define MAX_RI_DEVICE_SIZE 128
-#define INIT_RIBUFFER_SIZE (sizeof(RAWINPUTHEADER)+sizeof(RAWMOUSE))
 
 #define RI_RAWBUTTON_MASK 0x000003E0
 #define RI_INVALID_POS    0x80000000
 
+// Under WOW64, GetRawInputBuffer uses the 64-bit (24-byte) RAWINPUTHEADER,
+// so native RAWINPUT* misreads dwType/hDevice
+#pragma pack(push, 8)
+typedef struct {
+	DWORD  dwType;
+	DWORD  dwSize;
+	UINT64 hDevice;
+	UINT64 wParam;
+} wow64RawInputHeader_t;
+
+typedef struct {
+	wow64RawInputHeader_t header;
+	union {
+		RAWMOUSE    mouse;
+		RAWKEYBOARD keyboard;
+		RAWHID      hid;
+	} data;
+} wow64RawInput_t;
+#pragma pack(pop)
+
+static qboolean s_isWow64;
+
 // raw input dynamic functions
 typedef int 	(WINAPI* pGetRawInputDeviceList)	(OUT PRAWINPUTDEVICELIST pRawInputDeviceList, IN OUT PINT puiNumDevices, IN UINT cbSize);
-typedef int 	(WINAPI* pGetRawInputData)			(IN HRAWINPUT hRawInput, IN UINT uiCommand, OUT LPVOID pData, IN OUT PINT pcbSize, IN UINT cbSizeHeader);
 typedef int 	(WINAPI* pGetRawInputDeviceInfoA)	(IN HANDLE hDevice, IN UINT uiCommand, OUT LPVOID pData, IN OUT PINT pcbSize);
 typedef BOOL(WINAPI* pRegisterRawInputDevices)	(IN PCRAWINPUTDEVICE pRawInputDevices, IN UINT uiNumDevices, IN UINT cbSize);
-typedef int		(WINAPI* pGetLastError)				(void);
 
 pGetRawInputDeviceList		_GRIDL;
-pGetRawInputData			_GRID;
 pGetRawInputDeviceInfoA		_GRIDIA;
 pRegisterRawInputDevices	_RRID;
-pGetLastError				_GLE;
 
 typedef struct
 {
@@ -66,20 +89,19 @@ typedef struct
 } rawmouse_t;
 
 rawmouse_t* rawmice;
-RAWINPUT* raw;
-int			ribuffersize;
 
 static int	rawmicecount;
 
 void		IN_DeRegisterRawMouse(void);
-int			IN_RegisterRawMouse(void);
 // raw input end
 
+// volatile: IN_MouseEvent can touch these from the window thread (only when
+// raw-mouse registration failed, so never concurrently with raw-mouse reads).
 typedef struct {
-	int oldButtonState;
+	volatile int oldButtonState;
 
-	qboolean mouseActive;
-	qboolean mouseInitialized;
+	volatile qboolean mouseActive;
+	volatile qboolean mouseInitialized;
 } WinMouseVars_t;
 
 static WinMouseVars_t s_wmv;
@@ -126,11 +148,12 @@ cvar_t  *in_midiport;
 cvar_t  *in_midichannel;
 cvar_t  *in_mididevice;
 
-cvar_t  *in_mouse;
 cvar_t  *in_joystick;
 cvar_t  *in_joyBallScale;
 cvar_t  *in_debugJoystick;
 cvar_t  *joy_threshold;
+
+static cvar_t *in_raw; // 0 = legacy Win32 input, 1 = raw input (mouse + keyboard)
 
 qboolean in_appactive;
 
@@ -156,10 +179,8 @@ void IN_ShutdownRawMouse(void) {
 	IN_DeRegisterRawMouse();
 
 	Z_Free(rawmice);
-	Z_Free(raw);
 
 	rawmice = NULL;
-	raw = NULL;
 
 	rawmicecount = 0;
 }
@@ -198,26 +219,6 @@ int IN_RawInput_IsRDPMouse(char* cDeviceString)
 	return 1; // is RDP mouse
 }
 
-int IN_RegisterRawMouse(void)
-{
-	// This function registers to receive the WM_INPUT messages
-	RAWINPUTDEVICE Rid; // Register only for mouse messages from wm_input.  
-
-	//register to get wm_input messages
-	Rid.usUsagePage = 0x01;
-	Rid.usUsage = 0x02;
-	Rid.dwFlags = RIDEV_NOLEGACY; // adds HID mouse and also ignores legacy mouse messages
-	Rid.hwndTarget = NULL;
-
-	// Register to receive the WM_INPUT message for any change in mouse (buttons, wheel, and movement will all generate the same message)
-	return (*_RRID)(&Rid, 1, sizeof(Rid));
-}
-
-void IN_DeactivateRawMouse(void)
-{
-	IN_DeRegisterRawMouse();
-}
-
 void IN_RawMouse(int* mx, int* my) {
 	int x;
 
@@ -229,35 +230,6 @@ void IN_RawMouse(int* mx, int* my) {
 		*my += rawmice[x].delta[1];
 
 		rawmice[x].delta[0] = rawmice[x].delta[1] = 0;
-	}
-}
-
-void IN_ActivateRawMouse(void) {
-	HMODULE kernel32;
-	if (!IN_RegisterRawMouse())
-	{
-		Com_Printf("Raw input: unable to register raw input\n");
-		kernel32 = LoadLibrary("kernel32.dll");
-		if (kernel32)
-		{
-			_GLE = (pGetLastError)GetProcAddress(kernel32, "GetLastError");
-			if (_GLE)
-			{
-				int errorCode = (*_GLE)();
-				Com_Printf("Raw input: error code is %i\n", errorCode);
-			}
-			else {
-				Com_Printf("Raw input: function GetLastError could not be registered\n");
-				return;
-			}
-		}
-		else {
-			Com_Printf("Raw input: unable to load kernel32.dll\n");
-			return;
-		}
-		IN_ShutdownRawMouse();
-		Com_Printf("Falling back to Win32 mouse support...\n");
-		Cvar_Set("in_mouse", "1");
 	}
 }
 
@@ -291,12 +263,6 @@ qboolean IN_InitRawMouse(void)
 	if (!_GRIDIA)
 	{
 		Com_Printf("Raw input: function GetRawInputDeviceInfoA could not be registered\n");
-		return qfalse;
-	}
-	_GRID = (pGetRawInputData)GetProcAddress(user32, "GetRawInputData");
-	if (!_GRID)
-	{
-		Com_Printf("Raw input: function GetRawInputData could not be registered\n");
 		return qfalse;
 	}
 
@@ -382,10 +348,6 @@ qboolean IN_InitRawMouse(void)
 	// free the RAWINPUTDEVICELIST
 	Z_Free(pRawInputDeviceList);
 
-	// alloc raw input buffer
-	raw = Z_Malloc(INIT_RIBUFFER_SIZE);
-	ribuffersize = INIT_RIBUFFER_SIZE;
-
 	Com_Printf("Raw input: initialized with %i mice\n", rawmicecount);
 
 	return qtrue; // success
@@ -395,116 +357,238 @@ qboolean IN_InitRawMouse(void)
 // raw input read functions
 //================================
 
-void IN_RawInput_MouseRead(HANDLE in_device_handle) 
-{
-	int i = 0, tbuttons, j;
-	int dwSize;
+/*
+==================
+IT_ProcessRawMouse
 
-	if (!raw || !rawmice || rawmicecount < 1)
-		return; // no thx
+Pushes button/wheel events into the ring buffer; movement deltas accumulate
+into rawmice[], read back by the main thread each frame in IN_Frame.
+==================
+*/
+static void IT_ProcessRawMouse( HANDLE hDevice, RAWMOUSE *mouse, uint64_t *writeIndex, int timestamp ) {
+	int i, j, tbuttons;
 
-	// get raw input
-	if ((*_GRID)((HRAWINPUT)in_device_handle, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER)) == -1)
-	{
-		Com_Printf("Raw input: unable to add to get size of raw input header.\n");
-		return;
-	}
-
-	if (dwSize > ribuffersize)
-	{
-		ribuffersize = dwSize;
-		Z_Free(raw);
-		raw = Z_Malloc(dwSize);
-	}
-
-	if ((*_GRID)((HRAWINPUT)in_device_handle, RID_INPUT, raw, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
-		Com_Printf("Raw input: unable to add to get raw input header.\n");
-		return;
-	}
-
-	// find mouse in our mouse list
-	for (; i < rawmicecount; i++)
-	{
-		if (rawmice[i].rawinputhandle == raw->header.hDevice)
+	for ( i = 0; i < rawmicecount; i++ ) {
+		if ( rawmice[i].rawinputhandle == hDevice )
 			break;
 	}
-	if (i == rawmicecount) // we're not tracking this mouse
+	if ( i == rawmicecount ) // we're not tracking this mouse
 		return;
 
 	// movement
-	if (raw->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)
-	{
-		if (rawmice[i].pos[0] != RI_INVALID_POS)
-		{
-			rawmice[i].delta[0] += raw->data.mouse.lLastX - rawmice[i].pos[0];
-			rawmice[i].delta[1] += raw->data.mouse.lLastY - rawmice[i].pos[1];
+	if ( mouse->usFlags & MOUSE_MOVE_ABSOLUTE ) {
+		if ( rawmice[i].pos[0] != RI_INVALID_POS ) {
+			rawmice[i].delta[0] += mouse->lLastX - rawmice[i].pos[0];
+			rawmice[i].delta[1] += mouse->lLastY - rawmice[i].pos[1];
 		}
-		rawmice[i].pos[0] = raw->data.mouse.lLastX;
-		rawmice[i].pos[1] = raw->data.mouse.lLastY;
-	}
-	else // RELATIVE
-	{
-		rawmice[i].delta[0] += raw->data.mouse.lLastX;
-		rawmice[i].delta[1] += raw->data.mouse.lLastY;
+		rawmice[i].pos[0] = mouse->lLastX;
+		rawmice[i].pos[1] = mouse->lLastY;
+	} else { // RELATIVE
+		rawmice[i].delta[0] += mouse->lLastX;
+		rawmice[i].delta[1] += mouse->lLastY;
 		rawmice[i].pos[0] = RI_INVALID_POS;
 	}
 
-	// RTCWPro - notice extra buttons
 	// buttons
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_1_DOWN)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE1, qtrue, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_1_UP)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE1, qfalse, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_2_DOWN)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE2, qtrue, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_2_UP)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE2, qfalse, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_3_DOWN)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE3, qtrue, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_3_UP)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE3, qfalse, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_4_DOWN)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE4, qtrue, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_4_UP)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE4, qfalse, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_5_DOWN)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE5, qtrue, 0, NULL);
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_BUTTON_5_UP)
-		Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE5, qfalse, 0, NULL);
-
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_1_DOWN )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE1, qtrue );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_1_UP )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE1, qfalse );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_2_DOWN )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE2, qtrue );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_2_UP )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE2, qfalse );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_3_DOWN )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE3, qtrue );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_3_UP )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE3, qfalse );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_4_DOWN )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE4, qtrue );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_4_UP )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE4, qfalse );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_5_DOWN )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE5, qtrue );
+	if ( mouse->usButtonFlags & RI_MOUSE_BUTTON_5_UP )
+		WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE5, qfalse );
 
 	// mouse wheel
-	if (raw->data.mouse.usButtonFlags & RI_MOUSE_WHEEL)
-	{      // If the current message has a mouse_wheel message
-		if ((SHORT)raw->data.mouse.usButtonData > 0)
-		{
-			Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qtrue, 0, NULL);
-			Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MWHEELUP, qfalse, 0, NULL);
+	if ( mouse->usButtonFlags & RI_MOUSE_WHEEL ) {
+		if ( (SHORT)mouse->usButtonData > 0 ) {
+			WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MWHEELUP, qtrue );
+			WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MWHEELUP, qfalse );
 		}
-		if ((SHORT)raw->data.mouse.usButtonData < 0)
-		{
-			Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qtrue, 0, NULL);
-			Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MWHEELDOWN, qfalse, 0, NULL);
+		if ( (SHORT)mouse->usButtonData < 0 ) {
+			WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MWHEELDOWN, qtrue );
+			WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MWHEELDOWN, qfalse );
 		}
 	}
 
 	// extra buttons
-	tbuttons = raw->data.mouse.ulRawButtons & RI_RAWBUTTON_MASK;
-	for (j = 6; j < rawmice[i].numbuttons; j++)
-	{
-		if ((tbuttons & (1 << j)) && !(rawmice[i].buttons & (1 << j)))
-		{
-			Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE1 + j, qtrue, 0, NULL);
-		}
-		if (!(tbuttons & (1 << j)) && (rawmice[i].buttons & (1 << j)))
-		{
-			Sys_QueEvent(g_wv.sysMsgTime, SE_KEY, K_MOUSE1 + j, qfalse, 0, NULL);
-		}
-
+	tbuttons = mouse->ulRawButtons & RI_RAWBUTTON_MASK;
+	for ( j = 6; j < rawmice[i].numbuttons; j++ ) {
+		if ( ( tbuttons & ( 1 << j ) ) && !( rawmice[i].buttons & ( 1 << j ) ) )
+			WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE1 + j, qtrue );
+		if ( !( tbuttons & ( 1 << j ) ) && ( rawmice[i].buttons & ( 1 << j ) ) )
+			WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, K_MOUSE1 + j, qfalse );
 	}
 
 	rawmice[i].buttons &= ~RI_RAWBUTTON_MASK;
 	rawmice[i].buttons |= tbuttons;
+}
+
+
+/*
+==================
+IT_ProcessRawInput
+
+Runs on the input thread. Every event in the batch shares one timeGetTime()
+stamp -- the same clock Sys_GetCheapEvent uses.
+==================
+*/
+static void IT_ProcessRawInput( void *inputs, UINT count, uint64_t *writeIndex ) {
+	UINT i;
+	BYTE *cursor = (BYTE *)inputs;
+	int timestamp = (int)timeGetTime();
+
+	for ( i = 0; i < count; i++ ) {
+		DWORD dwType, dwSize;
+		HANDLE hDevice;
+		void *payload;
+
+		if ( s_isWow64 ) {
+			wow64RawInput_t *input = (wow64RawInput_t *)cursor;
+			dwType = input->header.dwType;
+			dwSize = input->header.dwSize;
+			hDevice = (HANDLE)(ULONG_PTR)input->header.hDevice;
+			payload = &input->data;
+			cursor += ( dwSize + 7 ) & ~(DWORD)7; // 8-byte alignment, per MS's WOW64 remark on GetRawInputBuffer
+		} else {
+			RAWINPUT *input = (RAWINPUT *)cursor;
+			dwType = input->header.dwType;
+			dwSize = input->header.dwSize;
+			hDevice = input->header.hDevice;
+			payload = &input->data;
+			cursor = (BYTE *)NEXTRAWINPUTBLOCK( input );
+		}
+
+		if ( dwType == RIM_TYPEMOUSE ) {
+			IT_ProcessRawMouse( hDevice, (RAWMOUSE *)payload, writeIndex, timestamp );
+		} else if ( dwType == RIM_TYPEKEYBOARD ) {
+			RAWKEYBOARD *kb = (RAWKEYBOARD *)payload;
+			qboolean isUp;
+
+			// KEYBOARD_OVERRUN_MAKE_CODE means an invalid/unrecognizable key or a
+			// rollover-limit overrun -- there's no real key event to extract.
+			if ( kb->MakeCode == KEYBOARD_OVERRUN_MAKE_CODE || kb->VKey >= UCHAR_MAX ) {
+				continue;
+			}
+
+			isUp = ( kb->Flags & RI_KEY_BREAK ) ? qtrue : qfalse;
+
+			// Alt+Enter (fullscreen toggle) bypasses the window proc under raw input,
+			// so drop it here too; GetAsyncKeyState avoids desync from a missed event.
+			if ( !isUp && kb->VKey == VK_RETURN && ( GetAsyncKeyState( VK_LMENU ) & 0x8000 ) ) {
+				continue;
+			}
+
+			{
+				qboolean isExtended = ( kb->Flags & ( RI_KEY_E0 | RI_KEY_E1 ) ) ? qtrue : qfalse;
+				int key = IN_GetQuakeKey( kb->VKey, kb->MakeCode, isExtended );
+				if ( key != 0 ) {
+					WIN_PushInputEventB( &g_wv.inputThreadBuffer, writeIndex, timestamp, SE_KEY, key, !isUp );
+				}
+			}
+		}
+	}
+}
+
+
+/*
+==================
+IT_ThreadFunc
+==================
+*/
+static void IT_ThreadFunc( thread_t *thread ) {
+	HWND hwnd;
+	RAWINPUTDEVICE rid[2];
+	// sized for the larger of the two entry shapes (wow64RawInput_t) so the
+	// same buffer works whether or not this process is running under WOW64
+	BYTE inputBuf[1024 * sizeof( wow64RawInput_t )];
+	UINT headerSize;
+	BOOL wow64 = FALSE;
+
+	PROF_InitThread( "Input" );
+
+	IsWow64Process( GetCurrentProcess(), &wow64 );
+	s_isWow64 = wow64 ? qtrue : qfalse;
+	// cbSizeHeader must stay the native size even under WOW64 -- passing 24
+	// here makes GetRawInputBuffer fail outright; only interpretation changes.
+	headerSize = sizeof( RAWINPUTHEADER );
+
+	hwnd = CreateWindowEx( 0, "Message", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, g_wv.hInstance, NULL );
+
+	// no RIDEV_INPUTSINK, matching cnq3: raw input only arrives while
+	// foreground, same as the legacy WM_KEYDOWN/WM_MOUSEMOVE fallback.
+	rid[0].usUsagePage = 1; rid[0].usUsage = 2; // mouse
+	rid[0].dwFlags = 0;
+	rid[0].hwndTarget = hwnd;
+
+	rid[1].usUsagePage = 1; rid[1].usUsage = 6; // keyboard
+	rid[1].dwFlags = 0;
+	rid[1].hwndTarget = hwnd;
+
+	if ( !RegisterRawInputDevices( rid, 2, sizeof( rid[0] ) ) ) {
+		// Com_Error here would deadlock (IN_Shutdown -> WIN_StopInputThread
+		// would wait on this very thread) -- exitedEarly reports it instead.
+		DestroyWindow( hwnd );
+		PROF_ShutdownThread();
+		thread->exitedEarly = qtrue;
+		SetEvent( thread->initDoneEvent );
+		return;
+	}
+
+	g_wv.inputThreadReady = qtrue;
+	SetEvent( thread->initDoneEvent );
+
+	while ( !thread->stopRequested ) {
+		DWORD wait = MsgWaitForMultipleObjects( 0, NULL, FALSE, 50, QS_RAWINPUT );
+
+		if ( wait == WAIT_OBJECT_0 ) {
+			// resets QS_RAWINPUT's "new" bit so the wait blocks again next time;
+			// unlike PeekMessage it discards nothing, so it can't race GetRawInputBuffer.
+			GetQueueStatus( QS_RAWINPUT );
+
+			PROF_BEGIN( "GetRawInputBuffer" );
+
+			UINT size = sizeof( inputBuf );
+			UINT count = GetRawInputBuffer( (PRAWINPUT)inputBuf, &size, headerSize );
+
+			if ( count != (UINT)-1 && count > 0 ) {
+				uint64_t writeIndex = g_wv.inputThreadBuffer.base.writeIndex;
+				IT_ProcessRawInput( inputBuf, count, &writeIndex );
+				WIN_FlushInputEvents( &g_wv.inputThreadBuffer, writeIndex );
+			}
+
+			PROF_END();
+		}
+	}
+
+	DestroyWindow( hwnd );
+	PROF_ShutdownThread();
+}
+
+
+void WIN_StartInputThread( void ) {
+	if ( !WIN_CreateThread( &g_wv.inputThread, IT_ThreadFunc ) ) {
+		Com_Error( ERR_FATAL, "Failed to create the input thread" );
+	}
+}
+
+
+void WIN_StopInputThread( qboolean forceExit ) {
+	WIN_DestroyThread( &g_wv.inputThread, forceExit );
+	// falls back to legacy WM_KEYDOWN/UP until the next WIN_StartInputThread
+	g_wv.inputThreadReady = qfalse;
 }
 // raw input end
 
@@ -515,22 +599,6 @@ WIN32 MOUSE CONTROL
 
 ============================================================
 */
-
-/*
-================
-IN_InitWin32Mouse
-================
-*/
-void IN_InitWin32Mouse( void ) {
-}
-
-/*
-================
-IN_ShutdownWin32Mouse
-================
-*/
-void IN_ShutdownWin32Mouse( void ) {
-}
 
 /*
 ================
@@ -562,12 +630,18 @@ void IN_ActivateWin32Mouse( void ) {
 
 	SetCursorPos( window_center_x, window_center_y );
 
-	SetCapture( g_wv.hWnd );
+	// SetCapture/ShowCursor only work on the thread that owns the window, so
+	// they're bridged to the window thread rather than called from here
+	if ( g_wv.hWnd ) {
+		SendMessage( g_wv.hWnd, WM_SETMOUSECAPTURE, TRUE, 0 );
+	}
 	// NERVE - SMF - dont do this in developer mode
 	if ( !com_developer->integer ) {
 		ClipCursor( &window_rect );
 	}
-	while ( ShowCursor( FALSE ) >= 0 );
+	if ( g_wv.hWnd ) {
+		SendMessage( g_wv.hWnd, WM_SETCURSORVIS, FALSE, 0 );
+	}
 }
 
 /*
@@ -580,56 +654,11 @@ void IN_DeactivateWin32Mouse( void ) {
 	if ( !com_developer->integer ) {
 		ClipCursor( NULL );
 	}
-	ReleaseCapture();
-	while ( ShowCursor( TRUE ) < 0 );
+	if ( g_wv.hWnd ) {
+		SendMessage( g_wv.hWnd, WM_SETMOUSECAPTURE, FALSE, 0 );
+		SendMessage( g_wv.hWnd, WM_SETCURSORVIS, TRUE, 0 );
+	}
 }
-
-/*
-================
-IN_Win32Mouse
-================
-*/
-void IN_Win32Mouse( int *mx, int *my ) {
-	POINT current_pos;
-
-	// find mouse movement
-	GetCursorPos( &current_pos );
-
-	// force the mouse to the center, so there's room to move
-	SetCursorPos( window_center_x, window_center_y );
-
-	*mx = current_pos.x - window_center_x;
-	*my = current_pos.y - window_center_y;
-}
-
-/*
-============================================================
-
-DIRECT INPUT MOUSE CONTROL
-
-============================================================
-*/
-#ifndef DOOMSOUND   ///// (SA) DOOMSOUND
-#undef DEFINE_GUID
-
-
-#define DINPUT_BUFFERSIZE           16
-#define iDirectInputCreate( a,b,c,d ) pDirectInputCreate( a,b,c,d )
-
-HRESULT ( WINAPI * pDirectInputCreate )( HINSTANCE hinst, DWORD dwVersion,
-										 LPDIRECTINPUT * lplpDirectInput, LPUNKNOWN punkOuter );
-
-#endif ///// (SA) DOOMSOUND
-
-typedef struct MYDATA {
-	LONG lX;                    // X axis goes here
-	LONG lY;                    // Y axis goes here
-	LONG lZ;                    // Z axis goes here
-	BYTE bButtonA;              // One button goes here
-	BYTE bButtonB;              // Another button goes here
-	BYTE bButtonC;              // Another button goes here
-	BYTE bButtonD;              // Another button goes here
-} MYDATA;
 
 /*
 ============================================================
@@ -650,20 +679,11 @@ void IN_ActivateMouse( void ) {
 	if ( !s_wmv.mouseInitialized ) {
 		return;
 	}
-	if ( !in_mouse->integer ) {
-		s_wmv.mouseActive = qfalse;
-		return;
-	}
 	if ( s_wmv.mouseActive ) {
 		return;
 	}
 
 	s_wmv.mouseActive = qtrue;
-
-	// RTCWPro - raw input
-	if (in_mouse->integer > 1) {
-		IN_ActivateRawMouse();
-	}
 
 	IN_ActivateWin32Mouse();
 }
@@ -685,7 +705,6 @@ void IN_DeactivateMouse( void ) {
 	}
 	s_wmv.mouseActive = qfalse;
 
-	IN_DeactivateRawMouse(); // RTCWPro - raw input
 	IN_DeactivateWin32Mouse();
 }
 
@@ -695,50 +714,19 @@ IN_StartupMouse
 ===========
 */
 void IN_StartupMouse( void ) {
-	s_wmv.mouseInitialized = qfalse;
+	s_wmv.mouseInitialized = qtrue;
 
-	if ( in_mouse->integer == 0 ) {
-		Com_Printf( "Mouse control not active.\n" );
+	if ( !in_raw->integer ) {
+		g_wv.rawInput = qfalse;
 		return;
 	}
 
-	s_wmv.mouseInitialized = qtrue;
-
-	// RTCWPro - raw input
-	if (in_mouse->integer == 1)
-	{
-		IN_InitWin32Mouse();
-	}
-	else if (in_mouse->integer > 1)
-	{
-		if(!IN_InitRawMouse()){
-			Com_Printf("Raw input: unable to register raw input\n");
-			HMODULE kernel32 = LoadLibrary("kernel32.dll");
-			if (kernel32)
-			{
-				_GLE = (pGetLastError)GetProcAddress(kernel32, "GetLastError");
-				if (_GLE)
-				{
-					int errorCode = (*_GLE)();
-					Com_Printf("Raw input: error code is %i\n", errorCode);
-				}
-				else {
-					Com_Printf("Raw input: function GetLastError could not be registered\n");
-					return;
-				}
-			}
-			else {
-				Com_Printf("Raw input: unable to load kernel32.dll\n");
-				return;
-			}
-			IN_ShutdownRawMouse();
-			Com_Printf("Falling back to Win32 mouse support...\n");
-			Cvar_Set("in_mouse", "1");
-		}
+	if ( !IN_InitRawMouse() ) {
+		Com_Printf( "Raw input: unable to register raw input\n" );
+		IN_ShutdownRawMouse();
 	}
 
-	//IN_InitWin32Mouse();
-	// raw mouse input end
+	g_wv.rawInput = ( rawmicecount > 0 );
 }
 
 /*
@@ -759,12 +747,12 @@ void IN_MouseEvent( int mstate ) {
 	{
 		if ( ( mstate & ( 1 << i ) ) &&
 			 !( s_wmv.oldButtonState & ( 1 << i ) ) ) {
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MOUSE1 + i, qtrue, 0, NULL );
+			WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MOUSE1 + i, qtrue );
 		}
 
 		if ( !( mstate & ( 1 << i ) ) &&
 			 ( s_wmv.oldButtonState & ( 1 << i ) ) ) {
-			Sys_QueEvent( g_wv.sysMsgTime, SE_KEY, K_MOUSE1 + i, qfalse, 0, NULL );
+			WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, K_MOUSE1 + i, qfalse );
 		}
 	}
 
@@ -773,31 +761,30 @@ void IN_MouseEvent( int mstate ) {
 
 /*
 ===========
-IN_MouseMove
+IN_LegacyMouseMove
+
+WM_MOUSEMOVE handler for the !in_raw fallback -- the cursor is pinned to
+window_center_x/y while active, so its drift from center each message is
+the delta; SetCursorPos then pulls it back to center for the next one.
 ===========
 */
-void IN_MouseMove( void ) {
+void IN_LegacyMouseMove( void ) {
+	POINT pos;
 	int mx, my;
 
-	// RTCWPro - raw input
-	//IN_Win32Mouse( &mx, &my );
-	if (rawmicecount > 0)
-	{
-		IN_RawMouse(&mx, &my);
-	}
-	else
-	{
-		IN_Win32Mouse(&mx, &my);
-	}
-	// raw mouse input end
-
-	if ( !mx && !my ) {
+	if ( !s_wmv.mouseActive ) {
 		return;
 	}
 
-	Sys_QueEvent( 0, SE_MOUSE, mx, my, 0, NULL );
-}
+	GetCursorPos( &pos );
+	mx = pos.x - window_center_x;
+	my = pos.y - window_center_y;
 
+	if ( mx || my ) {
+		WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_MOUSE, mx, my );
+		SetCursorPos( window_center_x, window_center_y );
+	}
+}
 
 /*
 =========================================================================
@@ -821,7 +808,6 @@ void IN_Startup( void ) {
 	IN_StartupMIDI();
 //	Com_Printf ("------------------------------------\n");
 
-	in_mouse->modified = qfalse;
 	in_joystick->modified = qfalse;
 }
 
@@ -831,6 +817,7 @@ IN_Shutdown
 ===========
 */
 void IN_Shutdown( void ) {
+	WIN_StopInputThread( qtrue );
 	IN_DeactivateMouse();
 	IN_ShutdownRawMouse(); // RTCWPro - raw input
 	IN_ShutdownMIDI();
@@ -852,9 +839,6 @@ void IN_Init( void ) {
 
 	Cmd_AddCommand( "midiinfo", MidiInfo_f );
 
-	// mouse variables
-	in_mouse                = Cvar_Get( "in_mouse",                  "1",     CVAR_ARCHIVE | CVAR_LATCH );
-
 	// joystick variables
 	in_joystick             = Cvar_Get( "in_joystick",               "0",     CVAR_ARCHIVE | CVAR_LATCH );
 	in_joyBallScale         = Cvar_Get( "in_joyBallScale",           "0.02",      CVAR_ARCHIVE );
@@ -862,7 +846,15 @@ void IN_Init( void ) {
 
 	joy_threshold           = Cvar_Get( "joy_threshold",         "0.15",      CVAR_ARCHIVE );
 
+	in_raw                  = Cvar_Get( "in_raw",                    "1",     CVAR_ARCHIVE | CVAR_LATCH );
+
 	IN_Startup();
+
+	if ( in_raw->integer ) {
+		WIN_StartInputThread();
+	}
+
+	Com_Printf( g_wv.inputThreadReady ? "Using raw keyboard/mouse input\n" : "Using Win32 keyboard/mouse input\n" );
 }
 
 
@@ -886,12 +878,77 @@ void IN_Activate( qboolean active ) {
 
 /*
 ==================
+IN_MouseSamplingSuspended
+
+True when mouse look/capture shouldn't run this frame (unfocused, or
+console/imgui has the mouse) -- shared with IN_DrainInputBuffers' delta reset.
+==================
+*/
+static qboolean IN_MouseSamplingSuspended( void ) {
+	qbool isFullscreen = Cvar_VariableIntegerValue( "r_fullscreen" ) != 0;
+	qbool releaseFullscreen = isFullscreen && ( cls.keyCatchers & KEYCATCH_IMGUI );
+	qbool releaseWindowed = !isFullscreen && ( cls.keyCatchers & ( KEYCATCH_CONSOLE | KEYCATCH_IMGUI ) );
+	return !in_appactive || releaseWindowed || releaseFullscreen;
+}
+
+
+/*
+==================
+IN_DrainInputBuffers
+
+Events are discarded here on plain !in_appactive, guarding against a few
+trailing events still sitting in the ring buffer from just before focus was
+lost -- deliberately narrower than IN_MouseSamplingSuspended() below, which
+would also block console/imgui typing. rawmice[] deltas reset on that
+broader gate instead, to avoid a backlog dumping as one SE_MOUSE jump.
+==================
+*/
+static void IN_DrainInputBuffers( void ) {
+	ringBufferIter_t iter;
+	uint64_t i;
+
+	WIN_BeginReading( &iter, &g_wv.inputThreadBuffer.base );
+	for ( i = iter.begin; i < iter.end; i++ ) {
+		inputEvent_t *ev = &g_wv.inputThreadBuffer.inputs[ i % g_wv.inputThreadBuffer.base.size ];
+		if ( in_appactive ) {
+			Sys_QueEvent( ev->timestamp, ev->event, ev->arg1, ev->arg2, 0, NULL );
+		}
+	}
+	WIN_EndReading( &iter );
+
+	WIN_BeginReading( &iter, &g_wv.legacyInputBuffer.base );
+	for ( i = iter.begin; i < iter.end; i++ ) {
+		inputEvent_t *ev = &g_wv.legacyInputBuffer.inputs[ i % g_wv.legacyInputBuffer.base.size ];
+		if ( in_appactive ) {
+			Sys_QueEvent( ev->timestamp, ev->event, ev->arg1, ev->arg2, 0, NULL );
+		}
+	}
+	WIN_EndReading( &iter );
+
+	if ( IN_MouseSamplingSuspended() ) {
+		int x;
+		for ( x = 0; x < rawmicecount; x++ ) {
+			rawmice[x].delta[0] = rawmice[x].delta[1] = 0;
+		}
+	}
+
+	if ( g_wv.inputThread.exitedEarly ) {
+		Com_Error( ERR_FATAL, "The input thread exited early" );
+	}
+}
+
+
+/*
+==================
 IN_Frame
 
 Called every frame, even if not generating commands
 ==================
 */
 void IN_Frame( void ) {
+	WIN_ProcessMainWindowEvents();
+	IN_DrainInputBuffers();
+
 	// post joystick events
 	IN_JoyMove();
 
@@ -899,15 +956,7 @@ void IN_Frame( void ) {
 		return;
 	}
 
-	qbool isFullscreen = Cvar_VariableIntegerValue( "r_fullscreen" ) != 0;
-	qbool releaseFullscreen = isFullscreen && (cls.keyCatchers & KEYCATCH_IMGUI);
-	qbool releaseWindowed = !isFullscreen && cls.keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_IMGUI);
-	if ( releaseWindowed || releaseFullscreen) {
-		IN_DeactivateMouse();
-		return;
-	}
-
-	if ( !in_appactive ) {
+	if ( IN_MouseSamplingSuspended() ) {
 		IN_DeactivateMouse();
 		return;
 	}
@@ -915,8 +964,13 @@ void IN_Frame( void ) {
 	IN_ActivateMouse();
 
 	// post events to the system que
-	IN_MouseMove();
-
+	if ( g_wv.rawInput ) {
+		int mx, my;
+		IN_RawMouse( &mx, &my );
+		if ( mx || my ) {
+			Sys_QueEvent( 0, SE_MOUSE, mx, my, 0, NULL );
+		}
+	}
 }
 
 

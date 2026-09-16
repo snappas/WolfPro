@@ -1771,6 +1771,8 @@ void G_writeGameEarlyExit(void)
         free(s);
         trap_FS_Write( "]\n}\n", strlen( "]\n}\n" ), level.jsonStatInfo.gameStatslogFile );
         trap_FS_FCloseFile(level.jsonStatInfo.gameStatslogFile );
+        level.jsonStatInfo.gameStatslogFile = 0; // prevent a later G_writeGameEarlyExit()/write call from reusing this stale handle
+        Com_sprintf(level.jsonStatInfo.gameStatslogFileName, sizeof(level.jsonStatInfo.gameStatslogFileName), "");
 
     } else {
         json_decref(jdata);

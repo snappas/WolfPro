@@ -35,16 +35,20 @@ static void CopyAnimationInfo(animationInfo_t *dst, animation_t *torsoAnim, anim
 
 	dst->torso = src->torso;
 	if(src->torso.animation){
-		*torsoAnim = *src->torso.animation;
-		Q_strncpyz(torsoAnim->name, src->torso.animation->name, sizeof(torsoAnim->name));
+		if(torsoAnim != src->torso.animation){
+			*torsoAnim = *src->torso.animation;
+			Q_strncpyz(torsoAnim->name, src->torso.animation->name, sizeof(torsoAnim->name));
+		}
 		dst->torso.animation = torsoAnim;
 	}
 	VectorCopy(src->torso.oldFramePos, dst->torso.oldFramePos);
 
 	dst->legs = src->legs;
 	if(src->legs.animation){
-		*legsAnim = *src->legs.animation;
-		Q_strncpyz(legsAnim->name, src->legs.animation->name, sizeof(legsAnim->name));
+		if(legsAnim != src->legs.animation){
+			*legsAnim = *src->legs.animation;
+			Q_strncpyz(legsAnim->name, src->legs.animation->name, sizeof(legsAnim->name));
+		}
 		dst->legs.animation = legsAnim;
 	}
 	VectorCopy(src->legs.oldFramePos, dst->legs.oldFramePos);

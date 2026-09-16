@@ -1445,7 +1445,8 @@ void ClientUserinfoChanged( int clientNum ) {
 	}
 
 	s = Info_ValueForKey(userinfo, "cg_uinfo");
-	sscanf(s, "%i %i %i %i %i %i %s",
+	// width must stay < GUID_LEN so the %s conversion can't overflow client->sess.guid[]
+	sscanf(s, "%i %i %i %i %i %i %32s",
 			&client->pers.clientTimeNudge,
 			&client->pers.clientMaxPackets,
 			&client->pers.hitSoundType,
@@ -1459,6 +1460,7 @@ void ClientUserinfoChanged( int clientNum ) {
 	if (!Q_stricmp(client->sess.guid, "D41D8CD98F00B204E9800998ECF8427E") ||
 		!Q_stricmp(client->sess.guid, "d41d8cd98f00b204e9800998ecf8427e")) {
 		trap_DropClient(clientNum, "(Known bug) Corrupted GUID^3! ^7Restart your game..");
+		return;
 	}
 
 	//// Check for Shared GUIDs and drop client - this is messing up stats
@@ -1469,10 +1471,12 @@ void ClientUserinfoChanged( int clientNum ) {
 		!Q_stricmp(client->sess.guid, "FBE2ED832F8415EFBAAA5DF10074484A") ||
 		!Q_stricmp(client->sess.guid, "fbe2ed832f8415efbaaa5df10074484a")) {
 		trap_DropClient(clientNum, "^3Shared GUID Violation. ^7Delete your RTCWKEY in Main and restart your game.");
+		return;
 	}
 
 	if (!Q_stricmp(client->sess.guid,NO_GUID)) {
         trap_DropClient(clientNum, "Empty or invalid rtcwkey");
+        return;
 	}
 
 	if ( ent->r.svFlags & SVF_BOT ) {
@@ -1674,7 +1678,9 @@ void ClientUserinfoChanged( int clientNum ) {
 
 	trap_SetConfigstring( CS_PLAYERS + clientNum, s );
 
-	trap_WTV_RecordPlayerIdentity( clientNum, client->sess.guid, client->pers.netname );
+	if ( g_wtvSupported ) {
+		trap_WTV_RecordPlayerIdentity( clientNum, client->sess.guid, client->pers.netname );
+	}
 
 	if (!(ent->r.svFlags & SVF_BOT)) {
 		char *team;
@@ -1756,6 +1762,35 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 		if ( g_password.string[0] && Q_stricmp( g_password.string, "none" ) &&
 			 strcmp( g_password.string, value ) != 0 ) {
 			return "Invalid password";
+		}
+	}
+
+	// Reject bad GUIDs here rather than via trap_DropClient() from
+	// ClientUserinfoChanged(): SV_DirectConnect() unconditionally sets the
+	// client state to CS_CONNECTED right after this function returns, which
+	// clobbers a drop issued during this same connect handshake.
+	if ( !( ent->r.svFlags & SVF_BOT ) ) {
+		char guid[GUID_LEN];
+		int dummy[6];
+
+		guid[0] = 0;
+		value = Info_ValueForKey( userinfo, "cg_uinfo" );
+		// width must stay < GUID_LEN so the %s conversion can't overflow guid[]
+		sscanf( value, "%i %i %i %i %i %i %32s", &dummy[0], &dummy[1], &dummy[2],
+				&dummy[3], &dummy[4], &dummy[5], guid );
+
+		if ( !Q_stricmp( guid, "D41D8CD98F00B204E9800998ECF8427E" ) ) {
+			return "(Known bug) Corrupted GUID! Restart your game..";
+		}
+
+		if ( !Q_stricmp( guid, "8E6A51BAF1C7E338A118D9E32472954E" ) ||
+			 !Q_stricmp( guid, "58E419DE5A8B2655F6D48EAB68275DB5" ) ||
+			 !Q_stricmp( guid, "FBE2ED832F8415EFBAAA5DF10074484A" ) ) {
+			return "Shared GUID Violation. Delete your RTCWKEY in Main and restart your game.";
+		}
+
+		if ( !Q_stricmp( guid, NO_GUID ) ) {
+			return "Empty or invalid rtcwkey";
 		}
 	}
 
@@ -1945,6 +1980,7 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 	int savedPing;
 	int savedTeam;
 	qboolean savedVoted = qfalse;         // NERVE - SMF
+	trace_t tr;
 
 	index = ent - g_entities;
 	client = ent->client;
@@ -2188,6 +2224,16 @@ void ClientSpawn( gentity_t *ent, qboolean revived ) {
 		//use the precise origin for linking
 		VectorCopy( ent->client->ps.origin, ent->r.currentOrigin );
 		VectorCopy(ent->client->ps.origin, ent->client->sess.prevOrigin);
+
+		// Spawn selection (SpotWouldTelefrag) avoids occupied spots when it can,
+		// but falls back to a known-occupied one when every spot on the team is
+		// taken -- same anti-stuck mitigation as the syringe revive path: shrink
+		// to the crouch bbox instead of leaving two players wedged together.
+		trap_Trace( &tr, ent->client->ps.origin, ent->client->ps.mins, ent->client->ps.maxs, ent->client->ps.origin, ent->s.number, MASK_PLAYERSOLID );
+		if ( tr.allsolid ) {
+			ent->client->ps.pm_flags |= PMF_DUCKED;
+		}
+
 		trap_LinkEntity( ent );
 	}
 

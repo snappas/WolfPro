@@ -44,6 +44,9 @@ void Sys_SendKeyEvents( void ) {
 void IN_MouseEvent( int mstate ) {
 }
 
+void IN_LegacyMouseMove( void ) {
+}
+
 void    IN_Activate( qboolean active ) {
 }
 

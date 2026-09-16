@@ -537,7 +537,7 @@ static qboolean GLW_CreateWindow( const char *drivername, int width, int height,
 		memset( &wc, 0, sizeof( wc ) );
 
 		wc.style         = 0;
-		wc.lpfnWndProc   = (WNDPROC) MainWndProc;
+		wc.lpfnWndProc   = (WNDPROC) MWT_MainWndProc;
 		wc.cbClsExtra    = 0;
 		wc.cbWndExtra    = 0;
 		wc.hInstance     = g_wv.hInstance;
@@ -615,23 +615,22 @@ static qboolean GLW_CreateWindow( const char *drivername, int width, int height,
 			}
 		}
 
-		g_wv.hWnd = CreateWindowEx(
-			exstyle,
-			WINDOW_CLASS_NAME,
-			"Wolfenstein",
-			stylebits,
-			x, y, w, h,
-			NULL,
-			NULL,
-			g_wv.hInstance,
-			NULL );
+		{
+			windowCreateParams_t params;
+			params.exStyle = exstyle;
+			params.className = WINDOW_CLASS_NAME;
+			params.windowName = "Wolfenstein";
+			params.style = stylebits;
+			params.x = x; params.y = y; params.w = w; params.h = h;
+			params.hInstance = g_wv.hInstance;
+
+			WIN_RequestWindow( &params ); // sets g_wv.hWnd internally, also does ShowWindow/UpdateWindow
+		}
 
 		if ( !g_wv.hWnd ) {
 			ri.Error( ERR_FATAL, "GLW_CreateWindow() - Couldn't create window" );
 		}
 
-		ShowWindow( g_wv.hWnd, SW_SHOW );
-		UpdateWindow( g_wv.hWnd );
 		ri.Printf( PRINT_ALL, "...created window@%d,%d (%dx%d)\n", x, y, w, h );
 	} else
 	{
@@ -640,14 +639,12 @@ static qboolean GLW_CreateWindow( const char *drivername, int width, int height,
 
 	if ( !GLW_InitDriver( drivername, colorbits ) ) {
 		ShowWindow( g_wv.hWnd, SW_HIDE );
-		DestroyWindow( g_wv.hWnd );
-		g_wv.hWnd = NULL;
+		WIN_RequestWindowDestroy();
 
 		return qfalse;
 	}
 
 	SetForegroundWindow( g_wv.hWnd );
-	SetFocus( g_wv.hWnd );
 
 	return qtrue;
 }
@@ -1380,8 +1377,7 @@ void GLimp_Shutdown( void ) {
 	if ( g_wv.hWnd ) {
 		ri.Printf( PRINT_ALL, "...destroying window\n" );
 		ShowWindow( g_wv.hWnd, SW_HIDE );
-		DestroyWindow( g_wv.hWnd );
-		g_wv.hWnd = NULL;
+		WIN_RequestWindowDestroy();
 		glw_state.pixelFormatSet = qfalse;
 	}
 

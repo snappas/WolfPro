@@ -177,6 +177,11 @@ typedef void ( APIENTRY * PFNGLPNTRIANGLESFATIPROC )( GLenum pname, GLfloat para
 /* reuse GL_EYE_PLANE */
 #endif
 
+// GL_VERSION_1_2 (not defined by the Windows SDK's OpenGL 1.1 gl.h)
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE                     0x812F
+#endif
+
 // S3TC compression constants
 #define GL_RGB_S3TC                         0x83A0
 #define GL_RGB4_S3TC                        0x83A1

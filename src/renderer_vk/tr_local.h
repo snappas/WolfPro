@@ -373,6 +373,8 @@ typedef enum {
 typedef struct {
 	float cloudHeight;
 	image_t     *outerbox[6], *innerbox[6];
+	shaderStage_t *outerStage;  // synthetic stage reused across all 6 outer faces
+	shaderStage_t *innerStage;  // synthetic stage reused across all 6 inner faces
 } skyParms_t;
 
 typedef struct {
@@ -1623,6 +1625,7 @@ RENDERER BACK END FUNCTIONS
 
 void RB_ExecuteRenderCommands( const void *data );
 void RB_CreateGraphicsPipeline(shader_t *newShader);
+void RB_CreateSkyBoxStages(shader_t *skyShader);
 void RB_CreateDynamicLightPipelines(void);
 int RB_GetDynamicLightPipelineIndex(int cull, int polygonOffset, int msaa);
 void RB_ClearPipelineCache(void);

@@ -158,6 +158,20 @@ vmCvar_t sv_screenshake;
 // Gordon
 vmCvar_t g_antilag;
 
+vmCvar_t g_dmgFeedbackScaleFullHealth;
+vmCvar_t g_dmgFeedbackScaleLowHealth;
+vmCvar_t g_dmgFeedbackFloor;
+vmCvar_t g_dmgFeedbackCeiling;
+vmCvar_t g_dmgFeedbackLegacy;
+
+vmCvar_t g_camShakeScale;
+vmCvar_t g_camShakeDuration;
+
+vmCvar_t g_spreadScaleSmg;
+vmCvar_t g_spreadAddSmg;
+vmCvar_t g_spreadAddSmgRand;
+vmCvar_t g_spreadAddPistol;
+
 vmCvar_t mod_url;
 vmCvar_t url;
 
@@ -173,6 +187,8 @@ vmCvar_t match_readypercent;
 vmCvar_t match_latejoin;
 vmCvar_t match_warmupDamage;
 vmCvar_t match_mutespecs;
+vmCvar_t match_teamlock;
+vmCvar_t match_teamlockwarmup;
 
  // unlagged
 vmCvar_t g_floatPlayerPosition;
@@ -209,6 +225,7 @@ vmCvar_t g_wtvdemos;
 vmCvar_t g_wtvDiscordWebhookURL;
 vmCvar_t g_wtvDiscordRetryCount;
 vmCvar_t g_wtvDiscordRetryDelay;
+qboolean g_wtvSupported;
 
 vmCvar_t g_disableDeadBodyFlagGrab;
 vmCvar_t g_mapScriptDirectory;
@@ -234,6 +251,7 @@ vmCvar_t g_debugHitboxes;
 vmCvar_t g_cr0, g_cr1, g_cr2, g_cr3, g_cr4;
 
 vmCvar_t g_capsuleScale;
+vmCvar_t g_preciseSpreadScale;
 
 vmCvar_t g_OmniBotPath;
 vmCvar_t g_OmniBotEnable;
@@ -377,6 +395,25 @@ cvarTable_t gameCvarTable[] = {
 
 	{&g_antilag, "g_antilag", "2", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
+	// damage view-kick: health-scaled multiplier on the hit, then clamped
+	// to [Floor, Ceiling]
+	{&g_dmgFeedbackScaleFullHealth, "g_dmgFeedbackScaleFullHealth", "0.4", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackFloor, "g_dmgFeedbackFloor", "5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy", "0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+
+	// explosion camera shake: amplitude and duration multipliers
+	{&g_camShakeScale, "g_camShakeScale", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_camShakeDuration, "g_camShakeDuration", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+
+	// MP40/Thompson aim-spread tuning: recovery-speed scale + per-shot recoil-add base
+	{&g_spreadScaleSmg, "g_spreadScaleSmg", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmg, "g_spreadAddSmg", "24", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmgRand, "g_spreadAddSmgRand", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	// Luger/Colt per-shot recoil-add base
+	{&g_spreadAddPistol, "g_spreadAddPistol", "20", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+
 	{&g_dbgRevive, "g_dbgRevive", "0", 0, 0, qfalse},
 
 	//Match
@@ -391,6 +428,8 @@ cvarTable_t gameCvarTable[] = {
 	{ &match_timeoutlength, "match_timeoutlength", "180", 0, 0, qfalse, qtrue },
 	{ &match_timeoutcount, "match_timeoutcount", "3", 0, 0, qfalse, qtrue },
 	{ &match_mutespecs, "match_mutespecs", "0", 0, 0, qfalse, qtrue },
+	{ &match_teamlock, "match_teamlock", "1", CVAR_ARCHIVE, 0, qfalse },
+	{ &match_teamlockwarmup, "match_teamlockwarmup", "1", CVAR_ARCHIVE, 0, qfalse },
 
 	{ &g_allowForceTapout, "g_allowForceTapout", "1", CVAR_ARCHIVE, qtrue },
 
@@ -452,6 +491,7 @@ cvarTable_t gameCvarTable[] = {
 	{ &g_cr4,  "g_cr4",  "7.0", CVAR_CHEAT, 0, qfalse }, //R calf
 
 	{ &g_capsuleScale, "g_capsuleScale", "1.0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_preciseSpreadScale, "g_preciseSpreadScale", "0.85", CVAR_ARCHIVE, 0, qtrue },
 
 	{ &g_OmniBotPath,               "omnibot_path",                 "./wolfpro/omni-bot",   CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
 	{ &g_OmniBotEnable,             "omnibot_enable",               "1",                    CVAR_ARCHIVE | CVAR_NORESTART,                      0,          qfalse },
@@ -1361,6 +1401,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	G_RegisterCvars();
 
+	{
+		char wtvProbe[8];
+		trap_Cvar_VariableStringBuffer( "//trap_G_WTVSupported", wtvProbe, sizeof( wtvProbe ) );
+		g_wtvSupported = ( atoi( wtvProbe ) != 0 );
+	}
+
 	// Xian enforcemaxlives stuff
 	/*
 	we need to clear the list even if enforce maxlives is not active
@@ -1413,7 +1459,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	trap_Cvar_VariableStringBuffer( "mapname", mapName, sizeof(mapName) );
 
 
-	if ( g_wtvdemos.integer && !trap_WTV_IsRecording() && ( g_gamestate.integer == GS_PLAYING ) ) {
+	if ( g_wtvdemos.integer && g_wtvSupported && !trap_WTV_IsRecording() && ( g_gamestate.integer == GS_PLAYING ) ) {
 		level.wtvStopSignaled = qfalse;
 		trap_WTV_RecordStart( g_currentRound.integer );
 	}
@@ -2705,7 +2751,7 @@ void CheckGameState() {
 				trap_SetConfigstring( CS_READY, va( "%i", READY_NONE ));
 				trap_SetConfigstring( CS_WARMUP, va( "%i", level.warmupTime ) );
 				trap_Cvar_Set( "gamestate", va( "%i", GS_WARMUP_COUNTDOWN ) );
-				if ( g_wtvdemos.integer && !trap_WTV_IsRecording() ) {
+				if ( g_wtvdemos.integer && g_wtvSupported && !trap_WTV_IsRecording() ) {
 					trap_WTV_RecordStart( g_currentRound.integer );
 				}
 				// Prevents joining once countdown starts..
@@ -2735,7 +2781,7 @@ void CheckGameState() {
 			level.warmupTime = level.time + ( delay * 1000 );
 			trap_SetConfigstring( CS_WARMUP, va( "%i", level.warmupTime ) );
 			trap_Cvar_Set( "gamestate", va( "%i", GS_WARMUP_COUNTDOWN ) );
-			if ( g_wtvdemos.integer && !trap_WTV_IsRecording() ) {
+			if ( g_wtvdemos.integer && g_wtvSupported && !trap_WTV_IsRecording() ) {
 				trap_WTV_RecordStart( g_currentRound.integer );
 			}
 		}
@@ -3199,7 +3245,7 @@ void G_RunFrame( int levelTime ) {
 	// see if it is time to end the level
 	CheckExitRules();
 
-	if ( g_wtvdemos.integer && level.intermissiontime && !level.wtvStopSignaled
+	if ( g_wtvdemos.integer && g_wtvSupported && level.intermissiontime && !level.wtvStopSignaled
 		&& level.time >= level.intermissiontime + 3000 ) {
 		level.wtvStopSignaled = qtrue;
 		trap_WTV_RecordStop( 0 );
@@ -3208,7 +3254,7 @@ void G_RunFrame( int levelTime ) {
 	// update to team status?
 	CheckTeamStatus();
 
-	if ( g_wtvdemos.integer && level.time - level.lastWtvScoreboardCaptureTime > WTV_SCOREBOARD_CAPTURE_INTERVAL ) {
+	if ( g_wtvdemos.integer && g_wtvSupported && level.time - level.lastWtvScoreboardCaptureTime > WTV_SCOREBOARD_CAPTURE_INTERVAL ) {
 		level.lastWtvScoreboardCaptureTime = level.time;
 		WTV_CaptureScoreboardAndTeamInfo();
 	}

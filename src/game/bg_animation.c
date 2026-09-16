@@ -580,7 +580,11 @@ qboolean BG_AnimParseAnimConfig( animModelInfo_t *animModelInfo, const char *fil
 	}
 
 	// read information for each frame
-	for ( i = 0 ; ( animModelInfo->version > 1 ) || ( i < MAX_ANIMATIONS ) ; i++ ) {
+	// the older fixed-list format (version < 2) indexes animStrings[], which only has
+	// MAX_ANIMATIONS entries; the newer named-animation format (version > 1) writes
+	// straight into animModelInfo->animations[], sized MAX_MODEL_ANIMATIONS -- cap each
+	// format at its own array's real size instead of overflowing either one.
+	for ( i = 0 ; i < MAX_MODEL_ANIMATIONS && ( animModelInfo->version > 1 || i < MAX_ANIMATIONS ) ; i++ ) {
 
 		token = COM_Parse( &text_p );
 		if ( !token ) {
@@ -2054,7 +2058,7 @@ void BG_RunLerpFrame(int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 
 void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInfo_t *modelInfo, lerpFrame_t *lf,
 						 int newAnimation, lerpFrame_t *torsoLerpFrame, lerpFrame_t *legsLerpFrame,
-						 vec3_t currentOrigin, vec3_t lerpOrigin, float manualAnimSpeed, int recursion){
+						 vec3_t currentOrigin, vec3_t lerpOrigin, float manualAnimSpeed, qboolean haveNextSnap, int recursion){
 		int f;
 	animation_t *anim, *oldAnim;
 	animation_t *otherAnim = NULL;
@@ -2087,7 +2091,7 @@ void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInf
 		float moveSpeed;
 
 		// calculate the speed at which we moved over the last frame
-		if ( snapshotTime != lf->oldFrameSnapshotTime) {
+		if ( snapshotTime != lf->oldFrameSnapshotTime && haveNextSnap ) {
 			// if ( clientNum == cg.snap->ps.clientNum ) {
 			// 	if ( isLadderAnim ) { // only use Z axis for speed
 			// 		if ( cent->currentState.aiChar != AICHAR_FEMZOMBIE ) {    // femzombie has sideways climbing
@@ -2105,7 +2109,7 @@ void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInf
 				}
 
 				moveSpeed = Distance( lerpOrigin, lf->oldFramePos ) / ( (float)( time - lf->oldFrameTime ) / 1000.0 );
-				
+
 			// }
 			//
 			// convert it to a factor of this animation's movespeed
@@ -2126,7 +2130,7 @@ void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInf
 
 		lf->oldFrame = lf->frame;
 		lf->oldFrameTime = lf->frameTime;
-		VectorCopy( currentOrigin, lf->oldFramePos );
+		VectorCopy( lerpOrigin, lf->oldFramePos );
 
 		// restrict the speed range
 		if ( lf->animSpeedScale < 0.25 ) {    // if it's too slow, then a really slow spped, combined with a sudden take-off, can leave them playing a really slow frame while they a moving really fast
@@ -2227,7 +2231,7 @@ void BG_RunLerpFrameRate(int snapshotTime, int time, int clientNum, animModelInf
 			if ( /*!anim->moveSpeed ||*/ recursion > 4 ) {
 				lf->frameTime = time;
 			} else {
-				BG_RunLerpFrameRate(snapshotTime, time, clientNum, modelInfo, lf, newAnimation, torsoLerpFrame, legsLerpFrame, currentOrigin, lerpOrigin, manualAnimSpeed, recursion + 1 );
+				BG_RunLerpFrameRate(snapshotTime, time, clientNum, modelInfo, lf, newAnimation, torsoLerpFrame, legsLerpFrame, currentOrigin, lerpOrigin, manualAnimSpeed, haveNextSnap, recursion + 1 );
 			}
 
 			if ( 0 ) {
