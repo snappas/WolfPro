@@ -1577,13 +1577,17 @@ qboolean CG_GetPartFramesFromWeap( centity_t *cent, refEntity_t *part, refEntity
 		return qtrue;   // primary weap model drawn for all frames right now
 	}
 
+	if ( !anim ) {
+		return qfalse;  // lerp frame not initialized yet (e.g. cg_gun_frame bypassed it this frame)
+	}
+
 	// check draw bit
 	if ( anim->moveSpeed & ( 1 << ( partid + 8 ) ) ) {    // hide bits are in high byte
 		return qfalse;  // not drawn for current sequence
 	}
 
 	// find part's start frame for this animation sequence
-	for ( i = 0; i < cent->pe.weap.animationNumber; i++ ) {
+	for ( i = 0; i < ( cent->pe.weap.animationNumber & ~ANIM_TOGGLEBIT ); i++ ) {
 		if ( wi->weapAnimations[i].moveSpeed & ( 1 << partid ) ) {     // this part has animation for this sequence
 			frameoffset += wi->weapAnimations[i].numFrames;
 		}
@@ -1655,6 +1659,9 @@ static void CG_RunWeapLerpFrame( clientInfo_t *ci, weaponInfo_t *wi, lerpFrame_t
 
 	// debugging tool to get no animations
 	if ( cg_animSpeed.integer == 0 ) {
+		if ( !lf->animation ) {
+			CG_ClearWeapLerpFrame( wi, lf, newAnimation );     // still needs a valid animation pointer for CG_GetPartFramesFromWeap
+		}
 		lf->oldFrame = lf->frame = lf->backlerp = 0;
 		return;
 	}
