@@ -183,6 +183,10 @@ typedef enum {
 #define CS_PAUSED				40
 #define CS_READY				41
 
+// WolfPro tuning cvars as an info string; parsed by key, so foreign demos that
+// put something else in this slot just fall back to defaults
+#define CS_WOLFPRO				60
+
 #define CS_MODELS               64
 #define CS_SOUNDS               ( CS_MODELS + MAX_MODELS )
 #define CS_PLAYERS              ( CS_SOUNDS + MAX_SOUNDS )

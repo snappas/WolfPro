@@ -1549,6 +1549,7 @@ extern vmCvar_t g_dmgFeedbackScaleLowHealth;
 extern vmCvar_t g_dmgFeedbackFloor;
 extern vmCvar_t g_dmgFeedbackCeiling;
 extern vmCvar_t g_dmgFeedbackLegacy;
+extern vmCvar_t g_dmgFeedbackRecoveryTime;
 
 extern vmCvar_t g_camShakeScale;
 extern vmCvar_t g_camShakeDuration;

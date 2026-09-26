@@ -1582,6 +1582,7 @@ typedef struct {
 	float dmgFeedbackScaleLowHealth;
 	float dmgFeedbackFloor;
 	float dmgFeedbackCeiling;
+	int dmgFeedbackRecoveryTime;
 	float camShakeScale;
 	float camShakeDuration;
 
@@ -2480,6 +2481,7 @@ void CG_InitConsoleCommands( void );
 void CG_ExecuteNewServerCommands( int latestSequence );
 void CG_ParseServerinfo( void );
 void CG_ParseWolfinfo( void );          // NERVE - SMF
+void CG_ParseWolfProInfo( void );
 void CG_SetConfigValues( void );
 void CG_ShaderStateChanged( void );
 void CG_SendMoveSpeed( animation_t *animList, int numAnims, char *modelName );

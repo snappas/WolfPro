@@ -133,8 +133,8 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `g_allowForceTapout` | `1` | ARCHIVE | Allows a downed player to force a "give up"/tapout instead of waiting for revive/bleed-out. |
 | `g_antilag` | `2` | ARCHIVE\|SERVERINFO | Master antilag/lag-compensation switch. `2` specifically enables full hitscan rewind. |
 | `g_apiquery_curl_URL` | `https://rtcwproapi.donkanator.com/serverquery` | ARCHIVE | Endpoint used for server-query API calls. |
-| `g_camShakeDuration` | `1.0` | ARCHIVE\|SERVERINFO | Multiplier on explosion camera-shake duration (how long it takes to settle). |
-| `g_camShakeScale` | `1.0` | ARCHIVE\|SERVERINFO | Multiplier on explosion camera-shake amplitude (how far the view swings). |
+| `g_camShakeDuration` | `1.0` | ARCHIVE | Multiplier on explosion camera-shake duration (how long it takes to settle). |
+| `g_camShakeScale` | `1.0` | ARCHIVE | Multiplier on explosion camera-shake amplitude (how far the view swings). |
 | `g_capsuleScale` | `1.0` | ARCHIVE | Global scale multiplier applied to player hit-capsule radius. |
 | `g_cr0`…`g_cr4` | `15.0`/`7.0`×4 | CHEAT **[debug/advanced]** | Per-body-part hit-capsule radii (torso, L/R thigh, L/R calf) used to tune `g_capsuleScale`. |
 | `g_dbgRevive` | `0` | — **[debug]** | Logs medic-revive debug info. |
@@ -144,11 +144,12 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `g_debugHitboxes` | `0` | CHEAT **[debug/advanced]** | Draws the active hit-capsule volumes. |
 | `g_debugMove` | `0` | — **[debug]** | Logs player-movement debug info. |
 | `g_delagHitscan` | `1` | ARCHIVE\|SERVERINFO | Enables lag-compensated (rewound) hit detection for hitscan weapons. |
-| `g_dmgFeedbackCeiling` | `10` | ARCHIVE\|SERVERINFO | Maximum final view-kick magnitude, after the health-scaled multiplier. |
-| `g_dmgFeedbackFloor` | `5` | ARCHIVE\|SERVERINFO | Minimum final view-kick magnitude, after the health-scaled multiplier. |
-| `g_dmgFeedbackLegacy` | `0` | ARCHIVE\|SERVERINFO | Reverts the damage view-kick (screen punch on taking a hit) to the original single-value-per-tick delivery and hardcoded health curve, ignoring the four cvars below. |
-| `g_dmgFeedbackScaleFullHealth` | `0.4` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at full health. |
-| `g_dmgFeedbackScaleLowHealth` | `0.5` | ARCHIVE\|SERVERINFO | View-kick multiplier applied to a hit at 1 HP; health in between linearly interpolates between the two. |
+| `g_dmgFeedbackCeiling` | `10` | ARCHIVE | Maximum final view-kick magnitude, after the health-scaled multiplier. |
+| `g_dmgFeedbackFloor` | `5` | ARCHIVE | Minimum final view-kick magnitude, after the health-scaled multiplier. |
+| `g_dmgFeedbackLegacy` | `0` | ARCHIVE | Reverts the damage view-kick (screen punch on taking a hit) to the original single-value-per-tick delivery and hardcoded health curve, ignoring the `ScaleFullHealth`/`ScaleLowHealth`/`Floor`/`Ceiling` cvars. |
+| `g_dmgFeedbackRecoveryTime` | `400` | ARCHIVE | Time in ms for the view to settle back after a damage view-kick peaks; `0` snaps back instantly. Applies in legacy mode too. |
+| `g_dmgFeedbackScaleFullHealth` | `0.4` | ARCHIVE | View-kick multiplier applied to a hit at full health. |
+| `g_dmgFeedbackScaleLowHealth` | `0.5` | ARCHIVE | View-kick multiplier applied to a hit at 1 HP; health in between linearly interpolates between the two. |
 | `g_gameStatslog` | `16` | ARCHIVE | Bitmask of which stat categories get JSON-logged: `1`=master stat-output enable (in practice, any nonzero value here also enables logging), `2`=include wstats in player stats, `4`=break out stats by category, `8`=break out stats by team, `16`=include extra kill-event data. Add the values together to combine. Central gate for stats logging across the codebase. |
 | `g_headMinX/Y/Z`, `g_headMaxX/Y/Z` | `-6/-6/0`, `6/6/12` | ARCHIVE | Bounds of the precise head hitbox volume, in map units. |
 | `g_hitsounds` | `1` | ARCHIVE | Server-side enable for hit-confirmation sound feedback (requires client soundpack). Client controls the client half via `cg_hitsounds`, below. |
@@ -164,10 +165,10 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `g_rocketMode` | `0` | SYSTEMINFO | Alternate rocket-launcher physics/handling mode. |
 | `g_showHeadshotRatio` | `0` | — | Toggles display of a player's headshot-percentage stat. |
 | `g_smoothClients` | `1` | — | Extrapolates other players' movement between snapshots for smoother rendering. |
-| `g_spreadAddPistol` | `20` | ARCHIVE\|SERVERINFO | Luger/Colt per-shot aim-spread increase base. |
-| `g_spreadAddSmg` | `24` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten per-shot aim-spread increase base. |
-| `g_spreadAddSmgRand` | `10` | ARCHIVE\|SERVERINFO | Upper bound (exclusive) of the random jitter added on top of `g_spreadAddSmg` each shot; `0` disables the jitter. |
-| `g_spreadScaleSmg` | `0.5` | ARCHIVE\|SERVERINFO | MP40/Thompson/Sten aim-spread recovery-speed scale (lower = faster recovery/tighter spread). |
+| `g_spreadAddPistol` | `20` | ARCHIVE | Luger/Colt per-shot aim-spread increase base. |
+| `g_spreadAddSmg` | `24` | ARCHIVE | MP40/Thompson/Sten per-shot aim-spread increase base. |
+| `g_spreadAddSmgRand` | `10` | ARCHIVE | Upper bound (exclusive) of the random jitter added on top of `g_spreadAddSmg` each shot; `0` disables the jitter. |
+| `g_spreadScaleSmg` | `0.5` | ARCHIVE | MP40/Thompson/Sten aim-spread recovery-speed scale (lower = faster recovery/tighter spread). |
 | `g_stats_curl_submit` | `0` | ARCHIVE | Enables curl-based automatic submission of end-of-match stats to a remote API. |
 | `g_stats_curl_submit_URL` | `https://rtcwproapi.donkanator.com/submit` | ARCHIVE | Target URL for stats submission. |
 | `g_statsDebug` | `0` | ARCHIVE | Writes extra debug info to help diagnose stats-related crashes. |
