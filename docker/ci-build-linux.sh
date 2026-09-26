@@ -13,7 +13,8 @@ set -euo pipefail
 #   WIN_X64_DIR  - path to the extracted windows-x64 build artifact
 #   WIN_X86_DIR  - path to the extracted windows-x86 build artifact
 # Optional env vars:
-#   SKIP_PUSH    - if "1", build the server image but don't push it
+#   SKIP_PUSH      - if "1", build the server image but don't push it
+#   WOLFPRO_COMMIT - source commit hash, appended to the binaries' version string
 
 : "${DOCKER_USER:?DOCKER_USER is required}"
 : "${DOCKER_TAG:?DOCKER_TAG is required}"
@@ -31,6 +32,7 @@ docker build \
 
 docker run \
   --user "$(id -u):$(id -g)" \
+  -e WOLFPRO_COMMIT="${WOLFPRO_COMMIT:-}" \
   -v "${RTCW_SRC}:/workspace" \
   --workdir /workspace/src \
   "${DOCKER_USER}/rtcw:${DOCKER_TAG}" \

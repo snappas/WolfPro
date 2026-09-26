@@ -3190,7 +3190,7 @@ void Com_Init( char *commandLine ) {
 	// TTimo gcc warning: variable `safeMode' might be clobbered by `longjmp' or `vfork'
 	volatile qboolean safeMode = qtrue;
 
-	Com_Printf( "%s %s %s\n", Q3_VERSION, CPUSTRING, __DATE__ );
+	Com_Printf( "%s %s %s %s\n", Q3_VERSION, CPUSTRING, __DATE__, WOLFPRO_COMMIT );
 
 	if ( setjmp( abortframe ) ) {
 		Sys_Error( "Error during initialization" );
@@ -3310,8 +3310,10 @@ void Com_Init( char *commandLine ) {
 	Cmd_AddCommand( "quit", Com_Quit_f );
 	Cmd_AddCommand( "writeconfig", Com_WriteConfig_f );
 
-	s = va( "%s %s %s", Q3_VERSION, CPUSTRING, __DATE__ );
+	s = va( "%s %s %s %s", Q3_VERSION, CPUSTRING, __DATE__, WOLFPRO_COMMIT );
 	com_version = Cvar_Get( "version", s, CVAR_ROM | CVAR_SERVERINFO );
+	// forced set: a config or +set can't override what the binary reports
+	Cvar_Set( "version", s );
 
 	Sys_Init();
 

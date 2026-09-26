@@ -32,6 +32,11 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "../qcommon/cm_public.h"
 
+// short git hash, supplied by release CI builds
+#ifndef WOLFPRO_COMMIT
+#define WOLFPRO_COMMIT "local"
+#endif
+
 //#define	PRE_RELEASE_DEMO
 
 #if defined(_MSC_VER)

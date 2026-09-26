@@ -248,6 +248,7 @@ typedef struct
 
 	thread_t inputThread;
 	volatile qboolean inputThreadReady; // set qtrue once the input thread's RegisterRawInputDevices succeeds
+	volatile qboolean rawKeyboard; // keyboard registered for raw input too; WM_KEYDOWN/UP are ignored while set
 
 	// syscon thread -> main thread
 	windowCommandBuffer_t conCmdBuffer;

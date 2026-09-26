@@ -61,6 +61,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DINSTALL_DEFAULT_BASEDIR=${{ github.workspace }}\ci-install\${{ matrix.arch }}
           -DBUILD_CLIENT=ON -DBUILD_MOD=ON -DBUILD_MOD_PK3=OFF -DBUILD_SERVER=${{ matrix.build_server }}
+          -DWOLFPRO_COMMIT=${{ github.sha }}
 
       - name: Build
         shell: cmd
@@ -124,6 +125,7 @@ jobs:
           DOCKER_TAG: ${{ steps.tag.outputs.docker_tag }}
           WIN_X64_DIR: ${{ github.workspace }}/artifacts/windows-x64
           WIN_X86_DIR: ${{ github.workspace }}/artifacts/windows-x86
+          WOLFPRO_COMMIT: ${{ github.sha }}
         run: bash docker/ci-build-linux.sh
 
       - name: Collect symbols

@@ -585,7 +585,8 @@ with little relevance on modern hardware, kept for completeness.
 | `in_midi` / `in_midiport` / `in_midichannel` / `in_mididevice` **(Windows)** | `0`/`1`/`1`/`0` | ARCHIVE | Legacy MIDI music playback device selection. |
 | `in_mouse` **(Linux)** | `1` | ARCHIVE | Master enable for mouse input. On Windows, see `in_raw` instead. |
 | `in_nograb` **(Linux)** | `0` | — **[debug]** | Disables input grabbing, so the mouse stays free over a windowed client (dev/testing). |
-| `in_raw` **(Windows)** | `1` | ARCHIVE\|LATCH | `0` = legacy Win32 keyboard/mouse input, `1` = raw input via a dedicated input thread. |
+| `in_raw` **(Windows)** | `1` | ARCHIVE\|LATCH | `0` = legacy Win32 keyboard/mouse input, `1` = raw mouse input via a dedicated input thread. |
+| `in_rawKeyboard` **(Windows)** | `0` | ARCHIVE\|LATCH | With `in_raw 1`, also read the keyboard through raw input instead of standard Win32 key messages. Apply with `in_restart`. |
 | `joy_threshold` | `0.15` | ARCHIVE | Joystick axis dead-zone threshold. |
 | `m_filter` | `0` | ARCHIVE | Mouse input filtering/smoothing toggle. |
 | `m_forward` / `m_side` | `0.25` / `0.25` | ARCHIVE | Mouse forward-movement/strafe scale (forward rarely used). |

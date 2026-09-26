@@ -55,6 +55,8 @@ at the same time.
 
 static kbutton_t kb[NUM_BUTTONS];
 
+static void IN_ButtonState_f( void );
+
 void IN_MLookDown( void ) {
 	kb[KB_MLOOK].active = qtrue;
 }
@@ -1051,10 +1053,68 @@ void CL_InitInput( void ) {
 	//Cmd_AddCommand ("notebook",IN_Notebook);
 	Cmd_AddCommand( "help",IN_Help );
 
+	Cmd_AddCommand( "in_buttonstate", IN_ButtonState_f );
+
 	cl_nodelta = Cvar_Get( "cl_nodelta", "0", 0 );
 	cl_debugMove = Cvar_Get( "cl_debugMove", "0", 0 );
 }
 
+
+/*
+============
+IN_ButtonState_f
+
+Dumps movement button and key state, for diagnosing stuck/dead movement.
+Slot -1 means held from a console-typed +command, 0 means empty.
+============
+*/
+static const char *IN_ButtonSlotName( int k ) {
+	if ( k == 0 ) {
+		return "-";
+	}
+	if ( k == -1 ) {
+		return "console";
+	}
+	if ( k < 0 || k >= MAX_KEYS ) {
+		return va( "bad(%i)", k );
+	}
+	return va( "%i:%s", k, Key_KeynumToString( k, qfalse ) );
+}
+
+static void IN_ButtonState_f( void ) {
+	static const struct { int idx; const char *name; } list[] = {
+		{ KB_FORWARD, "forward" }, { KB_BACK, "back" },
+		{ KB_MOVELEFT, "moveleft" }, { KB_MOVERIGHT, "moveright" },
+		{ KB_LEFT, "left" }, { KB_RIGHT, "right" },
+		{ KB_UP, "moveup" }, { KB_DOWN, "movedown" },
+		{ KB_SPEED, "speed" }, { KB_STRAFE, "strafe" },
+		{ KB_BUTTONS0, "attack" }, { KB_BUTTONS6, "activate" },
+	};
+	usercmd_t *cmd = &cl.cmds[cl.cmdNumber & cl.cmdMask];
+	int i;
+
+	Com_Printf( "time %i frame_msec %u keyCatchers 0x%x anykeydown %i\n",
+		com_frameTime, frame_msec, cls.keyCatchers, anykeydown );
+	for ( i = 0; i < (int)ARRAY_LEN( list ); i++ ) {
+		kbutton_t *b = &kb[list[i].idx];
+		Com_Printf( "%-10s active %i down [%s] [%s] downtime %u msec %u\n",
+			list[i].name, b->active, IN_ButtonSlotName( b->down[0] ),
+			IN_ButtonSlotName( b->down[1] ), b->downtime, b->msec );
+	}
+
+	Com_Printf( "keys down:" );
+	for ( i = 0; i < MAX_KEYS; i++ ) {
+		if ( keys[i].down ) {
+			Com_Printf( " %i:%s(rep %i \"%s\")", i, Key_KeynumToString( i, qfalse ),
+				keys[i].repeats, keys[i].binding ? keys[i].binding : "" );
+		}
+	}
+	Com_Printf( "\n" );
+
+	Com_Printf( "last cmd: fwd %i right %i up %i buttons 0x%x wbuttons 0x%x hweapon %i\n",
+		cmd->forwardmove, cmd->rightmove, cmd->upmove, cmd->buttons, cmd->wbuttons,
+		cl.snap.ps.persistant[PERS_HWEAPON_USE] );
+}
 
 /*
 ============

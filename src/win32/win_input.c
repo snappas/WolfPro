@@ -153,7 +153,9 @@ cvar_t  *in_joyBallScale;
 cvar_t  *in_debugJoystick;
 cvar_t  *joy_threshold;
 
-static cvar_t *in_raw; // 0 = legacy Win32 input, 1 = raw input (mouse + keyboard)
+static cvar_t *in_raw; // 0 = legacy Win32 input, 1 = raw input via the input thread
+static cvar_t *in_rawKeyboard; // 1 = keyboard also via raw input, 0 = WM_KEYDOWN/UP
+static qboolean s_wantRawKeyboard; // in_rawKeyboard snapshot, read by the input thread at startup
 
 qboolean in_appactive;
 
@@ -537,7 +539,7 @@ static void IT_ThreadFunc( thread_t *thread ) {
 	rid[1].dwFlags = 0;
 	rid[1].hwndTarget = hwnd;
 
-	if ( !RegisterRawInputDevices( rid, 2, sizeof( rid[0] ) ) ) {
+	if ( !RegisterRawInputDevices( rid, s_wantRawKeyboard ? 2 : 1, sizeof( rid[0] ) ) ) {
 		// Com_Error here would deadlock (IN_Shutdown -> WIN_StopInputThread
 		// would wait on this very thread) -- exitedEarly reports it instead.
 		DestroyWindow( hwnd );
@@ -547,6 +549,7 @@ static void IT_ThreadFunc( thread_t *thread ) {
 		return;
 	}
 
+	g_wv.rawKeyboard = s_wantRawKeyboard;
 	g_wv.inputThreadReady = qtrue;
 	SetEvent( thread->initDoneEvent );
 
@@ -588,6 +591,7 @@ void WIN_StartInputThread( void ) {
 void WIN_StopInputThread( qboolean forceExit ) {
 	WIN_DestroyThread( &g_wv.inputThread, forceExit );
 	// falls back to legacy WM_KEYDOWN/UP until the next WIN_StartInputThread
+	g_wv.rawKeyboard = qfalse;
 	g_wv.inputThreadReady = qfalse;
 }
 // raw input end
@@ -847,14 +851,17 @@ void IN_Init( void ) {
 	joy_threshold           = Cvar_Get( "joy_threshold",         "0.15",      CVAR_ARCHIVE );
 
 	in_raw                  = Cvar_Get( "in_raw",                    "1",     CVAR_ARCHIVE | CVAR_LATCH );
+	in_rawKeyboard          = Cvar_Get( "in_rawKeyboard",            "0",     CVAR_ARCHIVE | CVAR_LATCH );
 
 	IN_Startup();
 
 	if ( in_raw->integer ) {
+		s_wantRawKeyboard = in_rawKeyboard->integer ? qtrue : qfalse;
 		WIN_StartInputThread();
 	}
 
-	Com_Printf( g_wv.inputThreadReady ? "Using raw keyboard/mouse input\n" : "Using Win32 keyboard/mouse input\n" );
+	Com_Printf( "Using %s mouse input, %s keyboard input\n",
+		g_wv.inputThreadReady && g_wv.rawInput ? "raw" : "Win32", g_wv.rawKeyboard ? "raw" : "Win32" );
 }
 
 
