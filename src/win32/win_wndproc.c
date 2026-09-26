@@ -590,14 +590,14 @@ static LRESULT CALLBACK MainWndProc_Impl(
 		}
 		// fall through
 	case WM_KEYDOWN:
-		if ( !g_wv.inputThreadReady ) {
+		if ( !g_wv.rawKeyboard ) {
 			WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, MapKey( lParam ), qtrue );
 		}
 		break;
 
 	case WM_SYSKEYUP:
 	case WM_KEYUP:
-		if ( !g_wv.inputThreadReady ) {
+		if ( !g_wv.rawKeyboard ) {
 			WIN_PushInputEvent( &g_wv.legacyInputBuffer, g_wv.sysMsgTime, SE_KEY, MapKey( lParam ), qfalse );
 		}
 		break;
