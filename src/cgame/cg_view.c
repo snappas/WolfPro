@@ -586,8 +586,8 @@ static void CG_OffsetFirstPersonView( void ) {
 			ratio /= DAMAGE_DEFLECT_TIME;
 			angles[PITCH] += ratio * cg.v_dmg_pitch;
 			angles[ROLL] += ratio * cg.v_dmg_roll;
-		} else {
-			ratio = 1.0 - ( ratio - DAMAGE_DEFLECT_TIME ) / DAMAGE_RETURN_TIME;
+		} else if ( cgs.dmgFeedbackRecoveryTime > 0 ) {
+			ratio = 1.0 - ( ratio - DAMAGE_DEFLECT_TIME ) / cgs.dmgFeedbackRecoveryTime;
 			if ( ratio > 0 ) {
 				angles[PITCH] += ratio * cg.v_dmg_pitch;
 				angles[ROLL] += ratio * cg.v_dmg_roll;

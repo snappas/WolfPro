@@ -104,6 +104,8 @@ rem ***************************************************************************
 	cd deps64
 
 	echo Fetching Dependencies...
+	rem GITHUB_TOKEN (optional) authenticates api.github.com calls; anonymous
+	rem requests from shared CI runner IPs routinely hit the 60/hour limit.
 
 	if not exist "curl" (
 		echo curl...
@@ -120,10 +122,11 @@ rem ***************************************************************************
 		rem Pinned: don't auto-track "latest" here, it silently pulls in breaking
 		rem releases (e.g. 3.2.0's SIMD dispatcher rewrite required a matching
 		rem fix in tr_image.c). Bump deliberately and retest JPEG texture loading.
-		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/releases/tags/3.2.0).zipball_url;"^
+		call powershell "$h=@{}; if($env:GITHUB_TOKEN){$h.Authorization='Bearer '+$env:GITHUB_TOKEN};"^
+						"$source= (Invoke-RestMethod -Headers $h -Method GET -Uri https://api.github.com/repos/libjpeg-turbo/libjpeg-turbo/releases/tags/3.2.0).zipball_url;"^
 						"Write-Host $source;"^
 						"$file=$(Split-Path -Path $source -Leaf);"^
-						"Invoke-WebRequest -Uri $source -Out $file;"^
+						"Invoke-WebRequest -Headers $h -Uri $source -Out $file;"^
 						"Get-ChildItem $file | move-item -Destination libjpeg-turbo.zip"
 		call powershell "Expand-Archive -Path """libjpeg-turbo*.zip""" -DestinationPath """libjpeg-turbo""""
 		call powershell "Get-ChildItem """libjpeg-turbo\*\*""" | move-item -Destination """libjpeg-turbo\""
@@ -147,10 +150,11 @@ rem ***************************************************************************
 
 	if not exist "jansson" (
 		echo jansson...
-		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/akheron/jansson/releases)[0].zipball_url;"^
+		call powershell "$h=@{}; if($env:GITHUB_TOKEN){$h.Authorization='Bearer '+$env:GITHUB_TOKEN};"^
+						"$source= (Invoke-RestMethod -Headers $h -Method GET -Uri https://api.github.com/repos/akheron/jansson/releases)[0].zipball_url;"^
 						"Write-Host $source;"^
 						"$file=$(Split-Path -Path $source -Leaf);"^
-						"Invoke-WebRequest -Uri $source -Out $file;"^
+						"Invoke-WebRequest -Headers $h -Uri $source -Out $file;"^
 						"Get-ChildItem $file | move-item -Destination jansson.zip"
 		call powershell "Expand-Archive -Path """jansson.zip""" -DestinationPath """jansson""""
 		call powershell "Get-ChildItem """jansson\*\*""" | move-item -Destination """jansson\""
@@ -161,10 +165,11 @@ rem ***************************************************************************
 
 	if not exist "omni-bot" (
 		echo omni-bot...
-		call powershell "$source= (Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/jswigart/omni-bot/releases)[0].zipball_url;"^
+		call powershell "$h=@{}; if($env:GITHUB_TOKEN){$h.Authorization='Bearer '+$env:GITHUB_TOKEN};"^
+						"$source= (Invoke-RestMethod -Headers $h -Method GET -Uri https://api.github.com/repos/jswigart/omni-bot/releases)[0].zipball_url;"^
 						"Write-Host $source;"^
 						"$file=$(Split-Path -Path $source -Leaf);"^
-						"Invoke-WebRequest -Uri $source -Out $file;"^
+						"Invoke-WebRequest -Headers $h -Uri $source -Out $file;"^
 						"Get-ChildItem $file | move-item -Destination omni-bot.zip"
 		call powershell "Expand-Archive -Path """omni-bot.zip""" -DestinationPath """omni-bot""""
 		call powershell "Get-ChildItem """omni-bot\*\*""" | move-item -Destination """omni-bot\""

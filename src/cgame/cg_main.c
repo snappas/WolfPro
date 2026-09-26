@@ -631,10 +631,10 @@ cvarTable_t cvarTable[] = {
 	{ &cg_LTChargeTime, "g_LTChargeTime", "30000", 0 }, // communicated by systeminfo
 	{ &cg_engineerChargeTime,   "g_engineerChargeTime", "30000", 0 }, // communicated by systeminfo
 	{ &cg_soldierChargeTime,    "g_soldierChargeTime", "20000", 0 }, // communicated by systeminfo
-	{ &cg_spreadScaleSmg, "g_spreadScaleSmg", "0.5", 0 }, // communicated by serverinfo
-	{ &cg_spreadAddSmg, "g_spreadAddSmg", "24", 0 }, // communicated by serverinfo
-	{ &cg_spreadAddSmgRand, "g_spreadAddSmgRand", "10", 0 }, // communicated by serverinfo
-	{ &cg_spreadAddPistol, "g_spreadAddPistol", "20", 0 }, // communicated by serverinfo
+	{ &cg_spreadScaleSmg, "g_spreadScaleSmg", "0.5", 0 }, // communicated by CS_WOLFPRO
+	{ &cg_spreadAddSmg, "g_spreadAddSmg", "24", 0 }, // communicated by CS_WOLFPRO
+	{ &cg_spreadAddSmgRand, "g_spreadAddSmgRand", "10", 0 }, // communicated by CS_WOLFPRO
+	{ &cg_spreadAddPistol, "g_spreadAddPistol", "20", 0 }, // communicated by CS_WOLFPRO
 	// DHM - TEMP FIX
 	{ &cg_bluelimbotime,        "", "30000", 0 }, // communicated by systeminfo
 	{ &cg_redlimbotime,         "", "30000", 0 }, // communicated by systeminfo

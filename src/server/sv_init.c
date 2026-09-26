@@ -787,6 +787,12 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 		}
 	}
 
+	// set while still loading so restrictions ride in the gamestate, instead of
+	// being flagged for a redundant per-slot cs resend to reconnecting clients
+	if (com_sv_running->integer) {
+		SV_SetCvarRestrictions();
+	}
+
 	// save systeminfo and serverinfo strings
 	SV_SetConfigstring( CS_SYSTEMINFO, Cvar_InfoString_Big( CVAR_SYSTEMINFO, NULL ) );
 	cvar_modifiedFlags &= ~CVAR_SYSTEMINFO;
@@ -805,10 +811,6 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 
 	// send a heartbeat now so the master will get up to date info
 	SV_Heartbeat_f();
-
-	if (com_sv_running->integer) {
-		SV_SetCvarRestrictions();
-	}
 
 	Hunk_SetMark();
 

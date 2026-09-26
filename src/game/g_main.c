@@ -163,6 +163,7 @@ vmCvar_t g_dmgFeedbackScaleLowHealth;
 vmCvar_t g_dmgFeedbackFloor;
 vmCvar_t g_dmgFeedbackCeiling;
 vmCvar_t g_dmgFeedbackLegacy;
+vmCvar_t g_dmgFeedbackRecoveryTime;
 
 vmCvar_t g_camShakeScale;
 vmCvar_t g_camShakeDuration;
@@ -395,24 +396,28 @@ cvarTable_t gameCvarTable[] = {
 
 	{&g_antilag, "g_antilag", "2", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
 
+	// tuning cvars below reach clients via CS_WOLFPRO, not serverinfo
+
 	// damage view-kick: health-scaled multiplier on the hit, then clamped
 	// to [Floor, Ceiling]
-	{&g_dmgFeedbackScaleFullHealth, "g_dmgFeedbackScaleFullHealth", "0.4", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_dmgFeedbackFloor, "g_dmgFeedbackFloor", "5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy", "0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackScaleFullHealth, "g_dmgFeedbackScaleFullHealth", "0.4", CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth", "0.5", CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackFloor, "g_dmgFeedbackFloor", "5", CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling", "10", CVAR_ARCHIVE, 0, qfalse},
+	{&g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy", "0", CVAR_ARCHIVE, 0, qfalse},
+	// ms for the view to settle back after a damage kick
+	{&g_dmgFeedbackRecoveryTime, "g_dmgFeedbackRecoveryTime", "400", CVAR_ARCHIVE, 0, qfalse},
 
 	// explosion camera shake: amplitude and duration multipliers
-	{&g_camShakeScale, "g_camShakeScale", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_camShakeDuration, "g_camShakeDuration", "1.0", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_camShakeScale, "g_camShakeScale", "1.0", CVAR_ARCHIVE, 0, qfalse},
+	{&g_camShakeDuration, "g_camShakeDuration", "1.0", CVAR_ARCHIVE, 0, qfalse},
 
 	// MP40/Thompson aim-spread tuning: recovery-speed scale + per-shot recoil-add base
-	{&g_spreadScaleSmg, "g_spreadScaleSmg", "0.5", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_spreadAddSmg, "g_spreadAddSmg", "24", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
-	{&g_spreadAddSmgRand, "g_spreadAddSmgRand", "10", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadScaleSmg, "g_spreadScaleSmg", "0.5", CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmg, "g_spreadAddSmg", "24", CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddSmgRand, "g_spreadAddSmgRand", "10", CVAR_ARCHIVE, 0, qfalse},
 	// Luger/Colt per-shot recoil-add base
-	{&g_spreadAddPistol, "g_spreadAddPistol", "20", CVAR_SERVERINFO | CVAR_ARCHIVE, 0, qfalse},
+	{&g_spreadAddPistol, "g_spreadAddPistol", "20", CVAR_ARCHIVE, 0, qfalse},
 
 	{&g_dbgRevive, "g_dbgRevive", "0", 0, 0, qfalse},
 
@@ -1190,6 +1195,52 @@ void G_RemapTeamShaders() {
 }
 
 
+// tuning cvars clients need, kept out of the size-limited serverinfo string
+static const struct {
+	vmCvar_t *vmCvar;
+	const char *name;
+} wolfProInfoCvars[] = {
+	{ &g_dmgFeedbackScaleFullHealth, "g_dmgFeedbackScaleFullHealth" },
+	{ &g_dmgFeedbackScaleLowHealth, "g_dmgFeedbackScaleLowHealth" },
+	{ &g_dmgFeedbackFloor, "g_dmgFeedbackFloor" },
+	{ &g_dmgFeedbackCeiling, "g_dmgFeedbackCeiling" },
+	{ &g_dmgFeedbackLegacy, "g_dmgFeedbackLegacy" },
+	{ &g_dmgFeedbackRecoveryTime, "g_dmgFeedbackRecoveryTime" },
+	{ &g_camShakeScale, "g_camShakeScale" },
+	{ &g_camShakeDuration, "g_camShakeDuration" },
+	{ &g_spreadScaleSmg, "g_spreadScaleSmg" },
+	{ &g_spreadAddSmg, "g_spreadAddSmg" },
+	{ &g_spreadAddSmgRand, "g_spreadAddSmgRand" },
+	{ &g_spreadAddPistol, "g_spreadAddPistol" },
+};
+
+static qboolean G_IsWolfProInfoCvar( const vmCvar_t *vmCvar ) {
+	int i;
+
+	for( i = 0; i < (int)ARRAY_LEN( wolfProInfoCvars ); i++ ) {
+		if( wolfProInfoCvars[i].vmCvar == vmCvar ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+/*
+=================
+G_UpdateWolfProInfo
+=================
+*/
+static void G_UpdateWolfProInfo( void ) {
+	char info[MAX_INFO_STRING];
+	int i;
+
+	info[0] = '\0';
+	for( i = 0; i < (int)ARRAY_LEN( wolfProInfoCvars ); i++ ) {
+		Info_SetValueForKey( info, wolfProInfoCvars[i].name, wolfProInfoCvars[i].vmCvar->string );
+	}
+	trap_SetConfigstring( CS_WOLFPRO, info );
+}
+
 /*
 =================
 G_RegisterCvars
@@ -1234,6 +1285,8 @@ void G_RegisterCvars( void ) {
 	// done
 
 	level.warmupModificationCount = g_warmup.modificationCount;
+
+	G_UpdateWolfProInfo();
 }
 
 /*
@@ -1245,6 +1298,7 @@ void G_UpdateCvars( void ) {
 	int i;
 	cvarTable_t *cv;
 	qboolean remapped = qfalse;
+	qboolean wolfProInfoChanged = qfalse;
 
 	for ( i = 0, cv = gameCvarTable ; i < gameCvarTableSize ; i++, cv++ ) {
 		if ( cv->vmCvar ) {
@@ -1262,7 +1316,11 @@ void G_UpdateCvars( void ) {
 					remapped = qtrue;
 				}
 
-				if (cv->vmCvar == &g_spawnOffset) 
+				if( G_IsWolfProInfoCvar( cv->vmCvar ) ) {
+					wolfProInfoChanged = qtrue;
+				}
+
+				if (cv->vmCvar == &g_spawnOffset)
 				{
 					if (g_spawnOffset.integer < 1)
 					{
@@ -1286,6 +1344,10 @@ void G_UpdateCvars( void ) {
 
 	if ( remapped ) {
 		G_RemapTeamShaders();
+	}
+
+	if( wolfProInfoChanged ) {
+		G_UpdateWolfProInfo();
 	}
 }
 

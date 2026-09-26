@@ -368,18 +368,6 @@ void CG_ParseServerinfo( void ) {
 	info = CG_ConfigString( CS_SERVERINFO );
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	cgs.antilag = atoi( Info_ValueForKey( info, "g_antilag" ) );
-	cgs.dmgFeedbackScaleFullHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleFullHealth" ) );
-	cgs.dmgFeedbackScaleLowHealth = atof( Info_ValueForKey( info, "g_dmgFeedbackScaleLowHealth" ) );
-	cgs.dmgFeedbackFloor = atof( Info_ValueForKey( info, "g_dmgFeedbackFloor" ) );
-	cgs.dmgFeedbackCeiling = atof( Info_ValueForKey( info, "g_dmgFeedbackCeiling" ) );
-	{
-		const char *camShakeScaleStr = Info_ValueForKey( info, "g_camShakeScale" );
-		const char *camShakeDurationStr = Info_ValueForKey( info, "g_camShakeDuration" );
-		// older demos/servers predate these keys - default to the neutral 1.0 multiplier
-		// so camera shake still behaves as it always did, instead of vanishing to 0
-		cgs.camShakeScale = camShakeScaleStr[0] ? atof( camShakeScaleStr ) : 1.0f;
-		cgs.camShakeDuration = camShakeDurationStr[0] ? atof( camShakeDurationStr ) : 1.0f;
-	}
 	if ( !cgs.localServer ) {
 		trap_Cvar_Set( "g_gametype", va( "%i", cgs.gametype ) );
 		trap_Cvar_Set( "g_antilag", va( "%i", cgs.antilag ) );
@@ -400,10 +388,6 @@ void CG_ParseServerinfo( void ) {
 	trap_Cvar_Set( "g_engineerChargeTime",Info_ValueForKey( info,"g_engineerChargeTime" ) );
 	trap_Cvar_Set( "g_soldierChargeTime",Info_ValueForKey( info,"g_soldierChargeTime" ) );
 	trap_Cvar_Set( "g_LTChargeTime",Info_ValueForKey( info,"g_LTChargeTime" ) );
-	trap_Cvar_Set( "g_spreadScaleSmg",Info_ValueForKey( info,"g_spreadScaleSmg" ) );
-	trap_Cvar_Set( "g_spreadAddSmg",Info_ValueForKey( info,"g_spreadAddSmg" ) );
-	trap_Cvar_Set( "g_spreadAddSmgRand",Info_ValueForKey( info,"g_spreadAddSmgRand" ) );
-	trap_Cvar_Set( "g_spreadAddPistol",Info_ValueForKey( info,"g_spreadAddPistol" ) );
 	trap_Cvar_Set( "g_redlimbotime",Info_ValueForKey( info,"g_redlimbotime" ) );
 	// DHM - TEMP FIX
 	cg_redlimbotime.integer = atoi( Info_ValueForKey( info,"g_redlimbotime" ) );
@@ -415,6 +399,50 @@ void CG_ParseServerinfo( void ) {
 
 	// TTimo - make this available for ingame_callvote
 	trap_Cvar_Set( "cg_ui_voteFlags", Info_ValueForKey( info, "g_voteFlags" ) );
+
+	// older demos/servers carry the tuning keys here instead of CS_WOLFPRO
+	CG_ParseWolfProInfo();
+}
+
+/*
+==================
+CG_WolfProInfoValue
+
+Looks a tuning key up in CS_WOLFPRO, then serverinfo, then uses def.
+The result is only valid until the next Info_ValueForKey call.
+==================
+*/
+static const char *CG_WolfProInfoValue( const char *key, const char *def ) {
+	const char *value;
+
+	value = Info_ValueForKey( CG_ConfigString( CS_WOLFPRO ), key );
+	if( !value[0] ) {
+		value = Info_ValueForKey( CG_ConfigString( CS_SERVERINFO ), key );
+	}
+	return value[0] ? value : def;
+}
+
+/*
+==================
+CG_ParseWolfProInfo
+
+Defaults must match the server's cvar defaults in g_main.c.
+==================
+*/
+void CG_ParseWolfProInfo( void ) {
+	cgs.dmgFeedbackScaleFullHealth = atof( CG_WolfProInfoValue( "g_dmgFeedbackScaleFullHealth", "0.4" ) );
+	cgs.dmgFeedbackScaleLowHealth = atof( CG_WolfProInfoValue( "g_dmgFeedbackScaleLowHealth", "0.5" ) );
+	cgs.dmgFeedbackFloor = atof( CG_WolfProInfoValue( "g_dmgFeedbackFloor", "5" ) );
+	cgs.dmgFeedbackCeiling = atof( CG_WolfProInfoValue( "g_dmgFeedbackCeiling", "10" ) );
+	cgs.dmgFeedbackRecoveryTime = atoi( CG_WolfProInfoValue( "g_dmgFeedbackRecoveryTime", va( "%i", DAMAGE_RETURN_TIME ) ) );
+	cgs.camShakeScale = atof( CG_WolfProInfoValue( "g_camShakeScale", "1.0" ) );
+	cgs.camShakeDuration = atof( CG_WolfProInfoValue( "g_camShakeDuration", "1.0" ) );
+
+	// spread tuning feeds client-side pmove prediction through these cvars
+	trap_Cvar_Set( "g_spreadScaleSmg", CG_WolfProInfoValue( "g_spreadScaleSmg", "0.5" ) );
+	trap_Cvar_Set( "g_spreadAddSmg", CG_WolfProInfoValue( "g_spreadAddSmg", "24" ) );
+	trap_Cvar_Set( "g_spreadAddSmgRand", CG_WolfProInfoValue( "g_spreadAddSmgRand", "10" ) );
+	trap_Cvar_Set( "g_spreadAddPistol", CG_WolfProInfoValue( "g_spreadAddPistol", "20" ) );
 }
 
 /*
@@ -628,6 +656,8 @@ static void CG_ConfigStringModified( void ) {
 		CG_ParseWarmup();
 	} else if ( num == CS_WOLFINFO ) {      // NERVE - SMF
 		CG_ParseWolfinfo();
+	} else if ( num == CS_WOLFPRO ) {
+		CG_ParseWolfProInfo();
 	} else if ( num == CS_SCORES1 ) {
 		cgs.scores1 = atoi( str );
 	} else if ( num == CS_SCORES2 ) {

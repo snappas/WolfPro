@@ -59,7 +59,11 @@ cp "${RTCW_SRC}/wolfpro/"*.cfg "${RTCW_SRC}/build64/wolfpro/"
 rm -f "${RTCW_SRC}/build64/wolfpro/wolfpro_assets.bin"
 
 echo "== Fetching Omnibot RTCW release =="
-OMNIBOT_ZIP_URL=$(curl -fsSL https://api.github.com/repos/jswigart/omni-bot/releases/latest \
+GH_AUTH=()
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  GH_AUTH=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+fi
+OMNIBOT_ZIP_URL=$(curl -fsSL "${GH_AUTH[@]}" https://api.github.com/repos/jswigart/omni-bot/releases/latest \
   | grep -o '"browser_download_url": *"[^"]*_RTCW\.zip"' \
   | head -n1 \
   | cut -d '"' -f 4)

@@ -940,6 +940,17 @@ Loads restrictions into memory.
 ==================
 */
 extern cvar_rest_t* Cvar_SetRestricted(const char* var_name, unsigned int type, const char* value, const char* value2);
+
+// empties restriction slots from..MAX; unchanged (already empty) slots send nothing
+static void SV_ClearCvarRestrictions(int from) {
+	int i;
+
+	for (i = from; i < MAX_CVARRESTRICTS; i++) {
+		SV_SetConfigstring(CS_CVARRESTRICTS + i, "");
+		SV_SetConfigstring(CS_CVARRESTRICTVALS + i, "");
+	}
+}
+
 void SV_SetCvarRestrictions(void) {
 	FILE* f;
 	char* path;
@@ -951,12 +962,14 @@ void SV_SetCvarRestrictions(void) {
 		path = BASEGAME;
 
 	if (!Q_stricmp(sv_GameConfig->string, "")) {
+		SV_ClearCvarRestrictions(0);
 		Com_Printf("Game config file is not found..skipping.\n");
 		return;
 	}
 
 	if (!Q_stricmp(sv_GameConfig->string, "none")) {
 		Cvar_Set("sv_GameConfig", "");
+		SV_ClearCvarRestrictions(0);
 		//SV_ReloadRest(qtrue);
 		Com_Printf("Disabling game config..\n");
 		return;
@@ -975,6 +988,11 @@ void SV_SetCvarRestrictions(void) {
 			Cmd_TokenizeString(line);
 
 			if (!Q_stricmp(Cmd_Argv(0), "sv_cvar")) {
+				if (i >= MAX_CVARRESTRICTS) {
+					Com_Printf(S_COLOR_YELLOW "WARNING: more than %d sv_cvar restrictions in %s, ignoring '%s'\n",
+						MAX_CVARRESTRICTS, filepath, Cmd_Argv(1));
+					continue;
+				}
 				SV_SetConfigstring(CS_CVARRESTRICTS + i, Cmd_Argv(1));
 				SV_SetConfigstring(CS_CVARRESTRICTVALS + i, Cmd_ArgsFrom(2));
 				i++;
@@ -991,6 +1009,9 @@ void SV_SetCvarRestrictions(void) {
 		}
 		fclose(f);
 
+		// drop leftovers from a previously loaded, longer config
+		SV_ClearCvarRestrictions(i);
+
 		Com_Printf("Loaded %s\n", filepath);
 		Com_Printf("Registered %d restricted cvars.\n", i);
 		if (j > 0) {
@@ -1000,6 +1021,7 @@ void SV_SetCvarRestrictions(void) {
 	}
 	else {
 		Cvar_Set("sv_GameConfig", "");
+		SV_ClearCvarRestrictions(0);
 		//SV_ReloadRest(qtrue);
 		Com_Printf("Game config file is not found..skipping.\n");
 	}
