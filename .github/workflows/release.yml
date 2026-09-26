@@ -52,6 +52,8 @@ jobs:
 
       - name: Fetch dependencies
         shell: cmd
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: ${{ matrix.fetch_script }} vc14.3
 
       - name: Configure
@@ -126,6 +128,7 @@ jobs:
           WIN_X64_DIR: ${{ github.workspace }}/artifacts/windows-x64
           WIN_X86_DIR: ${{ github.workspace }}/artifacts/windows-x86
           WOLFPRO_COMMIT: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash docker/ci-build-linux.sh
 
       - name: Collect symbols
