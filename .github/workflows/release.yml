@@ -162,6 +162,9 @@ jobs:
     needs: [build-windows, build-linux-and-server]
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -209,6 +212,20 @@ jobs:
           cd artifacts/linux-client && zip -r "../../linux-client-${PK3_DATE}.zip" . && cd ../..
           cd artifacts/wolfpro-pk3s && zip -r "../../wolfpro-pk3s-${PK3_DATE}.zip" . && cd ../..
           cd artifacts/symbols && zip -r "../../symbols-${PK3_DATE}.zip" . && cd ../..
+
+      # SLSA build provenance for the release zips and the files inside them,
+      # so extracted binaries can be checked with `gh attestation verify` too.
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            *.zip
+            release-windows-x64/*.exe
+            release-windows-x64/*.dll
+            release-windows-x86/*.exe
+            release-windows-x86/*.dll
+            artifacts/linux-client/wolfmp*
+            artifacts/wolfpro-pk3s/*.pk3
 
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
