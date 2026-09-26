@@ -76,6 +76,17 @@ if(ENABLE_PROFILER)
 	add_definitions(-DENABLE_PROFILER=1)
 endif()
 
+# Release CI supplies the source commit via -DWOLFPRO_COMMIT or the environment;
+# local builds leave it unset and report "local".
+if(NOT WOLFPRO_COMMIT)
+	set(WOLFPRO_COMMIT "$ENV{WOLFPRO_COMMIT}")
+endif()
+if(WOLFPRO_COMMIT)
+	string(SUBSTRING "${WOLFPRO_COMMIT}" 0 7 WOLFPRO_COMMIT_SHORT)
+	message(STATUS "Build commit: ${WOLFPRO_COMMIT_SHORT}")
+	add_definitions(-DWOLFPRO_COMMIT=\"${WOLFPRO_COMMIT_SHORT}\")
+endif()
+
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" system_name_lower)
 
 if(system_name_lower MATCHES "(i386)|(i686)|(x86)|(amd64)")

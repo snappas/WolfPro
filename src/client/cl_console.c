@@ -735,13 +735,13 @@ void Con_DrawSolidConsole( float frac ) {
 
 	re.SetColor( g_color_table[ColorIndex( COLNSOLE_COLOR )] );
 
-	i = strlen( Q3_VERSION );
+	i = strlen( Q3_VERSION " " WOLFPRO_COMMIT );
 
 	for ( x = 0 ; x < i ; x++ ) {
 
 		SCR_DrawChar( cls.glconfig.vidWidth - ( i - x + 1 ) * con.cw,
 
-						   ( lines - ( con.ch + con.ch / 2 ) ), con.cw, con.ch, Q3_VERSION[x] );
+						   ( lines - ( con.ch + con.ch / 2 ) ), con.cw, con.ch, ( Q3_VERSION " " WOLFPRO_COMMIT )[x] );
 
 	}
 
