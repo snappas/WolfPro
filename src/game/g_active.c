@@ -577,6 +577,7 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 	int event;
 	gclient_t   *client;
 	int damage;
+	int lockTime;
 	vec3_t dir;
 
 	client = ent->client;
@@ -603,6 +604,7 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 			if ( g_dmflags.integer & DF_NO_FALLING ) {
 				break;
 			}
+			lockTime = ( client->ps.pm_flags & PMF_TIME_LOCKPLAYER ) ? client->ps.pm_time : 0;
 			if ( event == EV_FALL_NDIE ) {
 				damage = 9999;
 			} else if ( event == EV_FALL_DMG_50 )     {
@@ -627,6 +629,11 @@ void ClientEvents( gentity_t *ent, int oldEventSequence ) {
 				VectorClear( ent->client->ps.velocity );
 			} else {
 				damage = 5; // never used
+			}
+			// a landing knockback timer must not replace a revive lock
+			if ( lockTime ) {
+				client->ps.pm_time = lockTime;
+				client->ps.pm_flags &= ~PMF_TIME_KNOCKBACK;
 			}
 			VectorSet( dir, 0, 0, 1 );
 			ent->pain_debounce_time = level.time + 200; // no normal pain sound

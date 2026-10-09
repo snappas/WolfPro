@@ -1028,6 +1028,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 
 		VectorScale( dir, g_knockback.value * (float)knockback / mass, kvel );
+		// a player locked in the revive anim can't move, so don't let
+		// hits slide them along the ground either
+		if ( targ->client->ps.pm_flags & PMF_TIME_LOCKPLAYER ) {
+			kvel[0] = kvel[1] = 0;
+		}
 		if ( kvel[2] < -800.0f ) {
 			kvel[2] = -800.0f;
 		}

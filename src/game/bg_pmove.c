@@ -1415,8 +1415,9 @@ static void PM_GroundTrace( void ) {
 
 		PM_CrashLand();
 
-		// don't do landing time if we were just going down a slope
-		if ( pml.previous_velocity[2] < -200 ) {
+		// don't do landing time if we were just going down a slope, and
+		// don't let it overwrite (and shorten) a revive lock
+		if ( pml.previous_velocity[2] < -200 && !( pm->ps->pm_flags & PMF_TIME_LOCKPLAYER ) ) {
 			// don't allow another jump for a little while
 			pm->ps->pm_flags |= PMF_TIME_LAND;
 			pm->ps->pm_time = 250;
@@ -3265,6 +3266,12 @@ static void PM_DropTimers( void ) {
 	// drop misc timing counter
 	if ( pm->ps->pm_time ) {
 		if ( pml.msec >= pm->ps->pm_time ) {
+			// the revive anim outlasts its movement lock - cut it off here so
+			// the player doesn't move around stuck in the revive pose
+			if ( pm->ps->pm_flags & PMF_TIME_LOCKPLAYER ) {
+				pm->ps->legsTimer = 0;
+				pm->ps->torsoTimer = 0;
+			}
 			pm->ps->pm_flags &= ~PMF_ALL_TIMES;
 			pm->ps->pm_time = 0;
 		} else {
