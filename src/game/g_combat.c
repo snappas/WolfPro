@@ -1526,7 +1526,7 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 				straightUp[2] += 8196;
 				trap_Trace(&tr, ent->s.pos.trBase, NULL, NULL, straightUp, ent->s.number, MASK_SHOT);
 				if ( ( tr.fraction < 1.0 ) && ( !( tr.surfaceFlags & SURF_NOIMPACT ) ) ) {
-					return qfalse;
+					continue;
 				}
 			}
 			if ( LogAccuracyHit( ent, attacker ) ) {
