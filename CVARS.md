@@ -196,6 +196,7 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `g_gravityModifier` | `0.9475` | ARCHIVE | Additional multiplier on top of `g_gravity` for player physics/jump arcs. |
 | `g_inactivity` | `0` | — | Seconds of inactivity before a player is kicked/moved to spectator (`0` = disabled). |
 | `g_knifeonly` | `0` | — | Knife-only gameplay restriction mode. |
+| `g_hitscanKnockback` | `1` | ARCHIVE | `0` disables knockback (the push and the brief loss of movement control) from bullet weapons; explosions are unaffected. |
 | `g_knockback` | `1000` | — | Scales physical knockback force from weapon hits. |
 | `g_mapScriptDirectory` | `""` | ARCHIVE | Custom directory to load map scripts from, if set. |
 | `g_medicChargeTime` / `g_engineerChargeTime` / `g_LTChargeTime` / `g_soldierChargeTime` | `45000`/`30000`/`40000`/`20000` | SERVERINFO\|LATCH | Class special-ability charge/cooldown times (ms) per player class. |

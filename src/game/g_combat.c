@@ -912,6 +912,29 @@ dflags		these flags are used to control how T_Damage works
 ============
 */
 
+static qboolean G_IsHitscanMOD( int mod ) {
+	switch ( mod ) {
+	case MOD_LUGER:
+	case MOD_COLT:
+	case MOD_MP40:
+	case MOD_THOMPSON:
+	case MOD_STEN:
+	case MOD_MAUSER:
+	case MOD_SNIPERRIFLE:
+	case MOD_GARAND:
+	case MOD_SNOOPERSCOPE:
+	case MOD_SILENCER:
+	case MOD_AKIMBO:
+	case MOD_FG42:
+	case MOD_FG42SCOPE:
+	case MOD_VENOM:
+	case MOD_MACHINEGUN:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			   vec3_t dir, vec3_t point, int damage, int dflags, int mod ) {
 	gclient_t   *client;
@@ -1012,6 +1035,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		knockback = 0;
 	}
 	if ( dflags & DAMAGE_NO_KNOCKBACK ) {
+		knockback = 0;
+	}
+	if ( !g_hitscanKnockback.integer && G_IsHitscanMOD( mod ) ) {
 		knockback = 0;
 	}
 
