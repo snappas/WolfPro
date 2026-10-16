@@ -1151,10 +1151,6 @@ void ClientThink_real( gentity_t *ent ) {
 	ent->waterlevel = pm.waterlevel;
 	ent->watertype = pm.watertype;
 
-	
-	G_PlayerAngles(ent);
-	G_PlayerAnimation(ent);
-	
 	// execute client events
 	if ( level.paused == PAUSE_NONE ) {
 		ClientEvents( ent, oldEventSequence );
@@ -1778,6 +1774,11 @@ void ClientEndFrame( gentity_t *ent ) {
 			SnapVector( ent->s.pos.trBase );
 		}
 	}
+
+	// pose the hitboxes once per server frame (the swing math assumes one
+	// level.frameTime step), from the same state this frame's snapshot sends
+	G_PlayerAngles( ent );
+	G_PlayerAnimation( ent );
 
 	// store the client's position for backward reconciliation later
 	G_StoreHistory(ent);
