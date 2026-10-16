@@ -2426,6 +2426,45 @@ CG_ResetPlayerEntity
 A player just came into view or teleported, so reset all animation info
 ===============
 */
+static void CG_SeekLerpFrame( lerpFrame_t *lf, animation_t *anim, int animNumber, int elapsed ) {
+	int f = elapsed / anim->frameLerp;
+
+	if ( f >= anim->numFrames ) {
+		f = anim->numFrames - 1;
+	}
+	lf->animation = anim;
+	lf->animationNumber = lf->oldAnimationNumber = animNumber;
+	lf->oldFrame = lf->frame = anim->firstFrame + f;
+	lf->oldFrameTime = lf->frameTime = cg.time;
+	lf->animationTime = cg.time - elapsed;
+	lf->animSpeedScale = 1.0f;
+}
+
+// The revive anim isn't restarted on the wire, so a player entering view
+// mid-revive would replay it from frame 0; resume it from the revive time.
+static void CG_SyncReviveAnimation( centity_t *cent ) {
+	clientInfo_t *ci = &cgs.clientinfo[ cent->currentState.clientNum ];
+	animation_t *anim;
+	int legsAnim = cent->currentState.legsAnim;
+	int elapsed = cg.time - cent->currentState.effect3Time;
+
+	if ( !ci->modelInfo || !cent->currentState.effect3Time || elapsed < 0 ) {
+		return;
+	}
+	if ( ( legsAnim & ~ANIM_TOGGLEBIT ) >= ci->modelInfo->numAnimations ) {
+		return;
+	}
+	anim = &ci->modelInfo->animations[ legsAnim & ~ANIM_TOGGLEBIT ];
+	if ( Q_stricmp( anim->name, "revive" ) || !anim->frameLerp || elapsed >= anim->duration ) {
+		return;
+	}
+
+	CG_SeekLerpFrame( &cent->pe.legs, anim, legsAnim, elapsed );
+	if ( ( cent->currentState.torsoAnim & ~ANIM_TOGGLEBIT ) == ( legsAnim & ~ANIM_TOGGLEBIT ) ) {
+		CG_SeekLerpFrame( &cent->pe.torso, anim, cent->currentState.torsoAnim, elapsed );
+	}
+}
+
 void CG_ResetPlayerEntity( centity_t *cent ) {
 	cent->errorTime = -99999;       // guarantee no error decay added
 	cent->extrapolated = qfalse;
@@ -2445,6 +2484,8 @@ void CG_ResetPlayerEntity( centity_t *cent ) {
 		cent->pe.torso.yawing = qfalse;
 		cent->pe.torso.pitchAngle = cent->rawAngles[PITCH];
 		cent->pe.torso.pitching = qfalse;
+
+		CG_SyncReviveAnimation( cent );
 	}
 
 	BG_EvaluateTrajectory( &cent->currentState.pos, cg.time, cent->lerpOrigin );

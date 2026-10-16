@@ -912,6 +912,29 @@ dflags		these flags are used to control how T_Damage works
 ============
 */
 
+static qboolean G_IsHitscanMOD( int mod ) {
+	switch ( mod ) {
+	case MOD_LUGER:
+	case MOD_COLT:
+	case MOD_MP40:
+	case MOD_THOMPSON:
+	case MOD_STEN:
+	case MOD_MAUSER:
+	case MOD_SNIPERRIFLE:
+	case MOD_GARAND:
+	case MOD_SNOOPERSCOPE:
+	case MOD_SILENCER:
+	case MOD_AKIMBO:
+	case MOD_FG42:
+	case MOD_FG42SCOPE:
+	case MOD_VENOM:
+	case MOD_MACHINEGUN:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			   vec3_t dir, vec3_t point, int damage, int dflags, int mod ) {
 	gclient_t   *client;
@@ -1014,6 +1037,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	if ( dflags & DAMAGE_NO_KNOCKBACK ) {
 		knockback = 0;
 	}
+	if ( !g_hitscanKnockback.integer && G_IsHitscanMOD( mod ) ) {
+		knockback = 0;
+	}
 
 	// figure momentum add, even if the damage won't be taken
 	if ( knockback && targ->client && ( g_friendlyFire.integer || !OnSameTeam( targ, attacker ) ) ) {
@@ -1028,6 +1054,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 
 		VectorScale( dir, g_knockback.value * (float)knockback / mass, kvel );
+		// a player locked in the revive anim can't move, so don't let
+		// hits slide them along the ground either
+		if ( targ->client->ps.pm_flags & PMF_TIME_LOCKPLAYER ) {
+			kvel[0] = kvel[1] = 0;
+		}
 		if ( kvel[2] < -800.0f ) {
 			kvel[2] = -800.0f;
 		}
@@ -1521,7 +1552,7 @@ qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float
 				straightUp[2] += 8196;
 				trap_Trace(&tr, ent->s.pos.trBase, NULL, NULL, straightUp, ent->s.number, MASK_SHOT);
 				if ( ( tr.fraction < 1.0 ) && ( !( tr.surfaceFlags & SURF_NOIMPACT ) ) ) {
-					return qfalse;
+					continue;
 				}
 			}
 			if ( LogAccuracyHit( ent, attacker ) ) {

@@ -402,7 +402,7 @@ locals from sp
 
 intptr_t QDECL VM_Call( vm_t *vm, intptr_t callnum, ... ) {
 	vm_t    *oldVM;
-	int r;
+	intptr_t r;
 	int i;
 	intptr_t args[12];
 	va_list ap;

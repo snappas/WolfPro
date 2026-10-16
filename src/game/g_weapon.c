@@ -788,12 +788,16 @@ void weapon_callAirStrike( gentity_t *ent ) {
 	gentity_t *bomb,*te;
 	trace_t tr;
 	float traceheight, bottomtraceheight;
+	team_t throwTeam;
 
 	VectorCopy( ent->s.pos.trBase,bomboffset );
 	bomboffset[2] += 4096;
 
-	// cancel the airstrike if FF off and player joined spec
-	if ( !g_friendlyFire.integer && ent->parent->client && ent->parent->client->sess.sessionTeam == TEAM_SPECTATOR ) {
+	// cancel if the thrower left or changed teams during the fuse, otherwise a
+	// player reconnecting into the same slot would be credited with the kills
+	throwTeam = ent->s.otherEntityNum2 ? TEAM_RED : TEAM_BLUE;
+	if ( !ent->parent->client || ent->parent->client->pers.connected != CON_CONNECTED ||
+		 ent->parent->client->sess.sessionTeam != throwTeam ) {
 		ent->splashDamage = 0; // no damage
 		ent->think = G_ExplodeMissile;
 		ent->nextthink = level.time + crandom() * 50;
