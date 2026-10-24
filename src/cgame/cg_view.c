@@ -285,8 +285,23 @@ static void CG_OffsetThirdPersonView( void ) {
 
 	// if dead, look at killer
 	if ( cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 ) {
-		focusAngles[YAW] = cg.predictedPlayerState.stats[STAT_DEAD_YAW];
-		cg.refdefViewAngles[YAW] = cg.predictedPlayerState.stats[STAT_DEAD_YAW];
+		float deadYaw = cg.predictedPlayerState.stats[STAT_DEAD_YAW];
+
+		// track the medic client-side every frame; STAT_DEAD_YAW only updates at sv_fps
+		if ( cg.predictedPlayerState.viewlocked == 7 ) {
+			centity_t *medic = &cg_entities[cg.predictedPlayerState.viewlocked_entNum];
+
+			if ( medic->currentValid ) {
+				vec3_t dir;
+
+				VectorSubtract( medic->lerpOrigin, cg.refdef.vieworg, dir );
+				if ( dir[0] || dir[1] ) {
+					deadYaw = vectoyaw( dir );
+				}
+			}
+		}
+		focusAngles[YAW] = deadYaw;
+		cg.refdefViewAngles[YAW] = deadYaw;
 	}
 
 	if ( focusAngles[PITCH] > 45 ) {

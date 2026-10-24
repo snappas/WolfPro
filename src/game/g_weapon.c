@@ -387,7 +387,25 @@ void Weapon_Syringe( gentity_t *ent ) {
 
 				trap_Trace( &tr, traceEnt->client->ps.origin, traceEnt->client->ps.mins, traceEnt->client->ps.maxs, traceEnt->client->ps.origin, traceEnt->s.number, MASK_PLAYERSOLID );
 				if ( tr.allsolid ) {
+					vec3_t crouchMaxs;
+
 					traceEnt->client->ps.pm_flags |= PMF_DUCKED;
+
+					// still wedged in world geometry even crouched: move them onto the
+					// medic, overlapping players get pushed apart in ClientEndFrame
+					VectorCopy( traceEnt->client->ps.maxs, crouchMaxs );
+					crouchMaxs[2] = traceEnt->client->ps.crouchMaxZ;
+					trap_Trace( &tr, org, traceEnt->client->ps.mins, crouchMaxs, org, traceEnt->s.number, MASK_PLAYERSOLID & ~CONTENTS_BODY );
+					if ( tr.allsolid ) {
+						if ( g_dbgRevive.integer ) {
+							G_Printf( "revive: %s stuck in solid, moved to medic\n", traceEnt->client->pers.netname );
+						}
+						VectorCopy( ent->client->ps.origin, org );
+						VectorCopy( org, traceEnt->s.origin );
+						VectorCopy( org, traceEnt->r.currentOrigin );
+						VectorCopy( org, traceEnt->client->ps.origin );
+						VectorClear( traceEnt->client->ps.velocity );
+					}
 				}
 
 				traceEnt->s.effect3Time = level.time;

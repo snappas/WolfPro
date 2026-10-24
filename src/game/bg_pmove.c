@@ -1502,7 +1502,9 @@ static void PM_CheckDuck( void ) {
 	pm->mins[2] = pm->ps->mins[2];
 
 	if ( pm->ps->pm_type == PM_DEAD ) {
-		pm->maxs[2] = pm->ps->maxs[2];          // NOTE: must set death bounding box in game code
+		// collide as a crouched player so the corpse can't be pushed under geometry
+		// it couldn't be revived in; PmoveSingle restores the flat death box after
+		pm->maxs[2] = pm->ps->crouchMaxZ;
 		pm->ps->viewheight = pm->ps->deadViewHeight;
 		return;
 	}
@@ -4055,6 +4057,11 @@ void PmoveSingle( pmove_t *pmove ) {
 	// set groundentity, watertype, and waterlevel
 	PM_GroundTrace();
 	PM_SetWaterLevel();
+
+	// back to the death bounding box set in game code (used for hit detection)
+	if ( pm->ps->pm_type == PM_DEAD ) {
+		pm->maxs[2] = pm->ps->maxs[2];
+	}
 
 	// Ridah
 	if ( !isDummy ) {
