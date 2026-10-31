@@ -1336,6 +1336,83 @@ qboolean G_CheckForExistingModelInfo( gclient_t *cl, char *modelName, animModelI
 }
 
 /*
+==================
+G_CalcMoveSpeeds
+
+Mirrors CG_CalcMoveSpeeds. The config leaves moving animations at -1 for the
+model to answer, and clients only report their result to a local server, so a
+dedicated server has to work it out too. BG_RunLerpFrameRate would otherwise
+drop these animations to its slowest rate.
+==================
+*/
+static void G_CalcMoveSpeeds( animModelInfo_t *modelInfo, qhandle_t model ) {
+	char *tags[2] = { "tag_footleft", "tag_footright" };
+	vec3_t oldPos[2];
+	orientation_t o[2];
+	lerpInfo_t li;
+	animation_t *anim;
+	float totalSpeed;
+	int i, j, k, low, numSpeed;
+
+	memset( oldPos, 0, sizeof( oldPos ) );
+	memset( &li, 0, sizeof( li ) );
+	li.modelHandle = model;
+
+	for ( i = 0, anim = modelInfo->animations; i < modelInfo->numAnimations; i++, anim++ ) {
+
+		if ( anim->moveSpeed >= 0 ) {
+			continue;
+		}
+
+		totalSpeed = 0;
+		numSpeed = 0;
+
+		// for each frame
+		for ( j = 0; j < anim->numFrames; j++ ) {
+
+			li.frame = li.oldFrame = li.torsoFrame = li.oldTorsoFrame = anim->firstFrame + j;
+
+			// for each foot
+			for ( k = 0; k < 2; k++ ) {
+				if ( trap_GetTag( tags[k], &o[k], &li ) < 0 ) {
+					G_Printf( "G_CalcMoveSpeeds: tag %s not found for animation %s in model %s\n", tags[k], anim->name, modelInfo->modelname );
+					return;
+				}
+			}
+
+			// find the contact foot
+			if ( anim->flags & ANIMFL_LADDERANIM ) {
+				if ( o[0].origin[0] > o[1].origin[0] ) {
+					low = 0;
+				} else {
+					low = 1;
+				}
+				totalSpeed += fabs( oldPos[low][2] - o[low].origin[2] );
+			} else {
+				if ( o[0].origin[2] < o[1].origin[2] ) {
+					low = 0;
+				} else {
+					low = 1;
+				}
+				totalSpeed += fabs( oldPos[low][0] - o[low].origin[0] );
+			}
+
+			numSpeed++;
+
+			// save the positions
+			for ( k = 0; k < 2; k++ ) {
+				VectorCopy( o[k].origin, oldPos[k] );
+			}
+		}
+
+		// record the speed
+		if ( numSpeed > 0 && anim->frameLerp > 0 ) {
+			anim->moveSpeed = (int)( ( totalSpeed / numSpeed ) * 1000.0 / anim->frameLerp );
+		}
+	}
+}
+
+/*
 =============
 G_ParseAnimationFiles
 =============
@@ -1367,6 +1444,9 @@ qboolean G_ParseAnimationFiles( char *modelname, gclient_t *cl ) {
 
 	// parse the text
 	BG_AnimParseAnimConfig( cl->modelInfo, filename, text );
+
+	// calc movespeed values if required
+	G_CalcMoveSpeeds( cl->modelInfo, !Q_stricmp( modelname, MULTIPLAYER_AXISMODEL ) ? level.axisTorsoModel : level.alliesTorsoModel );
 
 	// load the script file
 	Com_sprintf( filename, sizeof( filename ), "models/players/%s/wolfanim.script", modelname );
