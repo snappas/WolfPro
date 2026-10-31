@@ -606,6 +606,7 @@ with little relevance on modern hardware, kept for completeness.
 
 | Cvar | Default | Flags | Description |
 |---|---|---|---|
+| `cl_autoUpdateCheck` | `1` | ARCHIVE | Windows only: check GitHub for a newer WolfPro release at startup and offer to install it. `0` disables the automatic check; `/update` still checks on demand. |
 | `cl_conXOffset` | `0` | — **[debug/advanced]** | Horizontal pixel offset applied to console text. |
 | `cl_debugTranslation` | `0` | — **[debug]** | Logs localized-string lookup debug info. |
 | `cl_language` | `0` | ARCHIVE | UI/string localization selection. |

@@ -85,6 +85,17 @@ if(WOLFPRO_COMMIT)
 	string(SUBSTRING "${WOLFPRO_COMMIT}" 0 7 WOLFPRO_COMMIT_SHORT)
 	message(STATUS "Build commit: ${WOLFPRO_COMMIT_SHORT}")
 	add_definitions(-DWOLFPRO_COMMIT=\"${WOLFPRO_COMMIT_SHORT}\")
+
+	# Channel: release (master), dev, or local; build time is UTC epoch seconds.
+	if(NOT WOLFPRO_CHANNEL)
+		set(WOLFPRO_CHANNEL "$ENV{WOLFPRO_CHANNEL}")
+	endif()
+	if(NOT WOLFPRO_CHANNEL)
+		set(WOLFPRO_CHANNEL "dev")
+	endif()
+	string(TIMESTAMP WOLFPRO_BUILD_TIME "%s" UTC)
+	message(STATUS "Build channel: ${WOLFPRO_CHANNEL}")
+	add_definitions(-DWOLFPRO_CHANNEL=\"${WOLFPRO_CHANNEL}\" -DWOLFPRO_BUILD_TIME=${WOLFPRO_BUILD_TIME})
 endif()
 
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" system_name_lower)

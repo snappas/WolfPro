@@ -105,6 +105,7 @@ If you have questions concerning this license or the applicable additional terms
 #define FEEDER_LIEUTWEAP            0x13    // NERVE - SMF - wolf mp lieutenant weapon list
 #define FEEDER_WTVDEMOS             0x14    // WTV server-recorded demos (current mod only)
 #define FEEDER_DEMO_MODS            0x15    // installed mods with a classic demos/ folder
+#define FEEDER_UPDATENOTES          0x16    // word-wrapped release notes of the offered update
 
 // display flags
 #define CG_SHOW_BLUE_TEAM_HAS_REDFLAG       0x00000001
@@ -319,6 +320,9 @@ If you have questions concerning this license or the applicable additional terms
 // NERVE - SMF
 #define UI_LIMBOCHAT                259
 // -NERVE - SMF
+
+#define UI_UPDATE_STATUS            260     // one-line auto-update status
+#define UI_UPDATE_PROGRESS          261     // auto-update download progress bar
 
 #define VOICECHAT_GETFLAG           "getflag"                // command someone to get the flag
 #define VOICECHAT_OFFENSE           "offense"                // command someone to go on offense

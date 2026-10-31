@@ -123,6 +123,7 @@ if(BUILD_CLIENT)
     if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.6")
         set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT "wolfmp")
     endif()
+	include(cmake/WolfBuildUpdater.cmake)
 endif(BUILD_CLIENT)
 
 if(BUILD_SERVER)

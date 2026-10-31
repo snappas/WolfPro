@@ -990,12 +990,16 @@ int             trap_FS_GetFileList(  const char *path, const char *extension, c
 int             trap_FS_Delete( const char *filename );
 qboolean        trap_GetValue( char *value, int valueSize, const char *key );
 int             trap_FS_GetModFileList( const char *modName, const char *subdir, const char *extension, char *listbuf, int bufsize );
+int trap_Update_GetNotes(char *buf, int size);
 
 typedef struct {
 	int trap_FS_GetModFileList;
+	int trap_Update_GetNotes;
 } uiExt_t;
 
 extern qboolean uiModFileListAvailable;
+extern qboolean uiUpdateAvailable;
+extern int uiUpdateGetNotesId;
 
 qhandle_t       trap_R_RegisterModel( const char *name );
 qhandle_t       trap_R_RegisterSkin( const char *name );

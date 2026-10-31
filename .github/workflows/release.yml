@@ -64,6 +64,7 @@ jobs:
           -DINSTALL_DEFAULT_BASEDIR=${{ github.workspace }}\ci-install\${{ matrix.arch }}
           -DBUILD_CLIENT=ON -DBUILD_MOD=ON -DBUILD_MOD_PK3=OFF -DBUILD_SERVER=${{ matrix.build_server }}
           -DWOLFPRO_COMMIT=${{ github.sha }}
+          -DWOLFPRO_CHANNEL=${{ github.ref_name == 'master' && 'release' || 'dev' }}
 
       - name: Build
         shell: cmd
@@ -233,6 +234,7 @@ jobs:
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ steps.release.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ steps.release.outputs.tag }}
           prerelease: ${{ steps.release.outputs.prerelease }}
           files: |

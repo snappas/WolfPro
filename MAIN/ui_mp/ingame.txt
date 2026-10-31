@@ -47,4 +47,5 @@
 	loadMenu { "ui_mp/mods.menu" }				//NERVE - DHM
 	loadMenu { "ui_mp/auto_update.menu" }		//NERVE - DHM
 	loadMenu { "ui_mp/urls.menu" } // TTimo
+	loadMenu { "ui_mp/update.menu" }		// WolfPro auto-update popup, drawn over everything
 }
