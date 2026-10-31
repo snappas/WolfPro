@@ -138,7 +138,7 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 
 	//Clamp max backward reconcilation time 
 	if (level.time - time > g_maxLagCompensation.integer) {
-		time = level.time + g_maxLagCompensation.integer;
+		time = level.time - g_maxLagCompensation.integer;
 	}
 
 	// find two entries in the history whose times sandwich "time"
@@ -222,20 +222,21 @@ void G_TimeShiftClient( gentity_t *ent, int time, qboolean debug, gentity_t *deb
 
 static qbool PlayerIsVisible(gentity_t* attacker, gentity_t* target) {
 
+	// use where the players are actually linked, not s.pos.trBase, which can
+	// hold a g_smoothClients extrapolation a long way from the target's box
 	vec3_t attackerMuzzlePoint;
-	VectorCopy(attacker->s.pos.trBase, attackerMuzzlePoint);
+	VectorCopy(attacker->r.currentOrigin, attackerMuzzlePoint);
 	attackerMuzzlePoint[2] += attacker->client->ps.viewheight;
 
 	vec3_t targetMuzzlePoint;
-	VectorCopy(target->s.pos.trBase, targetMuzzlePoint);
+	VectorCopy(target->r.currentOrigin, targetMuzzlePoint);
 	targetMuzzlePoint[2] += target->client->ps.viewheight;
 
+	// only world geometry hides a target; other players' bodies in the way don't
 	trace_t trace;
-	gentity_t* traceEnt = NULL;
-	trap_Trace(&trace, attackerMuzzlePoint, NULL, NULL, targetMuzzlePoint, attacker->s.number, MASK_SHOT);
-	traceEnt = &g_entities[trace.entityNum];
+	trap_Trace(&trace, attackerMuzzlePoint, NULL, NULL, targetMuzzlePoint, attacker->s.number, MASK_SOLID);
 
-	return (traceEnt == target);
+	return (trace.fraction == 1.0f);
 }
 
 
@@ -251,10 +252,13 @@ void G_TimeShiftAllClients( int time, gentity_t *skip ) {
 	int			i;
 	gentity_t	*ent;
 	qboolean debug = ( skip != NULL && skip->client ); 
+	qboolean	shift[MAX_CLIENTS];
 
-	// for every client
+	// decide who gets shifted before moving anyone, so a client that was
+	// already moved back can't change the visibility check for the rest
 	ent = &g_entities[0];
 	for ( i = 0; i < MAX_CLIENTS; i++, ent++ ) {
+		shift[i] = qfalse;
 		if ( ent->client
 				&& ent->inuse
 				&& ent->client->sess.sessionTeam < TEAM_SPECTATOR
@@ -269,12 +273,17 @@ void G_TimeShiftAllClients( int time, gentity_t *skip ) {
 
 			//If the target is not visible to the attacker, don't time shift him
 			//e.g. just ran behind a wall 
-			if (skip != NULL) {
-				if (!PlayerIsVisible(skip, ent)) {
-					continue;
-				}
+			if (skip != NULL && !PlayerIsVisible(skip, ent)) {
+				continue;
 			}
 
+			shift[i] = qtrue;
+		}
+	}
+
+	ent = &g_entities[0];
+	for ( i = 0; i < MAX_CLIENTS; i++, ent++ ) {
+		if ( shift[i] ) {
 			G_TimeShiftClient( ent, time, debug, skip );
 		}
 	}
@@ -326,9 +335,12 @@ Move a client back to where he was before the time shift
 void G_UnTimeShiftClient( gentity_t *ent ) {
 	// if it was saved
 	if ( ent->client->unlag.saved.leveltime == level.time ) {
-		// move it back
-		VectorCopy( ent->client->unlag.saved.mins, ent->r.mins );
-		VectorCopy( ent->client->unlag.saved.maxs, ent->r.maxs );
+		// move it back, but a client this shot killed keeps the corpse
+		// bbox player_die just gave it
+		if ( ent->health > 0 ) {
+			VectorCopy( ent->client->unlag.saved.mins, ent->r.mins );
+			VectorCopy( ent->client->unlag.saved.maxs, ent->r.maxs );
+		}
 		VectorCopy( ent->client->unlag.saved.currentOrigin, ent->r.currentOrigin );
 		ent->client->unlag.saved.leveltime = 0;
 		CopyAnimationInfo(&ent->client->animationInfo, &ent->client->unlag.saved.torsoAnimHistory, &ent->client->unlag.saved.legsAnimHistory, &ent->client->unlag.saved.animationInfo);
@@ -354,12 +366,12 @@ void G_UnTimeShiftAllClients( gentity_t *skip ) {
 
 	ent = &g_entities[0];
 	for ( i = 0; i < MAX_CLIENTS; i++, ent++) {
+		// no health or limbo check: a client this shot just killed was still
+		// shifted, and G_UnTimeShiftClient skips anyone who wasn't
 		if ( ent->client 
 			&& ent->inuse
 			&& ent->client->sess.sessionTeam < TEAM_SPECTATOR
 			&& ent != skip
-			&& ent->health > 0
-			&& !(ent->client->ps.pm_flags & PMF_LIMBO)
 			){
 				G_UnTimeShiftClient( ent );
 		}

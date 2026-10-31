@@ -747,19 +747,43 @@ static void G_PlayerAngles( gentity_t *ent ) {
 							 li->legsAxis, li->torsoAxis, li->headAxis);
 }
 
+// BG_RunLerpFrameRate advances at most one animation frame per call, and the
+// moving animations run faster than 20 frames a second, so one call per server
+// frame would let the hitboxes drift out of step with the model clients draw
+#define ANIM_STEP_MSEC 10
+
+static void G_RunPlayerLerpFrames( gentity_t *ent, animModelInfo_t *modelInfo, int time, vec3_t lerpOrigin ) {
+	animationInfo_t *info = &ent->client->animationInfo;
+
+	BG_RunLerpFrameRate(level.time, time, ent->s.number, modelInfo, &info->legs, (ent->s.legsAnim & ~ANIM_TOGGLEBIT),
+						 &info->torso, &info->legs, ent->r.currentOrigin, lerpOrigin, 1.0, qtrue, 0);
+	BG_RunLerpFrameRate(level.time, time, ent->s.number, modelInfo, &info->torso, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT),
+						 &info->torso, &info->legs, ent->r.currentOrigin, lerpOrigin, 1.0, qtrue, 0);
+}
+
 static void G_PlayerAnimation(gentity_t *ent){
 	animModelInfo_t* modelInfo = NULL;
+	animationInfo_t *info = &ent->client->animationInfo;
+	vec3_t oldOrigin, stepOrigin;
+	int time;
 
 	modelInfo = BG_ModelInfoForClient(ent->s.number);
 	if (!modelInfo) {
 		return;
 	}
-	BG_EvaluateTrajectory( &ent->s.pos, level.time, ent->client->animationInfo.lerpOrigin);
+	VectorCopy( info->lerpOrigin, oldOrigin );
+	BG_EvaluateTrajectory( &ent->s.pos, level.time, info->lerpOrigin);
 
-	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.legs, (ent->s.legsAnim & ~ANIM_TOGGLEBIT),
-						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, qtrue, 0);
-	BG_RunLerpFrameRate(level.time, level.time, ent->s.number, modelInfo, &ent->client->animationInfo.torso, (ent->s.torsoAnim & ~ANIM_TOGGLEBIT),
-						 &ent->client->animationInfo.torso, &ent->client->animationInfo.legs, ent->r.currentOrigin, ent->client->animationInfo.lerpOrigin, 1.0, qtrue, 0);
+	for ( time = level.time - level.frameTime + ANIM_STEP_MSEC; time < level.time; time += ANIM_STEP_MSEC ) {
+		float frac = 1.0f - (float)( level.time - time ) / level.frameTime;
+
+		stepOrigin[0] = oldOrigin[0] + frac * ( info->lerpOrigin[0] - oldOrigin[0] );
+		stepOrigin[1] = oldOrigin[1] + frac * ( info->lerpOrigin[1] - oldOrigin[1] );
+		stepOrigin[2] = oldOrigin[2] + frac * ( info->lerpOrigin[2] - oldOrigin[2] );
+		G_RunPlayerLerpFrames( ent, modelInfo, time, stepOrigin );
+	}
+	G_RunPlayerLerpFrames( ent, modelInfo, level.time, info->lerpOrigin );
+
 	lerpInfo_t *li = &ent->client->animationInfo.lerpInfo;
 	lerpFrame_t *lfTorso = &ent->client->animationInfo.torso;
 	lerpFrame_t* lfLegs = &ent->client->animationInfo.legs;
