@@ -3803,9 +3803,9 @@ void PM_Sprint( void ) {
 	} else
 	{
 		// JPW NERVE -- in multiplayer, recharge faster for top 75% of sprint bar
-		// (for people that *just* use it for jumping, not sprint) this code was
-		// mucked about with to eliminate client-side framerate-dependancy in wolf single player
-#ifdef GAMEDLL
+		// (for people that *just* use it for jumping, not sprint). cgame has to
+		// recharge too: PM_CmdScale reads sprintTime, and a client that lags behind
+		// the server here picks the wrong speed around the sprint threshold
 		if ( pm->ps->powerups[PW_NOFATIGUE] ) { // (SA) recharge at 2x with stamina powerup
 			pm->ps->sprintTime += 10;
 		} else {
@@ -3816,7 +3816,6 @@ void PM_Sprint( void ) {
 			
 			// jpw
 		}
-#endif // GAMEDLL
 		if ( pm->ps->sprintTime > 20000 ) {
 			pm->ps->sprintTime = 20000;
 		}
