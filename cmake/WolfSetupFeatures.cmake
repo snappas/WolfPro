@@ -95,3 +95,6 @@ if(BUILD_CLIENT OR BUILD_SERVER)
 
 endif()
 
+
+# jansson: used by the client updater and qagame
+find_package(JANSSON)

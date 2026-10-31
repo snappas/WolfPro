@@ -138,6 +138,17 @@ int trap_FS_GetModFileList( const char *modName, const char *subdir, const char 
 	return syscall( UI_EXT_FS_GETMODFILELIST, modName, subdir, extension, listbuf, bufsize );
 }
 
+// uses the id the engine reported, so callers must check uiUpdateAvailable
+int trap_Update_GetNotes(char *buf, int size) {
+	if(!uiUpdateGetNotesId) {
+		if(size > 0) {
+			buf[0] = '\0';
+		}
+		return 0;
+	}
+	return syscall(uiUpdateGetNotesId, buf, size);
+}
+
 qhandle_t trap_R_RegisterModel( const char *name ) {
 	return syscall( UI_R_REGISTERMODEL, name );
 }

@@ -160,7 +160,8 @@ typedef enum {
 	// engine extensions
 	// the mod should _never_ use these symbols
 	UI_EXT_GETVALUE = 700,
-	UI_EXT_FS_GETMODFILELIST
+	UI_EXT_FS_GETMODFILELIST,
+	UI_EXT_UPDATE_GETNOTES
 
 } uiImport_t;
 

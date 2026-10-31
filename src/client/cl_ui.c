@@ -777,6 +777,10 @@ static qboolean CL_UI_GetValue( char *value, int valueSize, const char *key ) {
 	typedef struct { const char *name; int number; } syscall_t;
 	static const syscall_t syscalls[] = {
 		{ "trap_FS_GetModFileList", UI_EXT_FS_GETMODFILELIST },
+#ifdef _WIN32
+		// only advertised where the updater exists, so other ui builds show no popup
+		{ "trap_Update_GetNotes", UI_EXT_UPDATE_GETNOTES },
+#endif
 	};
 	int i;
 
@@ -1175,6 +1179,9 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 
 	case UI_EXT_FS_GETMODFILELIST:
 		return FS_GetModFileList( VMA( 1 ), VMA( 2 ), VMA( 3 ), VMA( 4 ), args[5] );
+
+	case UI_EXT_UPDATE_GETNOTES:
+		return CL_Update_GetNotes( VMA( 1 ), args[2] );
 
 	default:
 		Com_Error( ERR_DROP, "Bad UI system trap: %i", args[0] );

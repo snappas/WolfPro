@@ -1006,6 +1006,329 @@ void UI_DrawCenteredPic( qhandle_t image, int w, int h ) {
 	UI_DrawHandlePic( x, y, w, h, image );
 }
 
+/*
+=================
+Update popup
+=================
+*/
+
+#define UI_UPDATER_NOTES_SIZE   16384 // matches the engine's sanitized notes cap
+#define UI_UPDATER_WRAP         60      // chars per notes line, upper bound
+// must match the upd_notes listbox in update.menu: textscale and the width
+// left after its text inset and scrollbar
+#define UI_UPDATER_NOTES_SCALE  0.2f
+#define UI_UPDATER_WRAP_PX      410.0f
+#define UI_UPDATER_MAX_LINES    1024
+#define UI_UPDATER_ERROR_COLOR  S_COLOR_YELLOW
+
+// cl_updateState values (updaterState_t in the engine)
+#define UI_UPDATER_STATE_IDLE        0
+#define UI_UPDATER_STATE_CHECKING    1
+#define UI_UPDATER_STATE_UPTODATE    2
+#define UI_UPDATER_STATE_AVAILABLE   3
+#define UI_UPDATER_STATE_CHECKFAILED 4
+#define UI_UPDATER_STATE_DOWNLOADING 5
+#define UI_UPDATER_STATE_STAGING     6
+#define UI_UPDATER_STATE_LAUNCHING   7
+#define UI_UPDATER_STATE_FAILED      8
+
+static char uiUpdNotes[UI_UPDATER_NOTES_SIZE];
+static char uiUpdLines[UI_UPDATER_MAX_LINES][sizeof(UI_UPDATER_ERROR_COLOR) + UI_UPDATER_WRAP];
+static int uiUpdLineCount;
+static char uiUpdNotesTag[64];
+static char uiUpdNotesErr[512];
+static menuDef_t *uiUpdReturnMenu;
+
+// Each line paints separately, so a color code only lasts for its own line.
+static void UI_Update_AddLine(const char *s, int len, const char *color) {
+	int colorLen = (int)strlen(color);
+	char *line;
+
+	if(uiUpdLineCount >= UI_UPDATER_MAX_LINES) {
+		return;
+	}
+	if(len > UI_UPDATER_WRAP) {
+		len = UI_UPDATER_WRAP;
+	}
+	line = uiUpdLines[uiUpdLineCount];
+	memcpy(line, color, colorLen);
+	memcpy(line + colorLen, s, len);
+	line[colorLen + len] = '\0';
+	uiUpdLineCount++;
+}
+
+// Longest prefix (at most UI_UPDATER_WRAP chars) whose painted width fits a line.
+static int UI_Update_FitPrefix(const char *s, int len) {
+	int lo = 1, hi = len < UI_UPDATER_WRAP ? len : UI_UPDATER_WRAP, mid;
+
+	while(lo < hi) {
+		mid = (lo + hi + 1) / 2;
+		if(Text_Width(s, UI_UPDATER_NOTES_SCALE, mid) <= UI_UPDATER_WRAP_PX) {
+			lo = mid;
+		} else {
+			hi = mid - 1;
+		}
+	}
+	return lo;
+}
+
+// Word-wraps one source line at spaces, hard-breaking words longer than a line.
+static void UI_Update_WrapLine(const char *s, int len, const char *color) {
+	int cut, fit;
+
+	if(len == 0) {
+		UI_Update_AddLine("", 0, "");
+		return;
+	}
+	while(len > 0 && uiUpdLineCount < UI_UPDATER_MAX_LINES) {
+		fit = UI_Update_FitPrefix(s, len);
+		if(fit >= len) {
+			UI_Update_AddLine(s, len, color);
+			return;
+		}
+		// s[fit] exists here, so a space right after the fitting prefix counts
+		for(cut = fit; cut > 0 && s[cut] != ' '; cut--) {
+		}
+		if(cut == 0) {
+			cut = fit;
+		}
+		UI_Update_AddLine(s, cut, color);
+		s += cut;
+		len -= cut;
+		while(len > 0 && *s == ' ') {
+			s++;
+			len--;
+		}
+	}
+}
+
+static void UI_Update_LoadNotes(void) {
+	char *p, *end;
+	int oldFont;
+
+	uiUpdLineCount = 0;
+	trap_Cvar_VariableStringBuffer("cl_updateLatest", uiUpdNotesTag, sizeof(uiUpdNotesTag));
+	trap_Cvar_VariableStringBuffer("cl_updateError", uiUpdNotesErr, sizeof(uiUpdNotesErr));
+	if(!uiUpdateAvailable) {
+		return;
+	}
+	trap_Update_GetNotes(uiUpdNotes, sizeof(uiUpdNotes));
+	uiUpdNotes[sizeof(uiUpdNotes) - 1] = '\0';
+
+	for(p = uiUpdNotes; *p; p++) {
+		if(*p == '\t') {
+			*p = ' ';
+		}
+	}
+	// measure with the listbox's font, whatever item is being painted now
+	oldFont = uiInfo.activeFont;
+	Text_SetActiveFont(UI_FONT_NORMAL);
+	// errors can carry paths and hashes, far wider than the status row
+	if(uiUpdNotesErr[0]) {
+		UI_Update_WrapLine(uiUpdNotesErr, (int)strlen(uiUpdNotesErr), UI_UPDATER_ERROR_COLOR);
+		UI_Update_AddLine("", 0, "");
+	}
+	p = uiUpdNotes;
+	while(*p && uiUpdLineCount < UI_UPDATER_MAX_LINES) {
+		end = strchr(p, '\n');
+		if(!end) {
+			end = p + strlen(p);
+		}
+		UI_Update_WrapLine(p, (int)(end - p - (end > p && end[-1] == '\r')), "");
+		p = *end ? end + 1 : end;
+	}
+	Text_SetActiveFont(oldFont);
+	// drop trailing blank lines
+	while(uiUpdLineCount > 0 && !uiUpdLines[uiUpdLineCount - 1][0]) {
+		uiUpdLineCount--;
+	}
+	Menu_SetFeederSelection(NULL, FEEDER_UPDATENOTES, 0, "update_popup");
+}
+
+// re-fetch when a newer check result or a new error changed the text
+static int UI_Update_NoteCount(void) {
+	char tag[64], err[sizeof(uiUpdNotesErr)];
+
+	if(!uiUpdateAvailable) {
+		return 0;
+	}
+	trap_Cvar_VariableStringBuffer("cl_updateLatest", tag, sizeof(tag));
+	trap_Cvar_VariableStringBuffer("cl_updateError", err, sizeof(err));
+	if(strcmp(tag, uiUpdNotesTag) || strcmp(err, uiUpdNotesErr)) {
+		UI_Update_LoadNotes();
+	}
+	return uiUpdLineCount;
+}
+
+static const char *UI_Update_NoteLine(int index) {
+	if(index < 0 || index >= uiUpdLineCount) {
+		return "";
+	}
+	return uiUpdLines[index];
+}
+
+static void UI_Update_ClosePopup(void) {
+	menuDef_t *ret = uiUpdReturnMenu;
+
+	Menus_CloseByName("update_popup");
+	// hand focus back without re-running the menu's onOpen
+	if(!ret || !(ret->window.flags & WINDOW_VISIBLE)) {
+		ret = Menus_FindByName("main");
+	}
+	if(ret && (ret->window.flags & WINDOW_VISIBLE)) {
+		ret->window.flags |= WINDOW_HASFOCUS;
+	}
+}
+
+static void UI_Update_Frame(void) {
+	static qboolean shownSent = qfalse;
+	menuDef_t *popup, *mainMenu;
+	uiClientState_t cs;
+
+	if(!uiUpdateAvailable) {
+		return;
+	}
+	popup = Menus_FindByName("update_popup");
+	if(!popup) {
+		return;
+	}
+	if(!(popup->window.flags & WINDOW_VISIBLE)) {
+		uiUpdReturnMenu = Menu_GetFocused();
+	}
+	if(trap_Cvar_VariableValue("cl_updatePrompt") == 0) {
+		shownSent = qfalse;
+		return;
+	}
+	if(shownSent) {
+		return;
+	}
+	// a prompt raised while the popup is already up counts as seen
+	if(!(popup->window.flags & WINDOW_VISIBLE)) {
+		trap_GetClientState(&cs);
+		mainMenu = Menus_FindByName("main");
+		if(cs.connState != CA_DISCONNECTED || !mainMenu || Menu_GetFocused() != mainMenu) {
+			return;
+		}
+		uiUpdReturnMenu = mainMenu;
+		Menus_ActivateByName("update_popup", qtrue);
+	}
+	trap_Cmd_ExecuteText(EXEC_APPEND, "update shown\n");
+	shownSent = qtrue;
+}
+
+// Shortens text to the widest prefix that fits maxWidth.
+static int UI_Update_FitChars(const char *text, float scale, float maxWidth) {
+	int lo = 0, hi = strlen(text), mid;
+
+	if(Text_Width(text, scale, 0) <= maxWidth) {
+		return 0;
+	}
+	while(lo < hi) {
+		mid = (lo + hi + 1) / 2;
+		if(Text_Width(text, scale, mid) <= maxWidth) {
+			lo = mid;
+		} else {
+			hi = mid - 1;
+		}
+	}
+	return lo > 0 ? lo : 1;
+}
+
+static void UI_DrawUpdateStatus(rectDef_t *rect, float scale, vec4_t color, int textStyle) {
+	char installed[64], latest[64], count[32], total[32], text[640];
+	int state, limit;
+	double dlCount, dlTotal;
+	float x;
+
+	if(!uiUpdateAvailable) {
+		return;
+	}
+	state = (int)trap_Cvar_VariableValue("cl_updateState");
+	trap_Cvar_VariableStringBuffer("cl_updateInstalled", installed, sizeof(installed));
+	trap_Cvar_VariableStringBuffer("cl_updateLatest", latest, sizeof(latest));
+
+	switch(state) {
+	case UI_UPDATER_STATE_IDLE:
+		// local builds never leave idle, so don't claim a check is running
+		if(!Q_stricmp(installed, "local")) {
+			Q_strncpyz(text, "Local build - auto-update disabled.", sizeof(text));
+		} else {
+			Q_strncpyz(text, "Checking for updates...", sizeof(text));
+		}
+		break;
+	case UI_UPDATER_STATE_CHECKING:
+		Q_strncpyz(text, "Checking for updates...", sizeof(text));
+		break;
+	case UI_UPDATER_STATE_UPTODATE:
+		Q_strncpyz(text, "You're on the latest version.", sizeof(text));
+		break;
+	case UI_UPDATER_STATE_AVAILABLE:
+		Com_sprintf(text, sizeof(text), "Installed %s  Latest %s", installed, latest);
+		break;
+	case UI_UPDATER_STATE_CHECKFAILED:
+		Q_strncpyz(text, "Update check failed.", sizeof(text));
+		break;
+	case UI_UPDATER_STATE_DOWNLOADING:
+		trap_Cvar_VariableStringBuffer("cl_updateDlCount", count, sizeof(count));
+		trap_Cvar_VariableStringBuffer("cl_updateDlTotal", total, sizeof(total));
+		dlCount = atof(count) / (1024.0 * 1024.0);
+		dlTotal = atof(total) / (1024.0 * 1024.0);
+		if(dlTotal > 0) {
+			Com_sprintf(text, sizeof(text), "Downloading %.1f / %.1f MB", dlCount, dlTotal);
+		} else {
+			Com_sprintf(text, sizeof(text), "Downloading %.1f MB", dlCount);
+		}
+		break;
+	case UI_UPDATER_STATE_STAGING:
+		Q_strncpyz(text, "Unpacking update...", sizeof(text));
+		break;
+	case UI_UPDATER_STATE_LAUNCHING:
+		Q_strncpyz(text, "Starting the updater...", sizeof(text));
+		break;
+	case UI_UPDATER_STATE_FAILED:
+		Q_strncpyz(text, "Update failed.", sizeof(text));
+		break;
+	default:
+		return;
+	}
+
+	limit = UI_Update_FitChars(text, scale, rect->w);
+	x = rect->x + (rect->w - Text_Width(text, scale, limit)) * 0.5f;
+	Text_Paint(x, rect->y, scale, color, text, 0, limit, textStyle);
+}
+
+static void UI_DrawUpdateProgress(rectDef_t *rect, vec4_t color) {
+	vec4_t back = {0.0f, 0.0f, 0.0f, 0.6f};
+	vec4_t edge = {0.5f, 0.5f, 0.5f, 0.5f};
+	char count[32], total[32];
+	double dlCount, dlTotal, frac = 0.0;
+	int state;
+
+	if(!uiUpdateAvailable) {
+		return;
+	}
+	state = (int)trap_Cvar_VariableValue("cl_updateState");
+	trap_Cvar_VariableStringBuffer("cl_updateDlCount", count, sizeof(count));
+	trap_Cvar_VariableStringBuffer("cl_updateDlTotal", total, sizeof(total));
+	dlCount = atof(count);
+	dlTotal = atof(total);
+	if(state == UI_UPDATER_STATE_STAGING || state == UI_UPDATER_STATE_LAUNCHING) {
+		frac = 1.0;
+	} else if(dlTotal > 0) {
+		frac = dlCount / dlTotal;
+		if(frac < 0) {
+			frac = 0;
+		} else if(frac > 1) {
+			frac = 1;
+		}
+	}
+	UI_FillRect(rect->x, rect->y, rect->w, rect->h, back);
+	if(frac > 0 && rect->w > 2 && rect->h > 2) {
+		UI_FillRect(rect->x + 1, rect->y + 1, (float)((rect->w - 2) * frac), rect->h - 2, color);
+	}
+	UI_DrawRect(rect->x, rect->y, rect->w, rect->h, edge);
+}
+
 int frameCount = 0;
 int startTime;
 
@@ -1039,7 +1362,8 @@ void _UI_Refresh( int realtime ) {
 
 
 	UI_UpdateCvars();
-	
+	UI_Update_Frame();
+
 	// WolfPro - blackout if speclocked
 	if ( ui_blackout.integer > 0 ) {
 		UI_FillRect( -10, -10, 650, 490, colorBlack );
@@ -2651,6 +2975,12 @@ static void UI_OwnerDraw( float x, float y, float w, float h, float text_x, floa
 		UI_DrawLimboChat( &rect,scale, color, textStyle );
 		break;
 		// -NERVE - SMF
+	case UI_UPDATE_STATUS:
+		UI_DrawUpdateStatus(&rect, scale, color, textStyle);
+		break;
+	case UI_UPDATE_PROGRESS:
+		UI_DrawUpdateProgress(&rect, color);
+		break;
 	default:
 		break;
 	}
@@ -4569,6 +4899,10 @@ static void UI_RunMenuScript( char **args ) {
 			UI_LoadDemos();
 		} else if ( Q_stricmp( name, "LoadWTVDemos" ) == 0 ) {
 			UI_LoadWTVDemos();
+		} else if(Q_stricmp(name, "LoadUpdateNotes") == 0) {
+			UI_Update_LoadNotes();
+		} else if(Q_stricmp(name, "CloseUpdatePopup") == 0) {
+			UI_Update_ClosePopup();
 		} else if ( Q_stricmp( name, "LoadMovies" ) == 0 ) {
 			UI_LoadMovies();
 
@@ -5832,6 +6166,8 @@ static int UI_FeederCount( float feederID ) {
 		return uiInfo.demoModCount;
 	} else if ( feederID == FEEDER_WTVDEMOS ) {
 		return uiInfo.wtvDemoCount;
+	} else if(feederID == FEEDER_UPDATENOTES) {
+		return UI_Update_NoteCount();
 		// NERVE - SMF
 	} else if ( feederID == FEEDER_PICKSPAWN ) {
 		return uiInfo.spawnCount;
@@ -6044,6 +6380,8 @@ static const char *UI_FeederItemText( float feederID, int index, int column, qha
 		if ( index >= 0 && index < uiInfo.wtvDemoCount ) {
 			return uiInfo.wtvDemoList[index];
 		}
+	} else if(feederID == FEEDER_UPDATENOTES) {
+		return UI_Update_NoteLine(index);
 	}
 	// NERVE - SMF
 	else if ( feederID == FEEDER_PICKSPAWN ) {
@@ -6786,6 +7124,17 @@ static void UI_BuildQ3Model_List( void )
 	} while ( 0 )
 
 qboolean uiModFileListAvailable = qfalse;
+qboolean uiUpdateAvailable = qfalse;
+int uiUpdateGetNotesId = 0;
+
+// ui_updatePopup tells menus the update popup works; never created on old engines
+static void UI_SetUpdatePopupCvar(void) {
+	if(uiUpdateAvailable) {
+		trap_Cvar_Set("ui_updatePopup", "1");
+	} else if(trap_Cvar_VariableValue("ui_updatePopup") != 0) {
+		trap_Cvar_Set("ui_updatePopup", "0");
+	}
+}
 
 /*
 =================
@@ -6804,6 +7153,9 @@ void UI_LoadExtensions( void ) {
 
 	if ( Q_atoi( buf ) == 0 ) {
 		uiModFileListAvailable = qfalse;
+		uiUpdateAvailable = qfalse;
+		uiUpdateGetNotesId = 0;
+		UI_SetUpdatePopupCvar();
 		return;
 	}
 
@@ -6812,9 +7164,13 @@ void UI_LoadExtensions( void ) {
 		int syscallId;
 
 		GET_UI_TRAP( trap_FS_GetModFileList );
+		GET_UI_TRAP( trap_Update_GetNotes );
 
 		uiModFileListAvailable = ( rtcwPro_uiExt.trap_FS_GetModFileList != 0 );
+		uiUpdateGetNotesId = rtcwPro_uiExt.trap_Update_GetNotes;
+		uiUpdateAvailable = (uiUpdateGetNotesId != 0);
 	}
+	UI_SetUpdatePopupCvar();
 }
 
 /*

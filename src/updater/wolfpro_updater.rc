@@ -1,0 +1,3 @@
+// Explicit asInvoker manifest: without it, Windows' installer detection
+// would elevate an exe with "updater" in its name.
+1 24 "wolfpro_updater.manifest"

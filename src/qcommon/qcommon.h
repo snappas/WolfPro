@@ -37,6 +37,14 @@ If you have questions concerning this license or the applicable additional terms
 #define WOLFPRO_COMMIT "local"
 #endif
 
+// release/dev/local channel and UTC epoch build time, supplied by CI builds
+#ifndef WOLFPRO_CHANNEL
+#define WOLFPRO_CHANNEL "local"
+#endif
+#ifndef WOLFPRO_BUILD_TIME
+#define WOLFPRO_BUILD_TIME 0
+#endif
+
 //#define	PRE_RELEASE_DEMO
 
 #if defined(_MSC_VER)

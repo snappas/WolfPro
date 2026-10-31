@@ -1,0 +1,354 @@
+#include "ui_mp/menudef.h"
+
+{
+// Update Popup //
+// loaded last so it draws over whichever fullscreen menu opened it
+
+#define UPDATER_X			90
+#define UPDATER_Y			86
+#define UPDATER_W			460
+#define UPDATER_H			308
+
+#define UPDATER_GOLD		.937 .702 .2 1
+#define UPDATER_RUST		.45 .13 .06 1
+#define UPDATER_LGREY		.9 .9 .9 1
+#define UPDATER_BORDER		.1 .1 .1 .25
+#define UPDATER_BACK		.3 .5 .2 .3
+#define UPDATER_HILIT		.1 .2 .37 1
+
+menuDef {
+	name "update_popup"
+	visible 0
+	fullscreen 0
+	rect UPDATER_X UPDATER_Y UPDATER_W UPDATER_H
+	focusColor 1 .75 0 1
+	style 1
+	border 1
+	popup
+
+	onOpen { uiScript LoadUpdateNotes }
+	onESC { uiScript CloseUpdatePopup }
+
+	itemDef {
+		name upd_window
+		rect 0 0 UPDATER_W UPDATER_H
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor .06 .06 .06 .94
+		visible 1
+		decoration
+	}
+
+	// title: available/downloading/unpacking/launching, otherwise neutral
+	itemDef {
+		name upd_title
+		text "UPDATE AVAILABLE"
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		rect 2 2 $evalint(UPDATER_W-4) 22
+		textalign ITEM_ALIGN_CENTER
+		textalignx $evalfloat(.5*(UPDATER_W-4))
+		textaligny 16
+		textfont UI_FONT_NORMAL
+		textscale .3
+		border 1
+		bordercolor UPDATER_BORDER
+		backcolor UPDATER_RUST
+		forecolor UPDATER_GOLD
+		cvarTest "cl_updateState"
+		showCvar { "3" ; "5" ; "6" ; "7" }
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name upd_title_check
+		text "CHECK FOR UPDATE"
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		rect 2 2 $evalint(UPDATER_W-4) 22
+		textalign ITEM_ALIGN_CENTER
+		textalignx $evalfloat(.5*(UPDATER_W-4))
+		textaligny 16
+		textfont UI_FONT_NORMAL
+		textscale .3
+		border 1
+		bordercolor UPDATER_BORDER
+		backcolor UPDATER_RUST
+		forecolor UPDATER_GOLD
+		cvarTest "cl_updateState"
+		hideCvar { "3" ; "5" ; "6" ; "7" }
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name upd_status
+		ownerdraw UI_UPDATE_STATUS
+		rect 10 30 $evalint(UPDATER_W-20) 18
+		textalignx 0
+		textaligny 13
+		textfont UI_FONT_NORMAL
+		textscale .22
+		textstyle 3
+		forecolor UPDATER_LGREY
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name upd_notes
+		type ITEM_TYPE_LISTBOX
+		textfont UI_FONT_NORMAL
+		elementwidth $evalint(UPDATER_W-40)
+		elementheight 12
+		elementtype LISTBOX_TEXT
+		feeder FEEDER_UPDATENOTES
+		notselectable
+		rect 10 52 $evalint(UPDATER_W-20) 200
+		style WINDOW_STYLE_FILLED
+		textaligny -3
+		textscale .2
+		forecolor UPDATER_LGREY
+		backcolor 0 0 0 .5
+		border 1
+		bordercolor .5 .5 .5 .5
+		outlinecolor 0 0 0 0
+		columns 1 2 $evalint(UPDATER_W-40) 61
+		visible 1
+	}
+
+	// download progress, also left full while unpacking and launching
+	itemDef {
+		name upd_progress
+		ownerdraw UI_UPDATE_PROGRESS
+		rect 30 258 $evalint(UPDATER_W-60) 10
+		textalignx 0
+		textaligny 0
+		forecolor .3 .5 .2 1
+		cvarTest "cl_updateState"
+		showCvar { "5" ; "6" ; "7" }
+		visible 1
+		decoration
+	}
+
+	// available: update, not now, skip
+
+	itemDef {
+		name upd_btn_update
+		text "UPDATE"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 50 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "3" }
+		mouseEnter { setitemcolor upd_btn_update backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_update backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			exec "update confirm"
+		}
+	}
+
+	itemDef {
+		name upd_btn_later
+		text "NOT NOW"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 175 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "3" }
+		mouseEnter { setitemcolor upd_btn_later backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_later backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			exec "update later";
+			uiScript CloseUpdatePopup
+		}
+	}
+
+	itemDef {
+		name upd_btn_skip
+		text "SKIP VERSION"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 300 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "3" }
+		mouseEnter { setitemcolor upd_btn_skip backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_skip backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			exec "update skip";
+			uiScript CloseUpdatePopup
+		}
+	}
+
+	// downloading / unpacking: cancel
+
+	itemDef {
+		name upd_btn_cancel
+		text "CANCEL"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 175 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "5" ; "6" }
+		mouseEnter { setitemcolor upd_btn_cancel backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_cancel backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			exec "update cancel"
+		}
+	}
+
+	// failed: retry the install; check failed: retry the check
+
+	itemDef {
+		name upd_btn_retry
+		text "RETRY"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 110 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "8" }
+		mouseEnter { setitemcolor upd_btn_retry backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_retry backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			exec "update confirm"
+		}
+	}
+
+	itemDef {
+		name upd_btn_recheck
+		text "RETRY"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 110 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "4" }
+		mouseEnter { setitemcolor upd_btn_recheck backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_recheck backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			exec "update"
+		}
+	}
+
+	itemDef {
+		name upd_btn_close2
+		text "CLOSE"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 240 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "4" ; "8" }
+		mouseEnter { setitemcolor upd_btn_close2 backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_close2 backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			uiScript CloseUpdatePopup
+		}
+	}
+
+	// idle, checking, up to date: close only
+
+	itemDef {
+		name upd_btn_close
+		text "CLOSE"
+		type ITEM_TYPE_BUTTON
+		style WINDOW_STYLE_FILLED
+		textstyle 3
+		border 1
+		bordercolor UPDATER_BORDER
+		rect 175 278 110 20
+		textalign 1
+		textalignx 55
+		textaligny 14
+		textfont UI_FONT_NORMAL
+		textscale .25
+		backcolor UPDATER_BACK
+		cvarTest "cl_updateState"
+		showCvar { "0" ; "1" ; "2" }
+		mouseEnter { setitemcolor upd_btn_close backcolor UPDATER_HILIT }
+		mouseExit { setitemcolor upd_btn_close backcolor UPDATER_BACK }
+		visible 1
+		action {
+			play "sound/misc/nomenu.wav";
+			uiScript CloseUpdatePopup
+		}
+	}
+}
+}

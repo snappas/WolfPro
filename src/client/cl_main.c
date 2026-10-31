@@ -2366,6 +2366,8 @@ void CL_Frame( int msec ) {
 		return;
 	}
 
+	CL_Update_Frame();
+
 	if(clc.downloadCURLM) {
 		CL_cURL_PerformDownload();
 		// we can't process frames normally when in disconnected
@@ -2943,6 +2945,8 @@ void CL_Init( void ) {
 
 	CL_ImGUI_Init();
 
+	CL_Update_Init();
+
 	Cvar_Set( "cl_running", "1" );
 
 	Com_Printf( "----- Client Initialization Complete -----\n" );
@@ -2967,6 +2971,8 @@ void CL_Shutdown( void ) {
 	recursive = qtrue;
 
 	CL_Disconnect( qtrue );
+
+	CL_Update_Shutdown();
 
 	S_Shutdown();
 	CL_ShutdownRef();

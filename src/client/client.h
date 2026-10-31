@@ -715,6 +715,35 @@ static void CL_ImGUI_Frame(void) {}
 #endif //NO RTCW_VULKAN
 #define KEYCATCH_IMGUI          0x0010
 
+//
+// cl_update.c
+//
+typedef enum { UPDATER_STATE_IDLE, UPDATER_STATE_CHECKING, UPDATER_STATE_UPTODATE, UPDATER_STATE_AVAILABLE, UPDATER_STATE_CHECKFAILED,
+               UPDATER_STATE_DOWNLOADING, UPDATER_STATE_STAGING, UPDATER_STATE_LAUNCHING, UPDATER_STATE_FAILED } updaterState_t;
+
+void CL_Update_Init(void);
+void CL_Update_Frame(void);
+void CL_Update_Shutdown(void);
+int CL_Update_GetNotes(char *buf, int size);
+
+#ifdef _WIN32
+// win_update.c: paths are UTF-8; cmdline holds the arguments only, not the exe
+qboolean Sys_UpdateSHA256File(const char *path, char hexOut[65]);
+qboolean Sys_UpdateDirWritable(const char *dir);
+qboolean Sys_UpdateLaunch(const char *exe, const char *cmdline, char *err, int errSize);
+void Sys_UpdateExePath(char *out, int size);
+int Sys_UpdatePid(void);
+qboolean Sys_UpdatePidRunning(int pid);
+qboolean Sys_UpdateUpdaterRunning(void);
+FILE *Sys_UpdateFOpen(const char *path, const char *mode);
+qboolean Sys_UpdateRemoveFile(const char *path);
+qboolean Sys_UpdateMkdirs(const char *dir);
+qboolean Sys_UpdateRemoveTree(const char *dir); // qtrue if gone or never existed
+int Sys_UpdateArgCount(void);
+qboolean Sys_UpdateArg(int index, char *out, int size); // 0 = first after the exe
+qboolean Sys_UpdateAnsiPath(const char *path, char *out, int size);
+#endif
+
 
 #define CTL_RKVALD          "rkvald"
 #define RKVALD_OK           "1"

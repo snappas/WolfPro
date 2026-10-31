@@ -58,6 +58,7 @@ if(IS_VULKAN)
 		os_libraries
 		${CURL_LIBRARIES}
 		${LZMA_LIBRARIES}
+		${JANSSON_LIBRARY}
 	)
 	target_link_libraries(${wolfmp_target} cimgui cimplot)
 else()
@@ -67,7 +68,12 @@ else()
 	os_libraries
 	${CURL_LIBRARIES}
 	${LZMA_LIBRARIES}
+	${JANSSON_LIBRARY}
 	)
+endif()
+if(WIN32)
+	# SHA-256 for update downloads (win_update.c)
+	target_link_libraries(${wolfmp_target} bcrypt)
 endif()
 if(ENABLE_ASAN)
 # clang_rt.asan-x86_64.lib is the clang-cl/LLVM static runtime name; MSVC's own bundled
@@ -75,7 +81,7 @@ if(ENABLE_ASAN)
 target_link_options(${wolfmp_target} PRIVATE /wholearchive:clang_rt.asan_dynamic_runtime_thunk-x86_64.lib)
 endif()
 
-target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR})
+target_include_directories(${wolfmp_target} PRIVATE ${CURL_INCLUDE_DIR} ${LZMA_INCLUDE_DIR} ${JANSSON_INCLUDE_DIR})
 
 message(STATUS CMAKE_BUILD_TYPE)
 
