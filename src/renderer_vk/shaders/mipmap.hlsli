@@ -1,5 +1,5 @@
 
-[[vk::binding(0)]] RWTexture2D<unorm float4> mips[12];
+[[vk::binding(0)]] [[vk::image_format("rgba8")]] RWTexture2D<unorm float4> mips[12];
 
 int2 TexTC(int2 tc, int2 dims, bool clampMode){
     int2 maxTC = dims - int2(1,1);

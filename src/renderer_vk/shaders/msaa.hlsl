@@ -11,7 +11,7 @@ struct RootConstants
 [[vk::push_constant]] RootConstants rc;
 
 Texture2DMS<unorm float4> src;
-RWTexture2D<unorm float4> dst;
+[[vk::image_format("rgba8")]] RWTexture2D<unorm float4> dst;
 
 [numthreads(8,8,1)]
 void cs(uint3 dtID : SV_DispatchThreadID) 
