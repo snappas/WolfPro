@@ -35,6 +35,7 @@ void RB_InitGamma(void){
     desc.name = "Gamma";
     desc.colorFormat = R8G8B8A8_UNorm;
     desc.cullType = CT_TWO_SIDED;
+    desc.noDepthAttachment = qtrue;
     desc.descLayout = descSetLayout;
 
     desc.dstBlend = GLS_DSTBLEND_ZERO;

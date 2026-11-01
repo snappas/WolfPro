@@ -28,7 +28,11 @@ if(WIN32)
 	# applied and this target linked with MSVC's /DEBUG-implied /OPT:NOREF default.
 	target_link_options(${wolfmp_target} PRIVATE /OPT:REF /OPT:ICF)
 	if(ENABLE_ASAN)
-		target_link_options(${wolfmp_target} PRIVATE /O0 -g /LIBPATH:${CLANGRT} /EHsc)
+		target_link_options(${wolfmp_target} PRIVATE /O0 -g /EHsc)
+		# cl.exe must link its own ASan libs; LLVM's import lib needs LLVM's runtime DLL
+		if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+			target_link_options(${wolfmp_target} PRIVATE /LIBPATH:${CLANGRT})
+		endif()
 	endif()
 	# AddressSanitizer on MSVC needs the dynamic CRT across this EXE + DLL-module
 	# project (see WolfPlatform.cmake) -- forcing the static CRT here would undo

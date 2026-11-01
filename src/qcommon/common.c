@@ -109,7 +109,7 @@ int64_t	com_nextTargetTimeUS = INT64_MIN;
 
 qboolean com_errorEntered = qfalse;
 qboolean com_fullyInitialized = qfalse;
-volatile qboolean com_zoneInitialized = qfalse; // set once mainzone exists -- other threads must not Z_Malloc before this
+volatile qboolean com_profilerReady = qfalse; // set once Com_Init has set up the profiler -- other threads must not register before this
 
 // renderer window states
 qboolean	gw_minimized = qfalse; // this will be always true for dedicated servers
@@ -1912,8 +1912,6 @@ static void Com_InitZoneMemory( void ) {
 		Com_Error( ERR_FATAL, "Zone data failed to allocate %i megs", mainZoneSize / (1024*1024) );
 	}
 	Z_Init( mainzone, mainZoneSize, "main");
-
-	com_zoneInitialized = qtrue;
 }
 
 
@@ -3394,6 +3392,7 @@ void Com_Init( char *commandLine ) {
 	PROF_Init();
 	PROF_InitThread( "Main" );
 	PROF_RegisterCommands();
+	com_profilerReady = qtrue;
 
 	com_fullyInitialized = qtrue;
 	Com_Printf( "--- Common Initialization Complete ---\n" );

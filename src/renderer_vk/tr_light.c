@@ -92,7 +92,7 @@ void R_DlightBmodel( bmodel_t *bmodel ) {
 		}
 
 		// we need to check this light
-		mask |= 1 << i;
+		mask |= 1u << i;
 	}
 
 	// RF, this is why some dlights wouldn't light up bmodels

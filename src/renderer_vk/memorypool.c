@@ -58,7 +58,7 @@ uint64_t Pool_Add(memoryPool *pool, void *rawItem){
 	uint32_t freeSpot = pool->firstFree;
 	
 	if(freeSpot == 0){
-		ri.Error(ERR_FATAL, "(Pool_Add)Ran out of pool memory\n");	
+		ri.Error(ERR_FATAL, "(Pool_Add)Ran out of pool memory (%u items of %u bytes each)\n", pool->itemCount, pool->typeSize);	
 	}	
 	assert(pool->lookupData[freeSpot].inUse == qfalse);
 

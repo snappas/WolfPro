@@ -309,6 +309,19 @@ void CreateInstance()
 {
     ri.Printf( PRINT_ALL, "Vulkan Create Instance\n" );
 
+    uint32_t instanceVersion = 0;
+    if(vkEnumerateInstanceVersion != NULL)
+    {
+        VK(vkEnumerateInstanceVersion(&instanceVersion));
+    }
+    if(instanceVersion < MINIMUM_VULKAN_API_VERSION)
+    {
+        ri.Error(ERR_FATAL, "Vulkan instance version %d.%d.%d is below the required %d.%d.%d\n"
+            "The OpenGL client (wolfmp_gl) can still run on this PC.\n",
+            VK_API_VERSION_MAJOR(instanceVersion), VK_API_VERSION_MINOR(instanceVersion), VK_API_VERSION_PATCH(instanceVersion),
+            VK_API_VERSION_MAJOR(MINIMUM_VULKAN_API_VERSION), VK_API_VERSION_MINOR(MINIMUM_VULKAN_API_VERSION), VK_API_VERSION_PATCH(MINIMUM_VULKAN_API_VERSION));
+    }
+
     VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {};
     messengerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -321,7 +334,7 @@ void CreateInstance()
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.apiVersion = MINIMUM_VULKAN_API_VERSION;
+    appInfo.apiVersion = TARGET_VULKAN_API_VERSION;
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 4, 0);
     appInfo.engineVersion = VK_MAKE_VERSION(1, 4, 0);
     appInfo.pApplicationName = "Wolfenstein-vk";
@@ -356,6 +369,8 @@ void CreateInstance()
 }
 
 
+#define QUEUE_GRAPHICS_COMPUTE (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)
+
 static qbool FindSuitableQueueFamilies(Queues* queues, VkPhysicalDevice physicalDevice)
 {
     uint32_t familyCount = 0;
@@ -374,7 +389,7 @@ static qbool FindSuitableQueueFamilies(Queues* queues, VkPhysicalDevice physical
 
         for(int f = 0; f < familyCount; ++f)
         {
-            if(families[f].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+            if((families[f].queueFlags & QUEUE_GRAPHICS_COMPUTE) == QUEUE_GRAPHICS_COMPUTE)
             {
                 VkBool32 presentSupport = qfalse;
                 VK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, f, vk.surface, &presentSupport));
@@ -394,7 +409,7 @@ static qbool FindSuitableQueueFamilies(Queues* queues, VkPhysicalDevice physical
 
         for(int f = 0; f < familyCount; ++f)
         {
-            if(families[f].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+            if((families[f].queueFlags & QUEUE_GRAPHICS_COMPUTE) == QUEUE_GRAPHICS_COMPUTE)
             {
                 queues->graphicsFamily = f;
                 graphicsFound = qtrue;
@@ -438,6 +453,133 @@ void R_Gpulist_f(void){
     ri.Hunk_FreeTempMemory(devices);
 }
 
+// core 1.3 reports both features through one struct; below that, or with the
+// KHR bit set, each comes from its extension, chained only if the device has it
+static void GetRenderingCaps(VkPhysicalDevice device, uint32_t apiVersion, VulkanCaps *caps)
+{
+    const int legacy = r_legacyRendering->integer;
+
+    VkPhysicalDeviceVulkan13Features f13 = {};
+    f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    VkPhysicalDeviceSynchronization2Features fSync2 = {};
+    fSync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    VkPhysicalDeviceDynamicRenderingFeatures fDynamic = {};
+    fDynamic.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    VkPhysicalDeviceFeatures2 f2 = {};
+    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+
+    caps->core13 = (apiVersion >= VK_API_VERSION_1_3 && !(legacy & LEGACY_RENDERING_KHR)) ? qtrue : qfalse;
+    if(caps->core13)
+    {
+        f2.pNext = &f13;
+    }
+    else
+    {
+        uint32_t count = 0;
+        VK(vkEnumerateDeviceExtensionProperties(device, NULL, &count, NULL));
+        VkExtensionProperties *available = (VkExtensionProperties*)ri.Hunk_AllocateTempMemory(count * sizeof(VkExtensionProperties));
+        VK(vkEnumerateDeviceExtensionProperties(device, NULL, &count, available));
+        if(IsExtensionAvailable("VK_KHR_synchronization2", count, available))
+        {
+            fSync2.pNext = f2.pNext;
+            f2.pNext = &fSync2;
+        }
+        if(IsExtensionAvailable("VK_KHR_dynamic_rendering", count, available))
+        {
+            fDynamic.pNext = f2.pNext;
+            f2.pNext = &fDynamic;
+        }
+        ri.Hunk_FreeTempMemory(available);
+    }
+    vkGetPhysicalDeviceFeatures2(device, &f2);
+
+    caps->synchronization2 = ((f13.synchronization2 || fSync2.synchronization2) && !(legacy & LEGACY_RENDERING_NO_SYNCHRONIZATION2)) ? qtrue : qfalse;
+    caps->dynamicRendering = ((f13.dynamicRendering || fDynamic.dynamicRendering) && !(legacy & LEGACY_RENDERING_NO_DYNAMIC_RENDERING)) ? qtrue : qfalse;
+}
+
+static const char *GetDeviceRejectReason(VkPhysicalDevice device, const VkPhysicalDeviceProperties *props, Queues *queues)
+{
+    static char reason[256];
+
+    if(props->apiVersion < MINIMUM_VULKAN_API_VERSION)
+    {
+        Com_sprintf(reason, sizeof(reason), "Vulkan %d.%d.%d is below the required %d.%d.%d",
+            VK_API_VERSION_MAJOR(props->apiVersion), VK_API_VERSION_MINOR(props->apiVersion), VK_API_VERSION_PATCH(props->apiVersion),
+            VK_API_VERSION_MAJOR(MINIMUM_VULKAN_API_VERSION), VK_API_VERSION_MINOR(MINIMUM_VULKAN_API_VERSION), VK_API_VERSION_PATCH(MINIMUM_VULKAN_API_VERSION));
+        return reason;
+    }
+
+    if(!FindSuitableQueueFamilies(queues, device))
+    {
+        Com_sprintf(reason, sizeof(reason), "no graphics+compute queue family with presentation support");
+        return reason;
+    }
+
+    VkPhysicalDeviceVulkan12Features f12 = {};
+    f12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    VkPhysicalDeviceFeatures2 f2 = {};
+    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    f2.pNext = &f12;
+    vkGetPhysicalDeviceFeatures2(device, &f2);
+
+    VkPhysicalDeviceVulkan12Properties p12 = {};
+    p12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
+    VkPhysicalDeviceProperties2 pr2 = {};
+    pr2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    pr2.pNext = &p12;
+    vkGetPhysicalDeviceProperties2(device, &pr2);
+
+#define REQUIRE_FEATURE(field) \
+    if(!(field)) \
+    { \
+        Com_sprintf(reason, sizeof(reason), "missing feature %s", #field); \
+        return reason; \
+    }
+
+    REQUIRE_FEATURE(f2.features.shaderSampledImageArrayDynamicIndexing);
+    REQUIRE_FEATURE(f2.features.shaderStorageImageArrayDynamicIndexing);
+    REQUIRE_FEATURE(f12.descriptorBindingSampledImageUpdateAfterBind);
+    REQUIRE_FEATURE(f12.descriptorBindingStorageImageUpdateAfterBind);
+    REQUIRE_FEATURE(f12.descriptorBindingStorageBufferUpdateAfterBind);
+    REQUIRE_FEATURE(f12.descriptorBindingPartiallyBound);
+    REQUIRE_FEATURE(f12.descriptorBindingUpdateUnusedWhilePending);
+    REQUIRE_FEATURE(f12.timelineSemaphore);
+    REQUIRE_FEATURE(f12.hostQueryReset);
+#undef REQUIRE_FEATURE
+
+    if(p12.maxPerStageDescriptorUpdateAfterBindSampledImages < MAX_IMAGEDESCRIPTORS)
+    {
+        Com_sprintf(reason, sizeof(reason), "maxPerStageDescriptorUpdateAfterBindSampledImages is %u, need %d",
+            p12.maxPerStageDescriptorUpdateAfterBindSampledImages, MAX_IMAGEDESCRIPTORS);
+        return reason;
+    }
+    if(p12.maxDescriptorSetUpdateAfterBindSampledImages < MAX_IMAGEDESCRIPTORS)
+    {
+        Com_sprintf(reason, sizeof(reason), "maxDescriptorSetUpdateAfterBindSampledImages is %u, need %d",
+            p12.maxDescriptorSetUpdateAfterBindSampledImages, MAX_IMAGEDESCRIPTORS);
+        return reason;
+    }
+
+    return NULL;
+}
+
+static void FillDeviceCaps(VkPhysicalDevice device, const Queues *queues)
+{
+    uint32_t familyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, NULL);
+    VkQueueFamilyProperties *families = (VkQueueFamilyProperties*)ri.Hunk_AllocateTempMemory(familyCount * sizeof(VkQueueFamilyProperties));
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, families);
+    const uint32_t validBits = queues->graphicsFamily < familyCount ? families[queues->graphicsFamily].timestampValidBits : 0;
+    ri.Hunk_FreeTempMemory(families);
+
+    vk.caps.timestamps = (vk.deviceProperties.limits.timestampComputeAndGraphics && validBits != 0) ? qtrue : qfalse;
+    vk.caps.anisotropy = vk.deviceFeatures.samplerAnisotropy ? qtrue : qfalse;
+    vk.caps.fillModeNonSolid = vk.deviceFeatures.fillModeNonSolid ? qtrue : qfalse;
+    vk.caps.fragmentStores = vk.deviceFeatures.fragmentStoresAndAtomics ? qtrue : qfalse;
+    vk.caps.maxAnisotropy = vk.caps.anisotropy ? vk.deviceProperties.limits.maxSamplerAnisotropy : 1.0f;
+    GetRenderingCaps(device, vk.deviceProperties.apiVersion, &vk.caps);
+}
+
 void PickPhysicalDevice(void)
 {
     uint32_t deviceCount = 0;
@@ -447,9 +589,14 @@ void PickPhysicalDevice(void)
         ri.Error(ERR_FATAL, "Vulkan found no physical device\n");
     }
 
+    char rejections[1024] = "";
     VkPhysicalDevice *devices = (VkPhysicalDevice*)ri.Hunk_AllocateTempMemory(deviceCount * sizeof(VkPhysicalDevice));
     {
         VK(vkEnumeratePhysicalDevices(vk.instance, &deviceCount, devices));
+
+        if(r_gpu->integer > (int)deviceCount){
+            ri.Printf(PRINT_WARNING, "r_gpu %d is out of range (%d devices found), selecting automatically\n", r_gpu->integer, (int)deviceCount);
+        }
 
         int selection = -1;
         int highestScore = 0;
@@ -463,46 +610,56 @@ void PickPhysicalDevice(void)
             VkPhysicalDeviceProperties deviceProperties;
             vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
 
-            VkPhysicalDeviceFeatures deviceFeatures;
-            vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-
             Queues queues;
-            if(deviceProperties.apiVersion >= MINIMUM_VULKAN_API_VERSION &&
-                FindSuitableQueueFamilies(&queues, physicalDevice) &&
-                deviceFeatures.shaderSampledImageArrayDynamicIndexing && //TODO is this the right variable? want dynamic uniform indexing vs nonuniform indexing
-                deviceFeatures.samplerAnisotropy &&
-                deviceProperties.limits.timestampComputeAndGraphics &&
-                deviceProperties.limits.maxDescriptorSetSampledImages >= MAX_IMAGEDESCRIPTORS)
+            const char *reason = GetDeviceRejectReason(physicalDevice, &deviceProperties, &queues);
+            if(reason != NULL)
             {
-                // score the physical device based on specifics that aren't requirements
-                
-                int score = 1;
-                if(deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-                {
-                    score += 1000;
-                }
+                ri.Printf(PRINT_ALL, "Vulkan device %d '%s' rejected: %s\n", d+1, deviceProperties.deviceName, reason);
+                Q_strcat(rejections, sizeof(rejections), va("\n  %d: %s - %s", d+1, deviceProperties.deviceName, reason));
+                continue;
+            }
 
-                // select the physical device if it scored better than the others
-                if(score > highestScore)
-                {
-                    highestScore = score;
-                    selection = d;
-                }
+            // score the physical device based on specifics that aren't requirements
+            int score = 1;
+            if(deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            {
+                score += 1000;
+            }
+
+            // select the physical device if it scored better than the others
+            if(score > highestScore)
+            {
+                highestScore = score;
+                selection = d;
             }
         }
 
         if(selection < 0)
         {
-            ri.Error(ERR_FATAL, "No suitable physical device found\n");
+            ri.Error(ERR_FATAL, "No suitable Vulkan device found:%s\n"
+                "The OpenGL client (wolfmp_gl) can still run on this PC.\n", rejections);
         }
 
         vk.physicalDevice = devices[selection];
         vkGetPhysicalDeviceProperties(vk.physicalDevice, &vk.deviceProperties);
         vkGetPhysicalDeviceFeatures(vk.physicalDevice, &vk.deviceFeatures);
         FindSuitableQueueFamilies(&vk.queues, devices[selection]);
+        FillDeviceCaps(vk.physicalDevice, &vk.queues);
     }
     ri.Hunk_FreeTempMemory(devices);
-    ri.Printf(PRINT_ALL, "Physical device selected: %s\n", vk.deviceProperties.deviceName);
+
+    VkPhysicalDeviceVulkan12Properties p12 = {};
+    p12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
+    VkPhysicalDeviceProperties2 pr2 = {};
+    pr2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    pr2.pNext = &p12;
+    vkGetPhysicalDeviceProperties2(vk.physicalDevice, &pr2);
+    ri.Printf(PRINT_ALL, "Physical device selected: %s, Vulkan %d.%d.%d, update-after-bind sampled images: %u\n",
+        vk.deviceProperties.deviceName,
+        VK_API_VERSION_MAJOR(vk.deviceProperties.apiVersion), VK_API_VERSION_MINOR(vk.deviceProperties.apiVersion), VK_API_VERSION_PATCH(vk.deviceProperties.apiVersion),
+        p12.maxDescriptorSetUpdateAfterBindSampledImages);
+    ri.Printf(PRINT_ALL, "Vulkan rendering path: %s, synchronization2 %s, dynamic rendering %s\n",
+        vk.caps.core13 ? "core 1.3" : "KHR", vk.caps.synchronization2 ? "on" : "off", vk.caps.dynamicRendering ? "on" : "off");
 }
 
 static void CreateQueryPool(void){
@@ -514,6 +671,18 @@ static void CreateQueryPool(void){
         VK(vkCreateQueryPool(vk.device, &query_pool_info, NULL, &vk.queryPool[i]));
     }
     
+}
+
+static void LoadRenderingFunctions(void)
+{
+    const qbool core = vk.caps.core13;
+    const qbool sync2 = vk.caps.synchronization2;
+    const qbool dynamic = vk.caps.dynamicRendering;
+
+    vk.cmdBeginRendering = !dynamic ? NULL : (core ? vkCmdBeginRendering : vkCmdBeginRenderingKHR);
+    vk.cmdEndRendering = !dynamic ? NULL : (core ? vkCmdEndRendering : vkCmdEndRenderingKHR);
+    vk.cmdPipelineBarrier2 = !sync2 ? NULL : (core ? vkCmdPipelineBarrier2 : vkCmdPipelineBarrier2KHR);
+    vk.cmdWriteTimestamp2 = !sync2 ? NULL : (core ? vkCmdWriteTimestamp2 : vkCmdWriteTimestamp2KHR);
 }
 
 static void CreateDevice(void)
@@ -540,13 +709,22 @@ static void CreateDevice(void)
     {
         "VK_KHR_swapchain"
     };
-    const char* extensions[ARRAY_LEN(neededDeviceExtensions) + 1]; // +1 for the optional calibrated-timestamps extension below
+    const char* extensions[ARRAY_LEN(neededDeviceExtensions) + 3]; // +3 for calibrated timestamps and the two KHR rendering extensions
     uint32_t extensionCount = 0;
     int neededIdx;
 
     for(neededIdx = 0; neededIdx < ARRAY_LEN(neededDeviceExtensions); ++neededIdx)
     {
         extensions[extensionCount++] = neededDeviceExtensions[neededIdx];
+    }
+
+    if(!vk.caps.core13 && vk.caps.synchronization2)
+    {
+        extensions[extensionCount++] = "VK_KHR_synchronization2";
+    }
+    if(!vk.caps.core13 && vk.caps.dynamicRendering)
+    {
+        extensions[extensionCount++] = "VK_KHR_dynamic_rendering";
     }
 
 #if defined( ENABLE_PROFILER )
@@ -571,30 +749,58 @@ static void CreateDevice(void)
     VkPhysicalDeviceVulkan12Features vk12f = {};
     vk12f.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vk12f.hostQueryReset = VK_TRUE;
-    //vk12f.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
-    //vk12f.descriptorBindingPartiallyBound = VK_TRUE;
+    vk12f.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
+    vk12f.descriptorBindingPartiallyBound = VK_TRUE;
 	vk12f.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-	vk12f.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
-    vk12f.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE; //@TODO: some older hardware may not support update after bind for storage images
+    vk12f.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
     vk12f.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
     vk12f.timelineSemaphore = VK_TRUE;
 
     VkPhysicalDeviceVulkan13Features vk13f = {};
     vk13f.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    vk13f.synchronization2 = VK_TRUE;
-    vk13f.dynamicRendering = VK_TRUE;
+    vk13f.synchronization2 = vk.caps.synchronization2 ? VK_TRUE : VK_FALSE;
+    vk13f.dynamicRendering = vk.caps.dynamicRendering ? VK_TRUE : VK_FALSE;
 
-    vk13f.pNext = &vk12f;
+    VkPhysicalDeviceSynchronization2Features sync2f = {};
+    sync2f.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    sync2f.synchronization2 = VK_TRUE;
 
-    // @TODO: copy over results from vk.deviceFeatures when they're optional
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicf = {};
+    dynamicf.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    dynamicf.dynamicRendering = VK_TRUE;
+
+    // the 1.3 struct must not sit in the same chain as the KHR ones
+    void *featureChain = &vk12f;
+    if(vk.caps.core13)
+    {
+        vk13f.pNext = featureChain;
+        featureChain = &vk13f;
+    }
+    else
+    {
+        if(vk.caps.synchronization2)
+        {
+            sync2f.pNext = featureChain;
+            featureChain = &sync2f;
+        }
+        if(vk.caps.dynamicRendering)
+        {
+            dynamicf.pNext = featureChain;
+            featureChain = &dynamicf;
+        }
+    }
+
     VkPhysicalDeviceFeatures2 features2 = {};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features2.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
-    features2.features.samplerAnisotropy = VK_TRUE;
+    features2.features.shaderStorageImageArrayDynamicIndexing = VK_TRUE;
+    features2.features.samplerAnisotropy = vk.caps.anisotropy;
+    features2.features.fillModeNonSolid = vk.caps.fillModeNonSolid;
     //features2.features.shaderClipDistance = VK_TRUE;
     features2.features.depthClamp = vk.deviceFeatures.depthClamp;
-    features2.features.fragmentStoresAndAtomics = VK_TRUE;
-    features2.pNext = &vk13f;
+    vk.caps.fragmentStoresEnabled = (r_shaderTrace->integer && vk.caps.fragmentStores) ? qtrue : qfalse;
+    features2.features.fragmentStoresAndAtomics = vk.caps.fragmentStoresEnabled ? VK_TRUE : VK_FALSE;
+    features2.pNext = featureChain;
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -607,6 +813,7 @@ static void CreateDevice(void)
 
     VK(vkCreateDevice(vk.physicalDevice, &createInfo, NULL, &vk.device));
     volkLoadDevice(vk.device);
+    LoadRenderingFunctions();
     vkGetDeviceQueue(vk.device, vk.queues.graphicsFamily, 0, &vk.queues.graphics);
     vkGetDeviceQueue(vk.device, vk.queues.presentFamily, 0, &vk.queues.present);
 }
@@ -614,7 +821,7 @@ static void CreateDevice(void)
 static void CreateAllocator(void)
 {
     VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.vulkanApiVersion = MINIMUM_VULKAN_API_VERSION;
+    allocatorInfo.vulkanApiVersion = vk.deviceProperties.apiVersion < TARGET_VULKAN_API_VERSION ? vk.deviceProperties.apiVersion : TARGET_VULKAN_API_VERSION;
     allocatorInfo.physicalDevice = vk.physicalDevice;
     allocatorInfo.device = vk.device;
     allocatorInfo.instance = vk.instance;
@@ -634,8 +841,7 @@ void SetObjectName(VkObjectType type, uint64_t object, const char* name)
         return;
     }
 
-    PFN_vkSetDebugUtilsObjectNameEXT pfnSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(vk.device, "vkSetDebugUtilsObjectNameEXT");
-    if(pfnSetDebugUtilsObjectNameEXT == NULL)
+    if(!vk.ext.EXT_debug_utils || vkSetDebugUtilsObjectNameEXT == NULL)
     {
         return;
     }
@@ -646,7 +852,7 @@ void SetObjectName(VkObjectType type, uint64_t object, const char* name)
     nameInfo.objectHandle = object;
     nameInfo.objectType = type;
     nameInfo.pNext = NULL;
-    if(pfnSetDebugUtilsObjectNameEXT(vk.device, &nameInfo) != VK_SUCCESS)
+    if(vkSetDebugUtilsObjectNameEXT(vk.device, &nameInfo) != VK_SUCCESS)
     {
         ri.Printf(PRINT_DEVELOPER, "vkSetDebugUtilsObjectNameEXT failed\n");
     }
@@ -721,9 +927,16 @@ static void CreateSwapChain(void)
     VkSurfaceCapabilitiesKHR caps;
     VK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk.physicalDevice, vk.surface, &caps));
 
+    // Use the surface's own extent when it reports one; fall back to the
+    // window size when the surface leaves it to the swap chain.
     int w, h;
-    w = glInfo.winWidth;
-    h = glInfo.winHeight;
+    if(caps.currentExtent.width != 0xFFFFFFFFu){
+        w = caps.currentExtent.width;
+        h = caps.currentExtent.height;
+    }else{
+        w = glInfo.winWidth;
+        h = glInfo.winHeight;
+    }
 
     if(w < caps.minImageExtent.width ||
       w > caps.maxImageExtent.width ||
@@ -925,8 +1138,19 @@ static void CreateSwapChain(void)
     // }
 }
 
-void RecreateSwapchain(void){
+// Returns qfalse without touching the swap chain while the surface has no
+// area (minimized); the recreate is then retried from RHI_BeginFrame.
+qbool RecreateSwapchain(void){
+    VkSurfaceCapabilitiesKHR caps;
+    VK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk.physicalDevice, vk.surface, &caps));
+    if(caps.currentExtent.width == 0 || caps.currentExtent.height == 0 ||
+      caps.maxImageExtent.width == 0 || caps.maxImageExtent.height == 0){
+        vk.swapChainRecreatePending = qtrue;
+        return qfalse;
+    }
+
     vkDeviceWaitIdle(vk.device);
+    DestroyFramebufferCache();
     vkDestroySwapchainKHR(vk.device, vk.swapChain, NULL);
     for(int i = 0; i < vk.swapChainImageCount; i++){
         Texture *texture = GET_TEXTURE(vk.swapChainRenderTargets[i]);
@@ -938,6 +1162,8 @@ void RecreateSwapchain(void){
     }
     
     CreateSwapChain();
+    vk.swapChainRecreatePending = qfalse;
+    return qtrue;
 }
 
 
@@ -1312,7 +1538,18 @@ static void CreateCommandPool(void)
 
 
 
+void RHI_SetFramesInFlight( uint32_t count ){
+    if(count < 1 || count > RHI_FRAMES_IN_FLIGHT){
+        ri.Error(ERR_FATAL, "Frames in flight out of range (%d, max %d)\n", (int)count, RHI_FRAMES_IN_FLIGHT);
+    }
+    vk.framesInFlight = count;
+    vk.currentFrameIndex = 0;
+}
+
 void RHI_BeginFrame(void) {
+    if(vk.swapChainRecreatePending){
+        RecreateSwapchain();
+    }
     if(r_swapInterval->modified){
         qbool currentVsync = r_swapInterval->integer != 0;
         if(currentVsync != vk.vsync){
@@ -1320,7 +1557,7 @@ void RHI_BeginFrame(void) {
         }
         r_swapInterval->modified = qfalse;
     }
-    vk.currentFrameIndex = (vk.currentFrameIndex + 1) % RHI_FRAMES_IN_FLIGHT;
+    vk.currentFrameIndex = (vk.currentFrameIndex + 1) % vk.framesInFlight;
     vk.durationQueryCount[vk.currentFrameIndex] = 0;
     
     // VkSemaphoreWaitInfo waitInfo = {};
@@ -2369,6 +2606,7 @@ VmaMemoryUsage GetVmaMemoryUsage(RHI_MemoryUsage usage)
 		case RHI_MemoryUsage_DeviceLocal: return VMA_MEMORY_USAGE_GPU_ONLY;
 		case RHI_MemoryUsage_Upload: return VMA_MEMORY_USAGE_CPU_TO_GPU;
 		case RHI_MemoryUsage_Readback: return VMA_MEMORY_USAGE_GPU_TO_CPU;
+		case RHI_MemoryUsage_Staging: return VMA_MEMORY_USAGE_CPU_ONLY;
 		default: assert(0); return VMA_MEMORY_USAGE_UNKNOWN;
 	}
 }
@@ -2414,7 +2652,7 @@ static void CreateUploadManager(){
     rhiBufferDesc textureStagingBufferDesc = {};
     textureStagingBufferDesc.name = "Upload Buffer";
     textureStagingBufferDesc.initialState = RHI_ResourceState_CopySourceBit;
-    textureStagingBufferDesc.memoryUsage = RHI_MemoryUsage_Upload;
+    textureStagingBufferDesc.memoryUsage = RHI_MemoryUsage_Staging;
     textureStagingBufferDesc.byteCount = vk.uploadBufferSize;
     textureStagingBufferDesc.longLifetime = qtrue;
     textureStagingBufferDesc.allowedStates = RHI_ResourceState_CopySourceBit;
@@ -2592,6 +2830,78 @@ VkSampleCountFlagBits GetVkSampleCount(uint32_t samples){
 }
 
 
+static int pipelineCacheSavedSize;
+
+// Returns qtrue only if the blob's header matches this device.
+static qbool PipelineCacheDataIsValid(const void *data, int size)
+{
+    VkPipelineCacheHeaderVersionOne header;
+    if(data == NULL || size < (int)sizeof(header)){
+        return qfalse;
+    }
+    memcpy(&header, data, sizeof(header));
+    if(header.headerSize < sizeof(header) || header.headerSize > (uint32_t)size){
+        return qfalse;
+    }
+    if(header.headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE){
+        return qfalse;
+    }
+    if(header.vendorID != vk.deviceProperties.vendorID || header.deviceID != vk.deviceProperties.deviceID){
+        return qfalse;
+    }
+    return memcmp(header.pipelineCacheUUID, vk.deviceProperties.pipelineCacheUUID, VK_UUID_SIZE) == 0;
+}
+
+static void CreatePipelineCache(void)
+{
+    void *data = NULL;
+    int size = ri.FS_ReadFile("vkpipelines.dat", &data);
+    VkPipelineCacheCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+
+    if(PipelineCacheDataIsValid(data, size)){
+        createInfo.initialDataSize = (size_t)size;
+        createInfo.pInitialData = data;
+        pipelineCacheSavedSize = size;
+    }else{
+        pipelineCacheSavedSize = 0;
+        if(size > 0){
+            ri.Printf(PRINT_WARNING, "vkpipelines.dat ignored (%d bytes), rebuilding\n", size);
+        }
+    }
+    VK(vkCreatePipelineCache(vk.device, &createInfo, NULL, &vk.pipelineCache));
+    if(data != NULL){
+        ri.FS_FreeFile(data);
+    }
+}
+
+void RHI_SavePipelineCache( void )
+{
+    size_t size = 0;
+    void *data;
+    VkResult result;
+
+    if(!vk.initialized || vk.device == VK_NULL_HANDLE || vk.pipelineCache == VK_NULL_HANDLE){
+        return;
+    }
+    if(vkGetPipelineCacheData(vk.device, vk.pipelineCache, &size, NULL) != VK_SUCCESS || size == 0){
+        return;
+    }
+    if((int)size == pipelineCacheSavedSize){
+        return;
+    }
+    data = malloc(size);
+    if(data == NULL){
+        return;
+    }
+    result = vkGetPipelineCacheData(vk.device, vk.pipelineCache, &size, data);
+    if(result == VK_SUCCESS){
+        ri.FS_WriteFile("vkpipelines.dat", data, (int)size);
+        pipelineCacheSavedSize = (int)size;
+    }
+    free(data);
+}
+
 void RHI_Init( void ) {
     if(vk.initialized)
     {
@@ -2608,7 +2918,7 @@ void RHI_Init( void ) {
     Pool_Init(&vk.bufferPool, 64, sizeof(Buffer), 0);
     Pool_Init(&vk.descriptorSetLayoutPool, 64, sizeof(DescriptorSetLayout), 0);
     Pool_Init(&vk.descriptorSetPool, 64 + MAX_UPLOADCMDBUFFERS, sizeof(DescriptorSet), 0);
-    Pool_Init(&vk.pipelinePool, 256, sizeof(Pipeline), 0);
+    Pool_Init(&vk.pipelinePool, RHI_MAX_PIPELINES, sizeof(Pipeline), 0);
     Pool_Init(&vk.samplerPool, 16, sizeof(Sampler), 0);
     
     
@@ -2619,6 +2929,7 @@ void RHI_Init( void ) {
     vk.surface = (VkSurfaceKHR)Sys_Vulkan_Init(vk.instance);
     PickPhysicalDevice();
     CreateDevice();
+    CreatePipelineCache();
     CreateAllocator();
     CreateSwapChain();
     CreateCommandPool();

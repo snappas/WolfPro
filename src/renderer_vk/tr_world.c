@@ -166,14 +166,14 @@ static int R_DlightFace( srfSurfaceFace_t *face, int dlightBits ) {
 	dlight_t    *dl;
 
 	for ( i = 0 ; i < tr.refdef.num_dlights ; i++ ) {
-		if ( !( dlightBits & ( 1 << i ) ) ) {
+		if ( !( dlightBits & ( 1u << i ) ) ) {
 			continue;
 		}
 		dl = &tr.refdef.dlights[i];
-		d = DotProduct( dl->origin, face->plane.normal ) - face->plane.dist;
+		d = DotProduct( dl->transformed, face->plane.normal ) - face->plane.dist;
 		if ( d < -dl->radius || d > dl->radius ) {
 			// dlight doesn't reach the plane
-			dlightBits &= ~( 1 << i );
+			dlightBits &= ~( 1u << i );
 		}
 	}
 
@@ -190,18 +190,18 @@ static int R_DlightGrid( srfGridMesh_t *grid, int dlightBits ) {
 	dlight_t    *dl;
 
 	for ( i = 0 ; i < tr.refdef.num_dlights ; i++ ) {
-		if ( !( dlightBits & ( 1 << i ) ) ) {
+		if ( !( dlightBits & ( 1u << i ) ) ) {
 			continue;
 		}
 		dl = &tr.refdef.dlights[i];
-		if ( dl->origin[0] - dl->radius > grid->meshBounds[1][0]
-			 || dl->origin[0] + dl->radius < grid->meshBounds[0][0]
-											 || dl->origin[1] - dl->radius > grid->meshBounds[1][1]
-			 || dl->origin[1] + dl->radius < grid->meshBounds[0][1]
-											 || dl->origin[2] - dl->radius > grid->meshBounds[1][2]
-			 || dl->origin[2] + dl->radius < grid->meshBounds[0][2] ) {
+		if ( dl->transformed[0] - dl->radius > grid->meshBounds[1][0]
+			 || dl->transformed[0] + dl->radius < grid->meshBounds[0][0]
+											 || dl->transformed[1] - dl->radius > grid->meshBounds[1][1]
+			 || dl->transformed[1] + dl->radius < grid->meshBounds[0][1]
+											 || dl->transformed[2] - dl->radius > grid->meshBounds[1][2]
+			 || dl->transformed[2] + dl->radius < grid->meshBounds[0][2] ) {
 			// dlight doesn't reach the bounds
-			dlightBits &= ~( 1 << i );
+			dlightBits &= ~( 1u << i );
 		}
 	}
 
@@ -683,5 +683,102 @@ void R_AddWorldSurfaces( void ) {
 	if ( tr.refdef.num_dlights > 32 ) {
 		tr.refdef.num_dlights = 32 ;
 	}
-	R_RecursiveWorldNode( tr.world->nodes, 15, ( 1 << tr.refdef.num_dlights ) - 1 );
+	// surfaces test against dl->transformed, and tr.or is the world here
+	R_TransformDlights( tr.refdef.num_dlights, tr.refdef.dlights, &tr.or );
+	R_RecursiveWorldNode( tr.world->nodes, 15, tr.refdef.num_dlights >= 32 ? ~0 : ( 1u << tr.refdef.num_dlights ) - 1 );
+}
+
+static rhiBuffer CreateWorldBuffer(const char *name, const void *data, uint32_t byteCount){
+	rhiBufferDesc desc = {};
+	desc.name = name;
+	desc.byteCount = byteCount;
+	desc.initialState = RHI_ResourceState_CopyDestinationBit;
+	desc.allowedStates = RHI_ResourceState_CopyDestinationBit | RHI_ResourceState_VertexBufferBit;
+	desc.memoryUsage = RHI_MemoryUsage_DeviceLocal;
+
+	rhiBuffer buffer = RHI_CreateBuffer(&desc);
+	RHI_UploadBufferData(buffer, data, byteCount);
+	return buffer;
+}
+
+static uint32_t AssignFirstVertex(int *firstVertex, int vertexCount, const shader_t *shader, uint32_t total){
+	*firstVertex = -1;
+	if(!shader->isMultitextured || vertexCount <= 0){
+		return total;
+	}
+	*firstVertex = (int)total;
+	return total + (uint32_t)vertexCount;
+}
+
+static void WriteVertex(vec4_t position, vec4_t texCoord, const float *xyz, const float *st, const float *lightmap){
+	VectorCopy(xyz, position);
+	position[3] = 1.0f; // the vertex shader ignores w
+	texCoord[0] = st[0];
+	texCoord[1] = st[1];
+	texCoord[2] = lightmap[0];
+	texCoord[3] = lightmap[1];
+}
+
+/*
+=================
+R_BuildWorldStaticBuffers
+
+Copies the surfaces drawn by the multitexture path into device-local vertex
+buffers, which RHI_Shutdown frees with the rest of the map's resources.
+=================
+*/
+void R_BuildWorldStaticBuffers( void ){
+	world_t *w = &s_worldData;
+	uint32_t vertexCount = 0;
+
+	backEnd.worldBuffersReady = qfalse;
+
+	for(int i = 0; i < w->numsurfaces; i++){
+		msurface_t *surf = &w->surfaces[i];
+		if(*surf->data == SF_FACE){
+			srfSurfaceFace_t *face = (srfSurfaceFace_t*)surf->data;
+			vertexCount = AssignFirstVertex(&face->staticFirstVertex, face->numPoints, surf->shader, vertexCount);
+		}else if(*surf->data == SF_TRIANGLES){
+			srfTriangles_t *tri = (srfTriangles_t*)surf->data;
+			vertexCount = AssignFirstVertex(&tri->staticFirstVertex, tri->numVerts, surf->shader, vertexCount);
+		}
+	}
+
+	if(vertexCount == 0){
+		ri.Printf(PRINT_ALL, "World static buffers: 0 vertexes, 0 bytes\n");
+		return;
+	}
+
+	const uint32_t byteCount = vertexCount * sizeof(vec4_t);
+	vec4_t *positions = ri.Hunk_AllocateTempMemory(byteCount);
+	vec4_t *texCoords = ri.Hunk_AllocateTempMemory(byteCount);
+
+	for(int i = 0; i < w->numsurfaces; i++){
+		msurface_t *surf = &w->surfaces[i];
+		if(*surf->data == SF_FACE){
+			srfSurfaceFace_t *face = (srfSurfaceFace_t*)surf->data;
+			const int first = face->staticFirstVertex;
+			for(int v = 0; first >= 0 && v < face->numPoints; v++){
+				const float *point = face->points[v];
+				WriteVertex(positions[first + v], texCoords[first + v], point, point + 3, point + 5);
+			}
+		}else if(*surf->data == SF_TRIANGLES){
+			srfTriangles_t *tri = (srfTriangles_t*)surf->data;
+			const int first = tri->staticFirstVertex;
+			for(int v = 0; first >= 0 && v < tri->numVerts; v++){
+				const drawVert_t *dv = &tri->verts[v];
+				WriteVertex(positions[first + v], texCoords[first + v], dv->xyz, dv->st, dv->lightmap);
+			}
+		}
+	}
+
+	backEnd.worldPositions = CreateWorldBuffer("World Positions", positions, byteCount);
+	backEnd.worldTexCoords = CreateWorldBuffer("World TexCoords", texCoords, byteCount);
+	backEnd.worldBuffersReady = qtrue;
+
+	// temp memory frees in reverse order
+	ri.Hunk_FreeTempMemory(texCoords);
+	ri.Hunk_FreeTempMemory(positions);
+
+	ri.Printf(PRINT_ALL, "World static buffers: %u vertexes, %u bytes\n", vertexCount, byteCount * 2);
 }

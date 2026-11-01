@@ -1055,6 +1055,54 @@ void RB_SurfaceFace( srfSurfaceFace_t *surf ) {
 	tess.numVertexes += surf->numPoints;
 }
 
+/*
+==============
+RB_SurfaceStaticIndices
+
+Appends a surface's indices rebased onto its vertexes in the world buffers,
+adding nothing to the tess vertexes.
+==============
+*/
+void RB_SurfaceStaticIndices( surfaceType_t *surface, int firstVertex ) {
+	const glIndex_t *indices;
+	glIndex_t   *tessIndexes;
+	int i;
+	int numIndexes;
+	int numVertexes;
+	int dlightBits;
+
+	if ( *surface == SF_FACE ) {
+		const srfSurfaceFace_t *face = ( const srfSurfaceFace_t * )surface;
+
+		indices = ( const glIndex_t * )( ( const char * )face + face->ofsIndices );
+		numIndexes = face->numIndices;
+		numVertexes = face->numPoints;
+		dlightBits = face->dlightBits;
+	} else {
+		const srfTriangles_t *tri = ( const srfTriangles_t * )surface;
+
+		indices = ( const glIndex_t * )tri->indexes;
+		numIndexes = tri->numIndexes;
+		numVertexes = tri->numVerts;
+		dlightBits = tri->dlightBits;
+	}
+
+	RB_CHECKOVERFLOW( 0, numIndexes );
+
+	tessIndexes = tess.indexes + tess.numIndexes;
+	for ( i = 0 ; i < numIndexes ; i++ ) {
+		tessIndexes[i] = indices[i] + firstVertex;
+	}
+	tess.numIndexes += numIndexes;
+	tess.dlightBits |= dlightBits;
+
+	// RB_EndSurface can't count these, tess.numVertexes stays 0
+	backEnd.pc.c_vertexes += numVertexes;
+
+	// after the overflow check, whose flush clears the mode
+	tess.batchMode = TESS_BATCH_STATIC;
+}
+
 
 static float    LodErrorForVolume( vec3_t local, float radius ) {
 	vec3_t world;

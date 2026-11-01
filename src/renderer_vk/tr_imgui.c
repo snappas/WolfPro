@@ -54,6 +54,7 @@ void RB_ImGUI_Init(void){
 
     desc.colorFormat = R8G8B8A8_UNorm;
     desc.cullType = CT_TWO_SIDED;
+    desc.noDepthAttachment = qtrue;
 
     desc.dstBlend = GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA;
     desc.srcBlend = GLS_SRCBLEND_SRC_ALPHA;
@@ -70,7 +71,7 @@ void RB_ImGUI_Init(void){
 
     ImGUIpipeline = RHI_CreateGraphicsPipeline(&desc);
 
-    for(int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++){
+    for(int i = 0; i < backEnd.framesInFlight; i++){
         rhiBufferDesc vertexBufferDesc = {};
         vertexBufferDesc.allowedStates = RHI_ResourceState_VertexBufferBit;
         vertexBufferDesc.byteCount = MAX_IMGUI_VERTS * sizeof(ImDrawVert);
@@ -163,6 +164,8 @@ void RB_ImGUI_Draw(rhiTexture renderTarget){
     RHI_UnmapBuffer(currentVB);
     RHI_UnmapBuffer(currentIB);
 
+    RB_EndRenderPass();
+
     RHI_CmdBeginBarrier();
     RHI_CmdTextureBarrier(renderTarget, RHI_ResourceState_RenderTargetBit);
     RHI_CmdEndBarrier();
@@ -174,7 +177,8 @@ void RB_ImGUI_Draw(rhiTexture renderTarget){
 
     RHI_CmdBindPipeline(ImGUIpipeline);
     RHI_CmdBindDescriptorSet(ImGUIpipeline, backEnd.descriptorSet);
-    RHI_CmdBindVertexBuffers(&currentVB, 1);
+    const uint32_t vertexOffset = 0;
+    RHI_CmdBindVertexBuffers(&currentVB, &vertexOffset, 1);
     RHI_CmdBindIndexBuffer(currentIB);
     RHI_CmdSetViewport(0,0,glConfig.vidWidth, glConfig.vidHeight, 0.0f, 1.0f);
 

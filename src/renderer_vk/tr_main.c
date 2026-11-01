@@ -1376,99 +1376,108 @@ int QDECL CompareDrawSurfs(void const *ptrA, void const *ptrB){
 	return qsort_signum(sortDifference);
 }
 
+// dlights reaching this surface, 0 for anything the additive pass doesn't cover
+static int R_SurfaceDlightMask( const drawSurf_t *drawSurf ) {
+	// dlightBits isn't refreshed for surfaces without the sort key's dlight bit
+	if(!( ( drawSurf->sort >> QSORT_DLIGHT_SHIFT ) & QSORT_DLIGHT_MASK )){
+		return 0;
+	}
+	if(drawSurf->shader->surfaceFlags & ( SURF_NODLIGHT | SURF_SKY )){
+		return 0;
+	}
+
+	switch(*drawSurf->surface){
+		case SF_GRID:
+			return ((srfGridMesh_t*)drawSurf->surface)->dlightBits;
+		case SF_FACE:
+			return ((srfSurfaceFace_t*)drawSurf->surface)->dlightBits;
+		case SF_TRIANGLES:
+			return ((srfTriangles_t*)drawSurf->surface)->dlightBits;
+		default:
+			return 0;
+	}
+}
+
+/*
+=================
+R_BuildLitSurfLists
+
+Appends one list per dlight to tr.refdef.litSurfs. Each keeps the draw surface
+order, so batching still works. A list past MAX_LITSURFS is truncated.
+=================
+*/
+static void R_BuildLitSurfLists( const drawSurf_t *drawSurfs, int numDrawSurfs, int *firstLitSurf, int *numLitSurfs ) {
+	const int numDlights = tr.refdef.num_dlights;
+	const unsigned int dlightMask = numDlights >= MAX_DLIGHTS ? ~0u : ( 1u << numDlights ) - 1u;
+	int surfCount[MAX_DLIGHTS] = { };
+	int numOpaqueSurfs = 0;
+	int nextLitSurf = tr.refdef.numLitSurfs;
+	int i, l;
+
+	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
+		if(drawSurfs[i].shader->sort > SS_OPAQUE){
+			break;
+		}
+		const unsigned int mask = (unsigned int)R_SurfaceDlightMask(&drawSurfs[i]) & dlightMask;
+		for(l = 0; l < numDlights; l++){
+			if(mask & (1u<<l)){
+				surfCount[l]++;
+			}
+		}
+		numOpaqueSurfs++;
+	}
+
+	for(l = 0; l < numDlights; l++){
+		const int available = MAX_LITSURFS - nextLitSurf;
+		firstLitSurf[l] = nextLitSurf;
+		numLitSurfs[l] = surfCount[l] < available ? surfCount[l] : available;
+		nextLitSurf += numLitSurfs[l];
+		surfCount[l] = 0;
+	}
+	tr.refdef.numLitSurfs = nextLitSurf;
+
+	for ( i = 0 ; i < numOpaqueSurfs ; i++ ) {
+		const drawSurf_t *drawSurf = &drawSurfs[i];
+		const unsigned int mask = (unsigned int)R_SurfaceDlightMask(drawSurf) & dlightMask;
+		for(l = 0; l < numDlights; l++){
+			if((mask & (1u<<l)) && surfCount[l] < numLitSurfs[l]){
+				litSurf_t *litSurf = &tr.refdef.litSurfs[firstLitSurf[l] + surfCount[l]++];
+				litSurf->surface = drawSurf->surface;
+				litSurf->shader = drawSurf->shader;
+				litSurf->sort = drawSurf->sort;
+			}
+		}
+	}
+}
+
 /*
 =================
 R_SortDrawSurfs
 =================
 */
-void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs, int firstLitSurf ) {
+void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	shader_t        *shader;
 	int fogNum;
 	int entityNum;
 	int dlighted;
 	int i;
+	int firstLitSurf[MAX_DLIGHTS] = { };
+	int numLitSurfs[MAX_DLIGHTS] = { };
 
 	// it is possible for some views to not have any surfaces
 	if ( numDrawSurfs < 1 ) {
 		// we still need to add it for hyperspace cases
-		R_AddDrawSurfCmd( drawSurfs, numDrawSurfs );
+		R_AddDrawSurfCmd( drawSurfs, numDrawSurfs, NULL, NULL );
 		return;
 	}
 
 	// sort the drawsurfs by sort type, then orientation, then shader
 	qsort(drawSurfs,numDrawSurfs, sizeof( drawSurf_t ), CompareDrawSurfs );
 
-	int dlightMask = (1 << tr.refdef.num_dlights) - 1;
-
-	int numLitSurfs[32] = { };
-	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
-		drawSurf_t *drawSurf = &drawSurfs[i];
-		int mask = 0;
-		switch(*drawSurf->surface){
-			case SF_GRID:
-				mask = ((srfGridMesh_t*)drawSurf->surface)->dlightBits;
-				break;
-			case SF_FACE:
-				mask = ((srfSurfaceFace_t*)drawSurf->surface)->dlightBits;
-				break;
-			case SF_TRIANGLES:
-				mask = ((srfTriangles_t*)drawSurf->surface)->dlightBits;
-				break;
-			default:
-				break;
-		}
-		mask &= dlightMask;
-		for(int l = 0; l < 32; l++){
-			if(mask & (1<<l)){
-				numLitSurfs[l]++;
-			}
-		}
-	}
-
-	
-
-	int firstLitSurfs[32] = { };
-#ifdef _DEBUG
-	int totalSurfs = numLitSurfs[0];
-#endif
-	firstLitSurfs[0] = firstLitSurf;
-	for(i = 1; i < 32; i++){
-		firstLitSurfs[i] = firstLitSurfs[i - 1] + numLitSurfs[i - 1];
-#ifdef _DEBUG
-		totalSurfs += numLitSurfs[i];
-#endif
-	}
-#ifdef _DEBUG
-	assert(totalSurfs <= ARRAY_LEN(backEndData->litSurfs));
-#endif
-
-	for ( i = 0 ; i < numDrawSurfs ; i++ ) {
-		
-		drawSurf_t *drawSurf = &drawSurfs[i];
-		int mask = 0;
-		switch(*drawSurf->surface){
-			case SF_GRID:
-				mask = ((srfGridMesh_t*)drawSurf->surface)->dlightBits;
-				break;
-			case SF_FACE:
-				mask = ((srfSurfaceFace_t*)drawSurf->surface)->dlightBits;
-				break;
-			case SF_TRIANGLES:
-				mask = ((srfTriangles_t*)drawSurf->surface)->dlightBits;
-				break;
-			default:
-				break;
-		}
-		mask &= dlightMask;
-		for(int l = 0; l < 32; l++){
-			if(mask & (1<<l)){
-				int litSurfIndex = firstLitSurfs[l]++;
-				litSurf_t *litSurf = &tr.refdef.litSurfs[litSurfIndex];
-				litSurf->surface = drawSurf->surface;
-				litSurf->shader = drawSurf->shader;
-				litSurf->sort = drawSurf->sort;
-			}
-		}
+	// must come first: a mirror view below appends its own lists and overwrites
+	// the dlightBits these depend on
+	if(tr.refdef.num_dlights > 0){
+		R_BuildLitSurfLists(drawSurfs, numDrawSurfs, firstLitSurf, numLitSurfs);
 	}
 
 	// check for any pass through drawing, which
@@ -1495,7 +1504,7 @@ void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs, int firstLitSurf 
 		}
 	}
 
-	R_AddDrawSurfCmd( drawSurfs, numDrawSurfs );
+	R_AddDrawSurfCmd( drawSurfs, numDrawSurfs, firstLitSurf, numLitSurfs );
 }
 
 /*
@@ -1664,7 +1673,6 @@ void R_RenderView( viewParms_t *parms ) {
 	tr.viewParms.frameCount = tr.frameCount;
 
 	int firstDrawSurf = tr.refdef.numDrawSurfs;
-	int firstLitSurf = tr.refdef.numLitSurfs;
 
 	// set viewParms.world
 	R_RotateForViewer();
@@ -1681,7 +1689,7 @@ void R_RenderView( viewParms_t *parms ) {
 		numDrawSurfs = MAX_DRAWSURFS;
 	}
 
-	R_SortDrawSurfs( tr.refdef.drawSurfs + firstDrawSurf, numDrawSurfs - firstDrawSurf, firstLitSurf );
+	R_SortDrawSurfs( tr.refdef.drawSurfs + firstDrawSurf, numDrawSurfs - firstDrawSurf );
 
 	// draw main system development information (surface outlines, etc)
 	R_FogOff();

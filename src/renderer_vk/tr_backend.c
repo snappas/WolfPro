@@ -261,6 +261,41 @@ void RB_BeginDrawingView( void ) {
 
 /*
 ==================
+RB_AddSurface
+
+Static and streamed surfaces of one shader can't share a batch, so a change
+of mode flushes. The checks use tess.shader, which has any remap applied.
+==================
+*/
+static void RB_AddSurface( surfaceType_t *surface ){
+	int firstVertex = -1;
+
+	// a flush re-resolves remaps, so a chained remap could leave the fast path
+	if(backEnd.worldBuffersReady && tess.shader->isMultitextured
+		&& tess.renderType == RT_GENERIC && !tess.shader->remappedShader){
+		if(*surface == SF_FACE){
+			firstVertex = ((srfSurfaceFace_t*)surface)->staticFirstVertex;
+		}else if(*surface == SF_TRIANGLES){
+			firstVertex = ((srfTriangles_t*)surface)->staticFirstVertex;
+		}
+	}
+
+	const tessBatchMode_t mode = firstVertex >= 0 ? TESS_BATCH_STATIC : TESS_BATCH_DYNAMIC;
+	if(tess.batchMode != TESS_BATCH_UNSET && tess.batchMode != mode && tess.numIndexes > 0){
+		RB_EndSurface();
+		RB_BeginSurface(tess.shader, tess.fogNum);
+	}
+
+	if(mode == TESS_BATCH_STATIC){
+		RB_SurfaceStaticIndices(surface, firstVertex);
+	}else{
+		rb_surfaceTable[*surface](surface);
+	}
+	tess.batchMode = mode;
+}
+
+/*
+==================
 RB_RenderDrawSurfList
 ==================
 */
@@ -303,7 +338,7 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastS
 	for ( i = firstSurfIndex, drawSurf = drawSurfs + firstSurfIndex ; i < lastSurfIndex ; i++, drawSurf++ ) {
 		if ( drawSurf->sort == oldSort ) {
 			// fast path, same as previous sort
-			rb_surfaceTable[ *drawSurf->surface ]( drawSurf->surface );
+			RB_AddSurface( drawSurf->surface );
 			continue;
 		}
 		oldSort = drawSurf->sort;
@@ -375,7 +410,7 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastS
 		}
 
 		// add the triangles for this surface
-		rb_surfaceTable[ *drawSurf->surface ]( drawSurf->surface );
+		RB_AddSurface( drawSurf->surface );
 	}
 	PROF_END();
 
@@ -412,14 +447,14 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastS
 }
 
 
-void RB_RenderLitSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastSurfIndex, dlight_t *dlight) {
+void RB_RenderLitSurfList( const litSurf_t *litSurfs, int numLitSurfs, dlight_t *dlight ) {
 	shader_t        *shader, *oldShader;
-	int fogNum;
+	int fogNum, oldFogNum;
 	int entityNum, oldEntityNum;
 	int dlighted;
 	qboolean depthRange, oldDepthRange;
-	drawSurf_t      *drawSurf;
-	int oldSort;
+	const litSurf_t *litSurf;
+	int64_t oldSort;
 	double originalTime;
 	int i;
 
@@ -435,35 +470,35 @@ void RB_RenderLitSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastSu
 	oldEntityNum = -1;
 	backEnd.currentEntity = &tr.worldEntity;
 	oldShader = NULL;
+	oldFogNum = -1;
 	oldDepthRange = qfalse;
 	oldSort = -1;
 	depthRange = qfalse;
 
-	// backEnd.pc.c_surfaces += lastSurfIndex - firstSurfIndex;
-	
-
-
-	for ( i = firstSurfIndex, drawSurf = drawSurfs + firstSurfIndex ; i < lastSurfIndex ; i++, drawSurf++ ) {
-		if ( drawSurf->sort == oldSort ) {
+	for ( i = 0, litSurf = litSurfs ; i < numLitSurfs ; i++, litSurf++ ) {
+		if ( litSurf->sort == oldSort ) {
 			// fast path, same as previous sort
-			rb_surfaceTable[ *drawSurf->surface ]( drawSurf->surface );
+			rb_surfaceTable[ *litSurf->surface ]( litSurf->surface );
 			continue;
 		}
-		oldSort = drawSurf->sort;
-		R_DecomposeSort( drawSurf->sort, &entityNum, &shader, &fogNum, &dlighted );
+		oldSort = litSurf->sort;
+		R_DecomposeSort( litSurf->sort, &entityNum, &shader, &fogNum, &dlighted );
+		// shaders registered after this list was built move the sort key's index
+		shader = litSurf->shader;
 
 		//
 		// change the tess parameters if needed
-		// a "entityMergable" shader is a shader that can have surfaces from seperate
-		// entities merged into a single batch, like smoke and blood puff sprites
-		if ( shader != oldShader  || ( entityNum != oldEntityNum && !shader->entityMergable ) ) {
+		// always split on entity: the light position is per entity, so even
+		// an entityMergable shader can't share a batch here
+		if ( shader != oldShader || fogNum != oldFogNum || entityNum != oldEntityNum ) {
 			if ( oldShader != NULL ) {
 				RB_EndSurface();
 			}
 			RB_BeginSurface( shader, fogNum );
-			
+
 			oldShader = shader;
-			
+			oldFogNum = fogNum;
+
 		}
 
 		//
@@ -511,7 +546,7 @@ void RB_RenderLitSurfList( drawSurf_t *drawSurfs, int firstSurfIndex, int lastSu
 		}
 
 		// add the triangles for this surface
-		rb_surfaceTable[ *drawSurf->surface ]( drawSurf->surface );
+		rb_surfaceTable[ *litSurf->surface ]( litSurf->surface );
 	}
 
 	// draw the contents of the last shader batch
@@ -585,12 +620,17 @@ void    RB_SetGL2D( void ) {
 
 	RHI_CmdBeginBarrier();
 	RHI_CmdTextureBarrier(backEnd.colorBuffer, RHI_ResourceState_RenderTargetBit);
+	RHI_CmdTextureBarrier(backEnd.depthBuffer, RHI_ResourceState_DepthWriteBit);
 	RHI_CmdEndBarrier();
 
 	RHI_RenderPass renderPass = {};
-	
+
 	renderPass.colorLoad = backEnd.clearColor ? RHI_LoadOp_Clear : RHI_LoadOp_Load;
 	renderPass.colorTexture = backEnd.colorBuffer;
+	renderPass.depthTexture = backEnd.depthBuffer;
+	renderPass.depthLoad = RHI_LoadOp_Clear;
+	// 2D draws at z = 0, so every depth test passes
+	renderPass.depth = 0.0f;
 	backEnd.clearColor = qfalse;
 
 	RB_BeginRenderPass("2D", &renderPass);
@@ -943,6 +983,61 @@ static void RB_EndTimedLabel(gpuTimedLabelHandle h){
 #endif
 }
 
+// screen bounds of the light's cube, qfalse when none of it is in the viewport
+static qbool RB_GetDlightScissor( const dlight_t *dl, int *x, int *y, int *w, int *h ) {
+	const viewParms_t *view = &backEnd.viewParms;
+	int minX = 0, minY = 0, maxX = 0, maxY = 0;
+
+	for(int i = 0; i < 8; i++){
+		vec3_t corner;
+		vec4_t eye, clip, normalized, window;
+
+		for(int axis = 0; axis < 3; axis++){
+			corner[axis] = dl->origin[axis] + ((i & (1 << axis)) ? dl->radius : -dl->radius);
+		}
+		R_TransformModelToClip(corner, view->world.modelMatrix, view->vulkanProjectionMatrix, eye, clip);
+
+		// the projected bounds mean nothing once a corner nears the camera plane
+		if(clip[3] <= 1.0f){
+			*x = view->viewportX;
+			*y = view->viewportY;
+			*w = view->viewportWidth;
+			*h = view->viewportHeight;
+			return qtrue;
+		}
+
+		R_TransformClipToWindow(clip, view, normalized, window);
+		const int windowX = (int)window[0];
+		const int windowY = (int)window[1];
+		if(i == 0 || windowX < minX){
+			minX = windowX;
+		}
+		if(i == 0 || windowY < minY){
+			minY = windowY;
+		}
+		if(i == 0 || windowX > maxX){
+			maxX = windowX;
+		}
+		if(i == 0 || windowY > maxY){
+			maxY = windowY;
+		}
+	}
+
+	minX = Com_ClampInt(0, view->viewportWidth, minX - 1);
+	minY = Com_ClampInt(0, view->viewportHeight, minY - 1);
+	maxX = Com_ClampInt(0, view->viewportWidth, maxX + 1);
+	maxY = Com_ClampInt(0, view->viewportHeight, maxY + 1);
+	if(maxX <= minX || maxY <= minY){
+		return qfalse;
+	}
+
+	*x = view->viewportX + minX;
+	*y = view->viewportY + minY;
+	*w = maxX - minX;
+	*h = maxY - minY;
+	return qtrue;
+}
+
 /*
 =============
 RB_DrawSurfs
@@ -998,11 +1093,17 @@ const void  *RB_DrawSurfs( const void *data ) {
 		backEnd.pipelineLayoutDirty = qtrue;
 		for(int l = 0; l < backEnd.refdef.num_dlights; l++){
 			dlight_t *dl = &backEnd.refdef.dlights[l];
-			if(R_CullPointAndRadius(dl->origin, dl->radius) == CULL_OUT){
+			int x, y, w, h;
+			if(cmd->numLitSurfs[l] == 0){
 				continue;
 			}
-			RB_RenderLitSurfList(cmd->drawSurfs, 0, numOpaqueSurfs, dl);
+			if(!RB_GetDlightScissor(dl, &x, &y, &w, &h)){
+				continue;
+			}
+			RHI_CmdSetScissor(x, y, w, h);
+			RB_RenderLitSurfList(cmd->refdef.litSurfs + cmd->firstLitSurf[l], cmd->numLitSurfs[l], dl);
 		}
+		SetViewportAndScissor();
 		PROF_END();
 		RB_EndTimedLabel(scope);
 	}
@@ -1020,6 +1121,10 @@ const void  *RB_DrawSurfs( const void *data ) {
 }
 
 
+#if defined( ENABLE_PROFILER )
+static void Prof_BridgeGPUPasses( void );
+#endif
+
 /*
 =============
 RB_BeginFrame
@@ -1027,25 +1132,20 @@ RB_BeginFrame
 =============
 */
 const void  *RB_BeginFrame( const void *data ) {
-	backEnd.currentFrameIndex = (backEnd.currentFrameIndex + 1) % RHI_FRAMES_IN_FLIGHT;
-	backEnd.renderPassCount[backEnd.currentFrameIndex] = 0;
-	backEnd.gpuSubScopeCount[backEnd.currentFrameIndex] = 0;
+#if defined( ENABLE_PROFILER )
+	RHI_SetGPUTimestamps( !Prof_IsPaused() );
+#else
+	RHI_SetGPUTimestamps( qfalse );
+#endif
+	backEnd.currentFrameIndex = (backEnd.currentFrameIndex + 1) % backEnd.framesInFlight;
 	backEnd.clearColor = qtrue;
 
 	backEnd.sceneViewCount = 0;
 	backEnd.previousPipeline.h = 0;
 	backEnd.currentDescriptorSet.h = 0;
 	backEnd.pipelineChangeCount = 0;
-	backEnd.previousVertexBufferCount = 0;
 	backEnd.colorBufferIndex = 0;
 	backEnd.colorBuffer = backEnd.colorBuffers[backEnd.colorBufferIndex];
-	
-	backEnd.vertexBuffers[backEnd.currentFrameIndex].indexCount = 0; 
-	backEnd.vertexBuffers[backEnd.currentFrameIndex].indexFirst = 0; 
-	backEnd.vertexBuffers[backEnd.currentFrameIndex].vertexCount = 0; 
-	backEnd.vertexBuffers[backEnd.currentFrameIndex].vertexFirst = 0; 
-
-	RHI_BeginFrame();
 
 	const drawBufferCommand_t   *cmd;
 
@@ -1055,14 +1155,24 @@ const void  *RB_BeginFrame( const void *data ) {
 	if ( r_clear->integer ) {
 		//@TODO
 	}
-	// genuine CPU-blocking wait -- the CPU stalls here until the GPU
-	// finishes the previous use of this frame-in-flight slot's resources
-	// (~RHI_FRAMES_IN_FLIGHT frames ago). A spike here is a direct signal
-	// the GPU is the bottleneck for this frame, not the CPU.
+	// CPU-blocking wait until the GPU finishes this slot's previous frame. A
+	// spike here means the GPU is the bottleneck for this frame, not the CPU.
 	PROF_BEGIN( "GPU Sync Wait" );
-	RHI_WaitOnSemaphore(backEnd.renderComplete, backEnd.renderCompleteCounter);
+	const uint64_t newerFrames = backEnd.framesInFlight - 1;
+	const uint64_t counter = backEnd.renderCompleteCounter;
+	RHI_WaitOnSemaphore(backEnd.renderComplete, counter > newerFrames ? counter - newerFrames : 0);
 	PROF_END();
-	RHI_AcquireNextImage(&backEnd.swapChainImageIndex, backEnd.imageAcquiredBinary);
+
+#if defined( ENABLE_PROFILER )
+	Prof_BridgeGPUPasses();
+#endif
+	backEnd.renderPassCount[backEnd.currentFrameIndex] = 0;
+	backEnd.gpuSubScopeCount[backEnd.currentFrameIndex] = 0;
+	backEnd.vertexBuffers[backEnd.currentFrameIndex].vertexUsed = 0;
+	backEnd.vertexBuffers[backEnd.currentFrameIndex].indexUsed = 0;
+
+	RHI_BeginFrame();
+	RHI_AcquireNextImage(&backEnd.swapChainImageIndex, backEnd.imageAcquiredBinary[backEnd.currentFrameIndex]);
 	RHI_BindCommandBuffer(backEnd.commandBuffers[backEnd.currentFrameIndex]);
 	RHI_BeginCommandBuffer();
 	RHI_DurationQueryReset();
@@ -1077,10 +1187,6 @@ const void  *RB_BeginFrame( const void *data ) {
 	// RHI_CmdBindPipeline(backEnd.pipeline);
 	// RHI_CmdBindDescriptorSet(backEnd.pipeline, backEnd.descriptorSet);
 	RHI_CmdBindIndexBuffer(backEnd.vertexBuffers[backEnd.currentFrameIndex].index);
-	/*rhiBuffer buffers[3] = {backEnd.vertexBuffers[backEnd.currentFrameIndex].position, 
-	backEnd.vertexBuffers[backEnd.currentFrameIndex].color,
-	backEnd.vertexBuffers[backEnd.currentFrameIndex].textureCoord};
-	RHI_CmdBindVertexBuffers(buffers, ARRAY_LEN(buffers));*/
 
 	RB_ImGUI_BeginFrame();
 
@@ -1095,6 +1201,10 @@ RB_EndFrame
 =============
 */
 
+qbool RB_ShaderTraceEnabled( void ){
+	return (r_shaderTrace->integer && RHI_SupportsFragmentStores()) ? qtrue : qfalse;
+}
+
 void DrawGUI_ShaderTrace(void){
 	static bool breakdownActive = false;
 	ToggleBooleanWithShortcut((qbool*)&breakdownActive, ImGuiKey_T, ImGUI_ShortcutOptions_Global);
@@ -1102,9 +1212,14 @@ void DrawGUI_ShaderTrace(void){
 	
 	if(breakdownActive){
 		if(igBegin("Shader Trace", &breakdownActive, 0)){
-			
+			if(!RB_ShaderTraceEnabled()){
+				igText("Set r_shaderTrace 1 and vid_restart");
+				igEnd();
+				return;
+			}
+
 			uint32_t* buffer = (uint32_t*)RHI_MapBuffer(backEnd.shaderIndexReadbackBuffer);
-			uint32_t shaderIndex = buffer[backEnd.currentFrameIndex ^ 1];
+			uint32_t shaderIndex = buffer[(backEnd.currentFrameIndex + backEnd.framesInFlight - 1) % backEnd.framesInFlight];
 			igText("%d %d", (int)buffer[0], (int)buffer[1]);
 			RHI_UnmapBuffer(backEnd.shaderIndexReadbackBuffer);
 
@@ -1202,7 +1317,9 @@ static void Prof_BridgeGPUPasses( void ) {
 
 	RHI_UpdateGPUCalibration();
 
-	f = (backEnd.currentFrameIndex - 1 + RHI_FRAMES_IN_FLIGHT) % RHI_FRAMES_IN_FLIGHT;
+	// called after RB_BeginFrame's wait and before this slot is reset, so the
+	// frame last recorded here is complete for any frames-in-flight count
+	f = (int)backEnd.currentFrameIndex;
 
 	// named passes first, depth 1 -- also gives us the umbrella box's own
 	// span below (min begin / max end across whatever actually ran this
@@ -1292,7 +1409,6 @@ const void  *RB_EndFrame( const void *data ) {
 	DrawGUI_ShaderTrace();
 	CL_ProfilerFrame();
 #if defined( ENABLE_PROFILER )
-	Prof_BridgeGPUPasses();
 	Prof_SetRendererFrameStats();
 #endif
 	if ( r_debugInput->integer ) {
@@ -1314,24 +1430,35 @@ const void  *RB_EndFrame( const void *data ) {
 	RHI_CmdTextureBarrier(backEnd.swapChainTextures[backEnd.swapChainImageIndex], RHI_ResourceState_PresentBit);
 	RHI_CmdEndBarrier();
 
-	RHI_CmdCopyBuffer(backEnd.shaderIndexReadbackBuffer, 0, backEnd.shaderIndexBuffer, 0, 8);
+	if(RB_ShaderTraceEnabled()){
+		RHI_CmdCopyBuffer(backEnd.shaderIndexReadbackBuffer, 0, backEnd.shaderIndexBuffer, 0, 8);
+	}
 	RHI_CmdEndDurationQuery(backEnd.frameDuration[backEnd.currentFrameIndex]);
 
 	RHI_EndCommandBuffer();
 
+	const VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
+	RHI_FlushBuffer(vb->vertex, 0, vb->vertexUsed);
+	RHI_FlushBuffer(vb->index, 0, vb->indexUsed);
+
 	backEnd.renderCompleteCounter++;
 	rhiSubmitGraphicsDesc graphicsDesc = {};
-	RHI_SubmitGraphicsDesc_Signal(&graphicsDesc, backEnd.renderCompleteBinary, 0);
+	RHI_SubmitGraphicsDesc_Signal(&graphicsDesc, backEnd.renderCompleteBinary[backEnd.swapChainImageIndex], 0);
 	RHI_SubmitGraphicsDesc_Signal(&graphicsDesc, backEnd.renderComplete, backEnd.renderCompleteCounter);
-	RHI_SubmitGraphicsDesc_Wait(&graphicsDesc, backEnd.imageAcquiredBinary);
+	RHI_SubmitGraphicsDesc_Wait(&graphicsDesc, backEnd.imageAcquiredBinary[backEnd.currentFrameIndex]);
 	RHI_SubmitGraphicsDesc_Wait_Timeline(&graphicsDesc, RHI_GetUploadSemaphore(), RHI_GetUploadSemaphoreValue());
+	// Overlapping frames share the depth and colour targets, so a frame
+	// starts after the previous one ends.
+	if(backEnd.framesInFlight > 1 && backEnd.renderCompleteCounter > 1){
+		RHI_SubmitGraphicsDesc_Wait_Timeline(&graphicsDesc, backEnd.renderComplete, backEnd.renderCompleteCounter - 1);
+	}
 	// CPU dispatch time only -- the GPU executes this frame's recorded
 	// commands asynchronously afterward, so "Submit" and the "Present"
 	// moment (rhi.c) that follows right after are both just hand-off
 	// points, not when the GPU actually does the work
 	PROF_MOMENT( "Submit" );
 	RHI_SubmitGraphics(&graphicsDesc);
-	RHI_SubmitPresent(backEnd.renderCompleteBinary, backEnd.swapChainImageIndex);
+	RHI_SubmitPresent(backEnd.renderCompleteBinary[backEnd.swapChainImageIndex], backEnd.swapChainImageIndex);
 	
 	RHI_EndFrame();
 
@@ -1438,6 +1565,10 @@ void RB_ExecuteRenderCommands( const void *data ) {
 #include "shaders/generic_ps_at_a2c.h"
 #include "shaders/generic_vs.h"
 #include "shaders/generic2s_ps.h"
+#include "shaders/generic_ps_trace.h"
+#include "shaders/generic_ps_at_trace.h"
+#include "shaders/generic_ps_at_a2c_trace.h"
+#include "shaders/generic2s_ps_trace.h"
 #include "shaders/generic2s_vs.h"
 
 typedef struct cachedPipeline {
@@ -1447,7 +1578,7 @@ typedef struct cachedPipeline {
 	struct cachedPipeline *next;
 } cachedPipeline;
 
-cachedPipeline pipelineCache[4096];
+cachedPipeline pipelineCache[RHI_MAX_PIPELINES - 256];
 cachedPipeline *pipelineHash[256];
 int pipelineCount = 0;
 
@@ -1509,6 +1640,7 @@ void RB_CreateGraphicsPipeline(shader_t *newShader){
 		// graphicsDesc.name = newShader->name;
 		graphicsDesc.descLayout = backEnd.descriptorSetLayout;
 		graphicsDesc.pushConstants.vsBytes = 64;
+		const qbool trace = RB_ShaderTraceEnabled();
 
 
 		
@@ -1517,8 +1649,13 @@ void RB_CreateGraphicsPipeline(shader_t *newShader){
 			graphicsDesc.pushConstants.psBytes = pcBytes;
 			graphicsDesc.vertexShader.data = generic2s_vs;
 			graphicsDesc.vertexShader.byteCount = sizeof(generic2s_vs);
-			graphicsDesc.pixelShader.data = generic2s_ps;
-			graphicsDesc.pixelShader.byteCount = sizeof(generic2s_ps);
+			if(trace){
+				graphicsDesc.pixelShader.data = generic2s_ps_trace;
+				graphicsDesc.pixelShader.byteCount = sizeof(generic2s_ps_trace);
+			}else{
+				graphicsDesc.pixelShader.data = generic2s_ps;
+				graphicsDesc.pixelShader.byteCount = sizeof(generic2s_ps);
+			}
 
 			rhiVertexAttributeDesc *a;
 			a = &graphicsDesc.attributes[graphicsDesc.attributeCount++];
@@ -1548,11 +1685,11 @@ void RB_CreateGraphicsPipeline(shader_t *newShader){
 			graphicsDesc.vertexShader.byteCount = sizeof(generic_vs);
 
 			if(stage->stateBits & GLS_ATEST_BITS){
-				graphicsDesc.pixelShader.data = generic_ps_at;
-				graphicsDesc.pixelShader.byteCount = sizeof(generic_ps_at);
+				graphicsDesc.pixelShader.data = trace ? generic_ps_at_trace : generic_ps_at;
+				graphicsDesc.pixelShader.byteCount = trace ? sizeof(generic_ps_at_trace) : sizeof(generic_ps_at);
 			}else{
-				graphicsDesc.pixelShader.data = generic_ps;
-				graphicsDesc.pixelShader.byteCount = sizeof(generic_ps);
+				graphicsDesc.pixelShader.data = trace ? generic_ps_trace : generic_ps;
+				graphicsDesc.pixelShader.byteCount = trace ? sizeof(generic_ps_trace) : sizeof(generic_ps);
 			}
 
 			rhiVertexAttributeDesc *a;
@@ -1598,8 +1735,8 @@ void RB_CreateGraphicsPipeline(shader_t *newShader){
 				graphicsDesc.sampleCount = RB_GetMSAASampleCount();
 				if(stage->stateBits & GLS_ATEST_BITS){
 					graphicsDesc.alphaToCoverage = qtrue;
-					graphicsDesc.pixelShader.data = generic_ps_at_a2c;
-					graphicsDesc.pixelShader.byteCount = sizeof(generic_ps_at_a2c);
+					graphicsDesc.pixelShader.data = trace ? generic_ps_at_a2c_trace : generic_ps_at_a2c;
+					graphicsDesc.pixelShader.byteCount = trace ? sizeof(generic_ps_at_a2c_trace) : sizeof(generic_ps_at_a2c);
 				}
 			}else{
 				graphicsDesc.sampleCount = 1;
@@ -1747,15 +1884,47 @@ qbool RB_IsMSAARequested(void){
 	return RB_GetMSAASampleCount() >= 2;
 }
 
+// valid after RHI_Init; r_msaa < 0 is automatic
 uint32_t RB_GetMSAASampleCount(void){
-	if(r_msaa->integer >= 8){
-		return 8;
+	uint32_t samples = 1;
+	if(r_msaa->integer < 0){
+		samples = RHI_IsIntegratedGPU() ? 1 : 2;
+	}else if(r_msaa->integer >= 8){
+		samples = 8;
 	}else if(r_msaa->integer >= 4){
-		return 4;
+		samples = 4;
 	}else if(r_msaa->integer >= 2){
-		return 2;
+		samples = 2;
 	}
-	return 1;
+	const uint32_t maxSamples = RHI_GetMaxMSAASamples();
+	while(samples > maxSamples){
+		samples >>= 1;
+	}
+	return samples;
+}
+
+// valid after RHI_Init; r_anisotropy < 0 is automatic
+uint32_t RB_GetAnisotropy( void ){
+	return backEnd.anisotropy;
+}
+
+void RB_ResolveAnisotropy( void ){
+	uint32_t aniso = 1;
+	if(r_ext_texture_filter_anisotropic->integer < 0){
+		aniso = RHI_IsIntegratedGPU() ? 4 : 16;
+	}else if(r_ext_texture_filter_anisotropic->integer > 1){
+		aniso = (uint32_t)r_ext_texture_filter_anisotropic->integer;
+	}
+	const uint32_t maxAniso = RHI_GetMaxAnisotropy();
+	backEnd.anisotropy = aniso < maxAniso ? aniso : maxAniso;
+}
+
+// r_mipFilter < 0 is automatic: off on integrated GPUs
+qbool RB_UseFilteredMips( void ){
+	if(r_mipFilter->integer < 0){
+		return RHI_IsIntegratedGPU() ? qfalse : qtrue;
+	}
+	return r_mipFilter->integer != 0 ? qtrue : qfalse;
 }
 
 qbool RB_IsViewportFullscreen(const viewParms_t *vp){
