@@ -667,6 +667,8 @@ typedef struct {
 	// dynamic lighting information
 	int dlightBits;
 
+	int staticFirstVertex;              // in the world buffers, -1 means none
+
 	// triangle definitions (no normals at points)
 	int numPoints;
 	int numIndices;
@@ -682,6 +684,8 @@ typedef struct {
 
 	// dynamic lighting information
 	int dlightBits;
+
+	int staticFirstVertex;              // in the world buffers, -1 means none
 
 	// culling information (FIXME: use this!)
 	vec3_t bounds[2];
@@ -785,6 +789,8 @@ typedef struct {
 	char        *entityParsePoint;
 } world_t;
 
+extern world_t s_worldData;     // valid during RE_LoadWorldMap, before tr.world
+
 //======================================================================
 
 
@@ -867,16 +873,12 @@ typedef struct {
 } backEndCounters_t;
 
 typedef struct {
-	rhiBuffer position;
+	rhiBuffer vertex;
 	rhiBuffer index;
-	rhiBuffer color[MAX_SHADER_STAGES];
-	rhiBuffer textureCoord[MAX_SHADER_STAGES];
-	rhiBuffer textureCoordLM;
-	rhiBuffer normal;
-	uint32_t indexCount; //total indices written this frame
-	uint32_t indexFirst; //first index of the draw call
-	uint32_t vertexCount; //total vertices written this frame
-	uint32_t vertexFirst; //first vertex of the draw call
+	byte *vertexData;
+	byte *indexData;
+	uint32_t vertexUsed; // bytes written this frame
+	uint32_t indexUsed;
 } VertexBuffers;
 
 #pragma pack(push,1)
@@ -886,8 +888,9 @@ typedef struct SceneView {
 } SceneView;
 #pragma pack(pop)
 
-#define VBA_MAX 524288
-#define IDX_MAX (VBA_MAX * 8)
+#define STREAM_VERTEX_BYTES ( 32 << 20 )
+#define DLIGHT_STREAM_LIMIT ( STREAM_VERTEX_BYTES / 2 )
+#define STREAM_INDEX_BYTES  ( 16 << 20 )
 #define SCENEVIEW_MAX 16
 #define MAX_RENDERPASSES 64 
 
@@ -943,11 +946,13 @@ typedef struct {
 	trRefEntity_t entity2D;     // currentEntity will point at this when doing 2D rendering
 
 	uint32_t currentFrameIndex;
+	uint32_t framesInFlight;
+	uint32_t anisotropy; // resolved r_anisotropy, set after RHI_Init
 	rhiCommandBuffer commandBuffers[RHI_FRAMES_IN_FLIGHT];
 	rhiSemaphore renderComplete;
 	uint64_t renderCompleteCounter;
-	rhiSemaphore renderCompleteBinary;
-	rhiSemaphore imageAcquiredBinary;
+	rhiSemaphore renderCompleteBinary[RHI_MAX_SWAP_CHAIN_IMAGES];
+	rhiSemaphore imageAcquiredBinary[RHI_FRAMES_IN_FLIGHT];
 
 	uint32_t swapChainImageIndex;
 	rhiTexture* swapChainTextures;
@@ -959,8 +964,7 @@ typedef struct {
 	rhiSampler sampler[4];
 
 	VertexBuffers vertexBuffers[RHI_FRAMES_IN_FLIGHT];
-	VertexBuffers previousVertexBuffers[RHI_FRAMES_IN_FLIGHT];
-	uint32_t previousVertexBufferCount;
+	qbool streamOverflowWarned;
 	
 	rhiBuffer sceneViewUploadBuffers[RHI_FRAMES_IN_FLIGHT];
 	rhiBuffer sceneViewGPUBuffer;
@@ -993,6 +997,10 @@ typedef struct {
 	
 	rhiBuffer shaderIndexBuffer;
 	rhiBuffer shaderIndexReadbackBuffer;
+
+	rhiBuffer worldPositions;
+	rhiBuffer worldTexCoords;
+	qbool worldBuffersReady;
 } backEndState_t;
 
 /*
@@ -1127,7 +1135,6 @@ extern cvar_t   *r_railSegmentLength;
 
 extern cvar_t   *r_ignore;              // used for debugging anything
 extern cvar_t   *r_verbose;             // used for verbose debug spew
-extern cvar_t   *r_ignoreFastPath;      // allows us to ignore our Tess fast paths
 
 extern cvar_t   *r_znear;               // near Z clip plane
 extern cvar_t   *r_zfar;                // far Z clip plane
@@ -1227,6 +1234,9 @@ extern cvar_t *r_gpu;
 
 extern cvar_t *r_debugUI;
 extern cvar_t *r_debugInput;
+extern cvar_t *r_shaderTrace;
+extern cvar_t *r_framesInFlight;
+extern cvar_t *r_legacyRendering;
 
 extern cvar_t *r_mipFilter;
 
@@ -1329,6 +1339,7 @@ void    RE_UploadCinematic( int w, int h, int cols, int rows, const byte *data, 
 void        RE_BeginFrame( stereoFrame_t stereoFrame );
 void        RE_BeginRegistration( glconfig_t *glconfig );
 void        RE_LoadWorldMap( const char *mapname );
+void        R_BuildWorldStaticBuffers( void );
 void        RE_SetWorldVisData( const byte *vis );
 qhandle_t   RE_RegisterSkin( const char *name );
 void        RE_Shutdown( qboolean destroyWindow );
@@ -1403,6 +1414,12 @@ typedef enum renderType_t {
 	RT_COUNT
 } renderType_t;
 
+typedef enum {
+	TESS_BATCH_UNSET,
+	TESS_BATCH_STATIC,      // indices into the world buffers, no tess vertexes
+	TESS_BATCH_DYNAMIC
+} tessBatchMode_t;
+
 typedef struct shaderCommands_s
 {
 	glIndex_t indexes[SHADER_MAX_INDEXES];
@@ -1432,14 +1449,18 @@ typedef struct shaderCommands_s
 
 	dlight_t *dlight;
 	renderType_t renderType;
+	tessBatchMode_t batchMode;
 
 } shaderCommands_t;
 
 extern shaderCommands_t tess;
 
 void RB_BeginSurface( shader_t *shader, int fogNum );
+qbool RB_StreamVertices( const void *data, uint32_t byteCount, uint32_t *outOffset );
+qbool RB_StreamIndices( const void *data, uint32_t indexCount, uint32_t *outFirstIndex );
 void RB_EndSurface( void );
 void RB_CheckOverflow( int verts, int indexes );
+void RB_SurfaceStaticIndices( surfaceType_t *surface, int firstVertex );
 #define RB_CHECKOVERFLOW( v,i ) if ( tess.numVertexes + ( v ) >= SHADER_MAX_VERTEXES || tess.numIndexes + ( i ) >= SHADER_MAX_INDEXES ) {RB_CheckOverflow( v,i );}
 
 void RB_StageIteratorGeneric( void );
@@ -1636,7 +1657,11 @@ void RB_EndComputePass(void);
 int RB_GetSamplerIndex(qbool clamp, qbool anisotropy);
 qbool RB_IsMSAARequested(void);
 uint32_t RB_GetMSAASampleCount(void);
+uint32_t RB_GetAnisotropy( void );
+void RB_ResolveAnisotropy( void );
+qbool RB_UseFilteredMips( void );
 qbool RB_IsViewportFullscreen(const viewParms_t *vp);
+qbool RB_ShaderTraceEnabled( void );
 void RB_FinishFullscreen3D(qbool prevFullscreen3D);
 /*
 =============================================================
@@ -1646,7 +1671,8 @@ RENDERER BACK END COMMAND QUEUE
 =============================================================
 */
 
-#define MAX_RENDER_COMMANDS 0x40000
+// every console or UI glyph is one 64-byte command, and a 4K console draws thousands
+#define MAX_RENDER_COMMANDS 0x100000
 
 typedef struct {
 	byte cmds[MAX_RENDER_COMMANDS];
@@ -1699,6 +1725,8 @@ typedef struct {
 	viewParms_t viewParms;
 	drawSurf_t *drawSurfs;
 	int numDrawSurfs;
+	int firstLitSurf[MAX_DLIGHTS];
+	int numLitSurfs[MAX_DLIGHTS];
 } drawSurfsCommand_t;
 
 typedef enum {
@@ -1752,7 +1780,8 @@ void *R_GetCommandBuffer( int bytes );
 void RB_ExecuteRenderCommands( const void *data );
 
 
-void R_AddDrawSurfCmd( drawSurf_t *drawSurfs, int numDrawSurfs );
+// NULL lists mean the view has no lit surfaces
+void R_AddDrawSurfCmd( drawSurf_t *drawSurfs, int numDrawSurfs, const int *firstLitSurf, const int *numLitSurfs );
 
 void RE_SetColor( const float *rgba );
 void RE_StretchPic( float x, float y, float w, float h,

@@ -59,6 +59,7 @@ void R_ClearFrame( void ) {
 	backEndData->commands.used = 0;
 
 	r_firstSceneDrawSurf = 0;
+	r_firstSceneLitSurf = 0;
 
 	r_numdlights = 0;
 	r_firstSceneDlight = 0;

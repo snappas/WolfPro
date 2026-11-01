@@ -464,7 +464,7 @@ These apply to both renderers unless marked otherwise.
 | `r_flareFade` | `5` | CHEAT | Flare fade rate. |
 | `r_flares` | `1` | ARCHIVE | Lens-flare rendering toggle. |
 | `r_flareSize` | `40` | CHEAT | Flare sprite size. |
-| `r_ignoreFastPath` | `1` | ARCHIVE\|LATCH | Disables a rendering shortcut used to speed up drawing vertex data. |
+| `r_ignoreFastPath` **(GL)** | `1` | ARCHIVE\|LATCH | Disables a rendering shortcut used to speed up drawing vertex data. |
 | `r_ignoreGLErrors` **(GL)** | `1` | ARCHIVE | Suppresses GL error checking/aborts. |
 | `r_intensity` | `1` | LATCH | Global texture/light intensity multiplier. |
 | `r_lodbias` | `0` | ARCHIVE | Model LOD bias. |
@@ -498,13 +498,15 @@ These apply to both renderers unless marked otherwise.
 | Cvar | Default | Flags | Description |
 |---|---|---|---|
 | `r_alphaboost` | `0` | ARCHIVE | Alpha-blend intensity boost. |
-| `r_anisotropy` | `16` | ARCHIVE\|LATCH | Anisotropic texture filtering level (VK's equivalent of GL's `r_ext_texture_filter_anisotropic`). |
+| `r_anisotropy` | `-1` | ARCHIVE\|LATCH | Anisotropic texture filtering level (VK's equivalent of GL's `r_ext_texture_filter_anisotropic`). `-1` is automatic: `16` on discrete GPUs, `4` on integrated GPUs. Values above the GPU's limit are lowered to it. `gfxinfo` prints the resolved value. |
 | `r_debugInput` | `0` | TEMP **[debug]** | Logs debug info about input events on the Vulkan renderer. |
 | `r_debugUI` | `0` | TEMP **[debug]** | Draws the Vulkan backend's ImGui debug UI. |
+| `r_framesInFlight` | `1` | ARCHIVE\|LATCH | Frames the CPU may prepare ahead of the GPU (`1`-`2`). `2` raises FPS when GPU-bound at the cost of about one frame of latency. |
 | `r_gpu` | `0` | ARCHIVE\|LATCH | Selects which physical GPU device to use (`0` = auto/first). |
-| `r_mipFilter` | `1` | ARCHIVE\|LATCH | Mipmap filter mode selection. |
+| `r_legacyRendering` | `0` | ARCHIVE\|LATCH | Troubleshooting option for driver problems; leave at `0` otherwise. Bitmask: `1` uses the KHR extensions even on Vulkan 1.3, `2` disables synchronization2, `4` disables dynamic rendering. |
+| `r_mipFilter` | `-1` | ARCHIVE\|LATCH | Mipmap filter mode selection. `-1` is automatic: filtered mips on discrete GPUs, fast mips on integrated GPUs. `0` forces fast mips, `1` forces filtered mips. |
 | `r_monitor` | `0` | ARCHIVE\|LATCH | Selects which display monitor to use in fullscreen mode; the OpenGL renderer has its own separate copy of this cvar too. |
-| `r_msaa` | `8` | ARCHIVE\|LATCH | MSAA sample count. |
+| `r_msaa` | `-1` | ARCHIVE\|LATCH | MSAA sample count (`0`/`1` off, `2`, `4`, `8`). `-1` is automatic: `2` on discrete GPUs, off on integrated GPUs. Values above what the GPU supports are lowered to the highest supported count. |
 | `r_sleepThreshold` | `2500` | ARCHIVE | Microsecond threshold controlling when the render thread sleeps vs. spin-waits (frame pacing/CPU tradeoff). |
 
 ## OpenGL-specific

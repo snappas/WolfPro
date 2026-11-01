@@ -1713,10 +1713,6 @@ static void ComputeStageIteratorFunc( void ) {
 		goto done;
 	}
 
-	if ( r_ignoreFastPath->integer ) {
-		return;
-	}
-
 	//
 	// see if this can go into the vertex lit fast path
 	//

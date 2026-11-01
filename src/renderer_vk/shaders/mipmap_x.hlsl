@@ -11,7 +11,7 @@ struct RootConstants
 
 #include "mipmap.hlsli"
 
-[[vk::binding(1)]] RWTexture2D<float4> dst;
+[[vk::binding(1)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> dst;
 
 
 

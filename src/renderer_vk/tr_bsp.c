@@ -40,7 +40,7 @@ void RE_LoadWorldMap( const char *name );
 
 */
 
-static world_t s_worldData;
+world_t s_worldData;
 static byte        *fileBase;
 
 int c_subdivisions;
@@ -2241,6 +2241,8 @@ void RE_LoadWorldMap( const char *name ) {
 	ri.Cmd_ExecuteText( EXEC_NOW, "updatescreen\n" );
 
 	s_worldData.dataSize = (byte *)ri.Hunk_Alloc( 0, h_low ) - startMarker;
+
+	R_BuildWorldStaticBuffers();
 
 	// only set tr.world now that we know the entire level has loaded properly
 	tr.world = &s_worldData;

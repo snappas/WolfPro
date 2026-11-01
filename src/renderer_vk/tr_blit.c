@@ -25,6 +25,7 @@ void RB_InitBlit(void){
     desc.name = "Blit";
     desc.colorFormat = RHI_GetSwapChainFormat();
     desc.cullType = CT_TWO_SIDED;
+    desc.noDepthAttachment = qtrue;
     desc.descLayout = blitDescSetLayout;
 
     desc.dstBlend = GLS_DSTBLEND_ZERO;

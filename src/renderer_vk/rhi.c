@@ -10,10 +10,213 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
+#define MAX_CACHED_RENDER_PASSES 32
+#define MAX_CACHED_FRAMEBUFFERS 64
+
+typedef struct CachedRenderPass {
+    VkRenderPass pass;
+    VkFormat color;
+    VkFormat depth;
+    VkSampleCountFlagBits samples;
+    VkAttachmentLoadOp colorLoad;
+    VkAttachmentLoadOp depthLoad;
+} CachedRenderPass;
+
+typedef struct CachedFramebuffer {
+    VkFramebuffer framebuffer;
+    VkRenderPass pass;
+    VkImageView color;
+    VkImageView depth;
+    uint32_t width;
+    uint32_t height;
+} CachedFramebuffer;
+
+static CachedRenderPass s_renderPasses[MAX_CACHED_RENDER_PASSES];
+static int s_renderPassCount = 0;
+static CachedFramebuffer s_framebuffers[MAX_CACHED_FRAMEBUFFERS];
+static int s_framebufferCount = 0;
+
+// Attachments stay in the layouts the barriers set, and the barrier before
+// each pass orders it against earlier work, so no subpass dependency is needed.
+static VkRenderPass GetRenderPass( VkFormat color, VkFormat depth, VkSampleCountFlagBits samples, VkAttachmentLoadOp colorLoad, VkAttachmentLoadOp depthLoad )
+{
+    if(depth == VK_FORMAT_UNDEFINED){
+        depthLoad = VK_ATTACHMENT_LOAD_OP_LOAD;
+    }
+    for(int i = 0; i < s_renderPassCount; i++){
+        const CachedRenderPass *c = &s_renderPasses[i];
+        if(c->color == color && c->depth == depth && c->samples == samples && c->colorLoad == colorLoad && c->depthLoad == depthLoad){
+            return c->pass;
+        }
+    }
+    if(s_renderPassCount >= MAX_CACHED_RENDER_PASSES){
+        ri.Error(ERR_FATAL, "Render pass cache is full (%d of %d, color format %d, depth format %d, %d samples)\n",
+            s_renderPassCount, MAX_CACHED_RENDER_PASSES, (int)color, (int)depth, (int)samples);
+    }
+
+    VkAttachmentDescription attachments[2] = {};
+    attachments[0].format = color;
+    attachments[0].samples = samples;
+    attachments[0].loadOp = colorLoad;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[1].format = depth;
+    attachments[1].samples = samples;
+    attachments[1].loadOp = depthLoad;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorRef = {};
+    colorRef.attachment = 0;
+    colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference depthRef = {};
+    depthRef.attachment = 1;
+    depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorRef;
+    subpass.pDepthStencilAttachment = depth != VK_FORMAT_UNDEFINED ? &depthRef : NULL;
+
+    VkRenderPassCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    createInfo.attachmentCount = depth != VK_FORMAT_UNDEFINED ? 2 : 1;
+    createInfo.pAttachments = attachments;
+    createInfo.subpassCount = 1;
+    createInfo.pSubpasses = &subpass;
+
+    CachedRenderPass *entry = &s_renderPasses[s_renderPassCount];
+    VK(vkCreateRenderPass(vk.device, &createInfo, NULL, &entry->pass));
+    entry->color = color;
+    entry->depth = depth;
+    entry->samples = samples;
+    entry->colorLoad = colorLoad;
+    entry->depthLoad = depthLoad;
+    s_renderPassCount++;
+    return entry->pass;
+}
+
+static VkFramebuffer GetFramebuffer( VkRenderPass pass, VkImageView color, VkImageView depth, uint32_t width, uint32_t height )
+{
+    for(int i = 0; i < s_framebufferCount; i++){
+        const CachedFramebuffer *c = &s_framebuffers[i];
+        if(c->pass == pass && c->color == color && c->depth == depth && c->width == width && c->height == height){
+            return c->framebuffer;
+        }
+    }
+    if(s_framebufferCount >= MAX_CACHED_FRAMEBUFFERS){
+        ri.Error(ERR_FATAL, "Framebuffer cache is full (%d of %d, %d x %d)\n",
+            s_framebufferCount, MAX_CACHED_FRAMEBUFFERS, (int)width, (int)height);
+    }
+
+    const VkImageView attachments[2] = { color, depth };
+    VkFramebufferCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    createInfo.renderPass = pass;
+    createInfo.attachmentCount = depth != VK_NULL_HANDLE ? 2 : 1;
+    createInfo.pAttachments = attachments;
+    createInfo.width = width;
+    createInfo.height = height;
+    createInfo.layers = 1;
+
+    CachedFramebuffer *entry = &s_framebuffers[s_framebufferCount];
+    VK(vkCreateFramebuffer(vk.device, &createInfo, NULL, &entry->framebuffer));
+    entry->pass = pass;
+    entry->color = color;
+    entry->depth = depth;
+    entry->width = width;
+    entry->height = height;
+    s_framebufferCount++;
+    return entry->framebuffer;
+}
+
+static void DestroyRenderPassCache( void )
+{
+    for(int i = 0; i < s_renderPassCount; i++){
+        vkDestroyRenderPass(vk.device, s_renderPasses[i].pass, NULL);
+    }
+    s_renderPassCount = 0;
+}
+
+// The caller waits for the device first. A view handle can be reused after
+// its destruction, so this must run whenever an attachment view is destroyed.
+void DestroyFramebufferCache( void )
+{
+    for(int i = 0; i < s_framebufferCount; i++){
+        vkDestroyFramebuffer(vk.device, s_framebuffers[i].framebuffer, NULL);
+    }
+    s_framebufferCount = 0;
+}
+
+// The swap chain extent can differ from the window size at any time, not
+// only during a resize, so the area is clamped to the render target.
+static VkRect2D GetRenderArea( const RHI_RenderPass *renderPass, const Texture *colorTexture )
+{
+    uint32_t width = glConfig.vidWidth;
+    uint32_t height = glConfig.vidHeight;
+    if(renderPass->width != 0 && renderPass->height != 0){
+        width = renderPass->width;
+        height = renderPass->height;
+    }
+
+    VkRect2D area;
+    area.offset.x = renderPass->x;
+    area.offset.y = renderPass->y;
+    area.extent.width = min(width, colorTexture->desc.width - renderPass->x);
+    area.extent.height = min(height, colorTexture->desc.height - renderPass->y);
+    return area;
+}
+
+static void BeginClassicRenderPass( const RHI_RenderPass *renderPass )
+{
+    Texture *colorTexture = GET_TEXTURE(renderPass->colorTexture);
+    Texture *depthTexture = renderPass->depthTexture.h != 0 ? GET_TEXTURE(renderPass->depthTexture) : NULL;
+    assert(colorTexture->currentLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    assert(depthTexture == NULL || depthTexture->currentLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    const VkRenderPass pass = GetRenderPass(colorTexture->format,
+        depthTexture != NULL ? depthTexture->format : VK_FORMAT_UNDEFINED,
+        GetVkSampleCount(colorTexture->desc.sampleCount),
+        GetVkAttachmentLoadOp(renderPass->colorLoad),
+        GetVkAttachmentLoadOp(renderPass->depthLoad));
+
+    VkClearValue clearValues[2] = {};
+    memcpy(clearValues[0].color.float32, renderPass->color, sizeof(float) * 4);
+    clearValues[1].depthStencil.depth = renderPass->depth;
+
+    VkRenderPassBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    beginInfo.renderPass = pass;
+    beginInfo.framebuffer = GetFramebuffer(pass, colorTexture->view, depthTexture != NULL ? depthTexture->view : VK_NULL_HANDLE, colorTexture->desc.width, colorTexture->desc.height);
+    beginInfo.clearValueCount = depthTexture != NULL ? 2 : 1;
+    beginInfo.pClearValues = clearValues;
+    beginInfo.renderArea = GetRenderArea(renderPass, colorTexture);
+
+    vkCmdBeginRenderPass(vk.activeCommandBuffer, &beginInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
 extern qbool crashing;
 void RHI_Shutdown(qboolean destroyWindow)
 {
+    // a fatal error during RHI_Init lands here with Vulkan partly set up
+    if(!vk.initialized){
+        if(destroyWindow){
+            Sys_Vulkan_Shutdown();
+        }
+        return;
+    }
+
     vkDeviceWaitIdle(vk.device);
+
+    DestroyFramebufferCache();
+    DestroyRenderPassCache();
 
     //destroy user resources
     PoolIterator it = Pool_BeginIteration();
@@ -116,6 +319,8 @@ void RHI_Shutdown(qboolean destroyWindow)
         for(int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++){
             vkDestroyQueryPool(vk.device, vk.queryPool[i], NULL);
         }
+        vkDestroyPipelineCache(vk.device, vk.pipelineCache, NULL);
+        vk.pipelineCache = VK_NULL_HANDLE;
         vkDestroyDescriptorPool(vk.device, vk.descriptorPool, NULL);
         vkDestroyCommandPool(vk.device, vk.commandPool, NULL);
         vkDestroySwapchainKHR(vk.device, vk.swapChain, NULL);
@@ -199,6 +404,9 @@ rhiBuffer RHI_CreateBuffer(const rhiBufferDesc *desc)
     assert((desc->initialState & desc->allowedStates) != 0);
     VmaAllocationCreateInfo allocCreateInfo = {};
     allocCreateInfo.usage = GetVmaMemoryUsage(desc->memoryUsage); 
+    if(desc->memoryUsage != RHI_MemoryUsage_DeviceLocal){
+        allocCreateInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    }
 
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -217,19 +425,13 @@ rhiBuffer RHI_CreateBuffer(const rhiBufferDesc *desc)
     buffer.desc = *desc;
     buffer.buffer = newBuffer;
     buffer.allocation = vmaAlloc;
-    buffer.mapped = qfalse;
-    buffer.mappedData = NULL;
+    buffer.mappedData = allocInfo.pMappedData;
     buffer.memoryUsage = desc->memoryUsage;
     buffer.currentLayout = desc->initialState;
     
     VkMemoryPropertyFlags memFlags;
 	vmaGetMemoryTypeProperties(vk.allocator, allocInfo.memoryType, &memFlags);
 	buffer.hostCoherent = (memFlags & (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0;
-	// if(buffer.hostCoherent)
-	// {
-	// 	VK(vmaMapMemory(vk.allocator, buffer.allocation, &buffer.mappedData));
-	// 	buffer.mapped = qtrue;
-	// }
 
     return (rhiBuffer) { Pool_Add(&vk.bufferPool, &buffer) };
 }
@@ -237,23 +439,29 @@ rhiBuffer RHI_CreateBuffer(const rhiBufferDesc *desc)
 byte* RHI_MapBuffer(rhiBuffer buffer)
 {
     Buffer *currentBuffer = GET_BUFFER(buffer);
-    assert(currentBuffer->mapped == qfalse);
-    VK(vmaMapMemory(vk.allocator, currentBuffer->allocation, &currentBuffer->mappedData));
-    currentBuffer->mapped = qtrue;
+    assert(currentBuffer->mappedData);
+    if(!(currentBuffer->hostCoherent) && currentBuffer->memoryUsage == RHI_MemoryUsage_Readback){
+        vmaInvalidateAllocation(vk.allocator, currentBuffer->allocation, 0, VK_WHOLE_SIZE);
+    }
     return (byte*)currentBuffer->mappedData;
 }
 
 void RHI_UnmapBuffer(rhiBuffer buffer)
 {
     Buffer *currentBuffer = GET_BUFFER(buffer);
-    assert(currentBuffer->mapped == qtrue);
-    vmaUnmapMemory(vk.allocator, currentBuffer->allocation);
-    if(!(currentBuffer->hostCoherent) && currentBuffer->memoryUsage == RHI_MemoryUsage_Upload){
+    assert(currentBuffer->mappedData);
+    if(!(currentBuffer->hostCoherent) && (currentBuffer->memoryUsage == RHI_MemoryUsage_Upload || currentBuffer->memoryUsage == RHI_MemoryUsage_Staging)){
         vmaFlushAllocation(vk.allocator, currentBuffer->allocation, 0, VK_WHOLE_SIZE);
-    } else if(!(currentBuffer->hostCoherent) && currentBuffer->memoryUsage == RHI_MemoryUsage_Readback){
-        vmaInvalidateAllocation(vk.allocator, currentBuffer->allocation, 0, VK_WHOLE_SIZE);
     }
-    currentBuffer->mapped = qfalse;
+}
+
+void RHI_FlushBuffer(rhiBuffer buffer, uint32_t offset, uint32_t byteCount)
+{
+    Buffer *currentBuffer = GET_BUFFER(buffer);
+    assert(currentBuffer->mappedData);
+    if(!(currentBuffer->hostCoherent) && byteCount > 0){
+        vmaFlushAllocation(vk.allocator, currentBuffer->allocation, offset, byteCount);
+    }
 }
 
 rhiTexture RHI_CreateTexture(const rhiTextureDesc *desc)
@@ -354,6 +562,31 @@ rhiTexture RHI_CreateTexture(const rhiTextureDesc *desc)
     return (rhiTexture) { Pool_Add(&vk.texturePool, &texture) };
 }
 
+qbool RHI_IsIntegratedGPU( void )
+{
+    return vk.deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? qtrue : qfalse;
+}
+
+uint32_t RHI_GetMaxMSAASamples( void )
+{
+    const VkPhysicalDeviceLimits *l = &vk.deviceProperties.limits;
+    const VkSampleCountFlags counts = l->framebufferColorSampleCounts & l->framebufferDepthSampleCounts
+        & l->sampledImageColorSampleCounts & l->sampledImageDepthSampleCounts;
+    if(counts & VK_SAMPLE_COUNT_8_BIT){
+        return 8;
+    }else if(counts & VK_SAMPLE_COUNT_4_BIT){
+        return 4;
+    }else if(counts & VK_SAMPLE_COUNT_2_BIT){
+        return 2;
+    }
+    return 1;
+}
+
+uint32_t RHI_GetMaxAnisotropy( void )
+{
+    return vk.caps.maxAnisotropy >= 1.0f ? (uint32_t)vk.caps.maxAnisotropy : 1;
+}
+
 rhiSampler RHI_CreateSampler(const char* name, RHI_TextureAddressing mode, uint32_t anisotropy)
 {
     VkSamplerAddressMode wrapMode = (mode == RHI_TextureAddressing_Repeat) ?  VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -364,8 +597,11 @@ rhiSampler RHI_CreateSampler(const char* name, RHI_TextureAddressing mode, uint3
 	createInfo.addressModeU = wrapMode;
 	createInfo.addressModeV = wrapMode;
 	createInfo.addressModeW = wrapMode;
-	createInfo.anisotropyEnable = anisotropy > 1 ? VK_TRUE : VK_FALSE;
-	createInfo.maxAnisotropy = anisotropy;
+	createInfo.anisotropyEnable = (anisotropy > 1 && vk.caps.anisotropy) ? VK_TRUE : VK_FALSE;
+	createInfo.maxAnisotropy = (float)anisotropy < vk.caps.maxAnisotropy ? (float)anisotropy : vk.caps.maxAnisotropy;
+	if(!createInfo.anisotropyEnable){
+		createInfo.maxAnisotropy = 1.0f;
+	}
 	createInfo.minFilter = VK_FILTER_LINEAR;
 	createInfo.magFilter = VK_FILTER_LINEAR;
 	createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
@@ -405,8 +641,14 @@ rhiDescriptorSetLayout RHI_CreateDescriptorSetLayout(const rhiDescriptorSetLayou
         binding->stageFlags = GetVkShaderStageFlags(desc->bindings[i].stageFlags);
         binding->pImmutableSamplers = VK_NULL_HANDLE;
 
-        //bindingFlags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
-        bindingFlags[i] = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+        if(desc->bindings[i].descriptorType == RHI_DescriptorType_ReadOnlyBuffer){
+            bindingFlags[i] = 0;
+        }else{
+            bindingFlags[i] = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+            if(desc->bindings[i].descriptorCount > 1){
+                bindingFlags[i] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+            }
+        }
 
     }
 
@@ -594,7 +836,7 @@ rhiPipeline RHI_CreateComputePipeline(const rhiComputePipelineDesc *computeDesc)
     createInfo.stage.pName = "cs";
 
     VkPipeline vkPipeline;
-    VK(vkCreateComputePipelines(vk.device, VK_NULL_HANDLE, 1, &createInfo, NULL, &vkPipeline));
+    VK(vkCreateComputePipelines(vk.device, vk.pipelineCache, 1, &createInfo, NULL, &vkPipeline));
 
     vkDestroyShaderModule(vk.device, csModule, NULL);
 
@@ -694,7 +936,7 @@ rhiPipeline RHI_CreateGraphicsPipeline(const rhiGraphicsPipelineDesc *graphicsDe
 
 	VkPipelineRasterizationStateCreateInfo rasterizer = {};
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterizer.polygonMode = graphicsDesc->wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+	rasterizer.polygonMode = (graphicsDesc->wireframe && vk.caps.fillModeNonSolid) ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
 	rasterizer.cullMode = GetVkCullModeFlags(graphicsDesc->cullType);
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	//rasterizer.depthClampEnable = vk.deviceFeatures.depthClamp;
@@ -757,7 +999,8 @@ rhiPipeline RHI_CreateGraphicsPipeline(const rhiGraphicsPipelineDesc *graphicsDe
     pipeline_create.colorAttachmentCount    = 1;
     VkFormat colorFormat = GetVkFormat(graphicsDesc->colorFormat);
     pipeline_create.pColorAttachmentFormats = &colorFormat;
-    pipeline_create.depthAttachmentFormat   = GetVkFormat(D32_SFloat);
+    const VkFormat depthFormat = graphicsDesc->noDepthAttachment ? VK_FORMAT_UNDEFINED : GetVkFormat(D32_SFloat);
+    pipeline_create.depthAttachmentFormat   = depthFormat;
     pipeline_create.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
   
@@ -807,8 +1050,12 @@ rhiPipeline RHI_CreateGraphicsPipeline(const rhiGraphicsPipelineDesc *graphicsDe
     // Use the pNext to point to the rendering create struct
     VkGraphicsPipelineCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    createInfo.pNext               = &pipeline_create; // reference the new dynamic structure
-    createInfo.renderPass          = VK_NULL_HANDLE; // previously required non-null
+    if(vk.caps.dynamicRendering){
+        createInfo.pNext           = &pipeline_create; // reference the new dynamic structure
+    }else{
+        // load ops don't affect compatibility, so this suits every pass variant
+        createInfo.renderPass      = GetRenderPass(colorFormat, depthFormat, GetVkSampleCount(graphicsDesc->sampleCount), VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_LOAD);
+    }
     createInfo.layout = layout.pipelineLayout;
 	createInfo.subpass = 0; // we always target sub-pass 0
 	createInfo.stageCount = stageCount;
@@ -824,7 +1071,7 @@ rhiPipeline RHI_CreateGraphicsPipeline(const rhiGraphicsPipelineDesc *graphicsDe
 	createInfo.pViewportState = &viewportState;
 
     VkPipeline vkPipeline;
-    VK(vkCreateGraphicsPipelines(vk.device, VK_NULL_HANDLE, 1, &createInfo, NULL, &vkPipeline));
+    VK(vkCreateGraphicsPipelines(vk.device, vk.pipelineCache, 1, &createInfo, NULL, &vkPipeline));
 
     vkDestroyShaderModule(vk.device, psModule, NULL);
     vkDestroyShaderModule(vk.device, vsModule, NULL);
@@ -854,26 +1101,52 @@ uint32_t RHI_GetSwapChainImageCount( void ){
     return vk.swapChainImageCount;
 }
 
+#if !defined(_WIN32)
+void sdl_PollEvents( void ); // no Sys_ wrapper exists for the SDL pump
+#endif
+
 void RHI_AcquireNextImage(uint32_t* outImageIndex, rhiSemaphore signalSemaphore)
 {
     Semaphore* signal = GET_SEMAPHORE(signalSemaphore);
     assert(signal->binary == qtrue);
     assert(signal->signaled == qfalse);
 
-    const VkResult r = vkAcquireNextImageKHR(vk.device, vk.swapChain, UINT64_MAX, signal->semaphore, VK_NULL_HANDLE, outImageIndex); 
-    if(r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)
-    {
-        signal->signaled = qtrue;
-    }
-    else
-    {
+    // An out-of-date acquire leaves the semaphore unsignalled, so it is
+    // safe to reuse on the retry against the recreated swap chain.
+    const int maxAttempts = 3;
+    for(int attempt = 1; attempt <= maxAttempts; attempt++){
+        const VkResult r = vkAcquireNextImageKHR(vk.device, vk.swapChain, UINT64_MAX, signal->semaphore, VK_NULL_HANDLE, outImageIndex);
+        if(r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR){
+            if(*outImageIndex >= RHI_MAX_SWAP_CHAIN_IMAGES){
+                ri.Error(ERR_FATAL, "Swap chain image index out of range (%d >= %d)\n", (int)*outImageIndex, RHI_MAX_SWAP_CHAIN_IMAGES);
+            }
+            signal->signaled = qtrue;
+            return;
+        }
         signal->signaled = qfalse;
-        if(r == VK_ERROR_OUT_OF_DATE_KHR){
-            RecreateSwapchain();
-        }else{
+        if(r != VK_ERROR_OUT_OF_DATE_KHR){
             Check(r, "vkAcquireNextImageKHR");
+            return;
+        }
+        if(!RecreateSwapchain()){
+            // Minimized mid-frame: there is no image to continue with, so wait
+            // for an area. Only a window that isn't minimized has a time limit.
+            const int waitMs = 10000;
+            int start = Sys_Milliseconds();
+            while(!RecreateSwapchain()){
+#if !defined(_WIN32)
+                sdl_PollEvents();
+#endif
+                if(Sys_IsMinimized()){
+                    start = Sys_Milliseconds();
+                }else if(Sys_Milliseconds() - start > waitMs){
+                    ri.Error(ERR_FATAL, "Swap chain surface still has no area after %d ms (window %d x %d)\n", waitMs, glInfo.winWidth, glInfo.winHeight);
+                }
+                Sys_Sleep(20);
+            }
         }
     }
+    ri.Error(ERR_FATAL, "vkAcquireNextImageKHR out of date after %d attempts (window %d x %d)\n", maxAttempts, glInfo.winWidth, glInfo.winHeight);
 }
 
 
@@ -924,7 +1197,7 @@ void RHI_SubmitGraphics(const rhiSubmitGraphicsDesc *graphicsDesc)
     submitInfo.pWaitDstStageMask    = flags;
 
 
-    VK(vkQueueSubmit(vk.queues.present, 1, &submitInfo, VK_NULL_HANDLE)); 
+    VK(vkQueueSubmit(vk.queues.graphics, 1, &submitInfo, VK_NULL_HANDLE));
 }
 
 
@@ -985,7 +1258,7 @@ void RHI_BeginCommandBuffer( void )
 {
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK(vkBeginCommandBuffer(vk.activeCommandBuffer, &beginInfo));
 }
 
@@ -997,6 +1270,13 @@ void RHI_EndCommandBuffer()
 void RHI_BeginRendering(const RHI_RenderPass* renderPass)
 {
     assert(vk.renderingActive == qfalse);
+
+    if(!vk.caps.dynamicRendering){
+        BeginClassicRenderPass(renderPass);
+        vk.renderingActive = qtrue;
+        vk.currentRenderPass = *renderPass;
+        return;
+    }
 
     Texture* colorTexture = GET_TEXTURE(renderPass->colorTexture);
     VkRenderingAttachmentInfo colorAttachmentInfo = {};
@@ -1016,7 +1296,7 @@ void RHI_BeginRendering(const RHI_RenderPass* renderPass)
         depthAttachmentInfo.imageLayout = depthTexture->currentLayout;
         depthAttachmentInfo.loadOp = GetVkAttachmentLoadOp(renderPass->depthLoad);
         depthAttachmentInfo.clearValue.depthStencil.depth = renderPass->depth;
-        depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         pDepthAttachmentInfo = &depthAttachmentInfo;
     }
 
@@ -1026,17 +1306,9 @@ void RHI_BeginRendering(const RHI_RenderPass* renderPass)
     renderingInfo.pColorAttachments = &colorAttachmentInfo;
     renderingInfo.pDepthAttachment = pDepthAttachmentInfo;
     renderingInfo.layerCount = 1;
-    if(renderPass->width == 0 || renderPass->height == 0){
-        renderingInfo.renderArea.extent.height = glConfig.vidHeight;
-        renderingInfo.renderArea.extent.width = glConfig.vidWidth;
-    }else{
-        renderingInfo.renderArea.extent.height = renderPass->height;
-        renderingInfo.renderArea.extent.width = renderPass->width;
-    }
-    renderingInfo.renderArea.offset.x = renderPass->x;
-    renderingInfo.renderArea.offset.y = renderPass->y;
+    renderingInfo.renderArea = GetRenderArea(renderPass, colorTexture);
 
-    vkCmdBeginRendering(vk.activeCommandBuffer, &renderingInfo);
+    vk.cmdBeginRendering(vk.activeCommandBuffer, &renderingInfo);
     vk.renderingActive = qtrue;
     vk.currentRenderPass = *renderPass;
     
@@ -1053,7 +1325,11 @@ RHI_RenderPass* RHI_CurrentRenderPass(void){
 void RHI_EndRendering(void)
 {
     assert(vk.renderingActive == qtrue);
-    vkCmdEndRendering(vk.activeCommandBuffer);
+    if(vk.caps.dynamicRendering){
+        vk.cmdEndRendering(vk.activeCommandBuffer);
+    }else{
+        vkCmdEndRenderPass(vk.activeCommandBuffer);
+    }
     vk.renderingActive = qfalse;
 }
 
@@ -1074,17 +1350,17 @@ void RHI_CmdBindDescriptorSet(rhiPipeline pipeline, rhiDescriptorSet descriptorS
     vkCmdBindDescriptorSets(vk.activeCommandBuffer, bindPoint, privatePipeline->layout.pipelineLayout, 0, 1, &privateDescSet->set, 0, NULL);
 }
 
-void RHI_CmdBindVertexBuffers(const rhiBuffer *vertexBuffers, uint32_t bufferCount)
+void RHI_CmdBindVertexBuffers(const rhiBuffer *buffers, const uint32_t *offsets, uint32_t bufferCount)
 {
-    VkBuffer buffers[16]; 
-    VkDeviceSize offsets[16];
-    assert(bufferCount < ARRAY_LEN(buffers));
+    VkBuffer vkBuffers[16]; 
+    VkDeviceSize vkOffsets[16];
+    assert(bufferCount < ARRAY_LEN(vkBuffers));
     for(int i = 0; i < bufferCount; i++){
-        Buffer *buffer = GET_BUFFER(vertexBuffers[i]);
-        buffers[i] = buffer->buffer;
-        offsets[i] = 0;
+        Buffer *buffer = GET_BUFFER(buffers[i]);
+        vkBuffers[i] = buffer->buffer;
+        vkOffsets[i] = offsets[i];
     }
-    vkCmdBindVertexBuffers(vk.activeCommandBuffer,0, bufferCount, buffers, offsets);
+    vkCmdBindVertexBuffers(vk.activeCommandBuffer,0, bufferCount, vkBuffers, vkOffsets);
 }
 
 void RHI_CmdBindIndexBuffer(rhiBuffer indexBuffer)
@@ -1166,6 +1442,40 @@ void RHI_CmdBeginBarrier()
     vk.bufferBarrierCount = 0;  
 }
 
+// Maps sync2-only stage bits onto legacy ones. NONE becomes TOP_OF_PIPE as
+// a source and BOTTOM_OF_PIPE as a destination (no dependent access there).
+static VkPipelineStageFlags GetLegacyStageMask(VkPipelineStageFlags2 stages, qbool isDestination)
+{
+    VkPipelineStageFlags2 rest = stages;
+    VkPipelineStageFlags legacy = 0;
+
+    if(stages == VK_PIPELINE_STAGE_2_NONE){
+        return isDestination ? VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    }
+    const VkPipelineStageFlags2 transferBits = VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_RESOLVE_BIT |
+        VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT;
+    const VkPipelineStageFlags2 vertexInputBits = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT |
+        VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
+    if(rest & transferBits){
+        legacy |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        rest &= ~transferBits;
+    }
+    if(rest & vertexInputBits){
+        legacy |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        rest &= ~vertexInputBits;
+    }
+    // remaining bits keep their legacy values
+    assert((rest >> 32) == 0);
+    return legacy | (VkPipelineStageFlags)(rest & 0xffffffffu);
+}
+
+static VkAccessFlags GetLegacyAccessMask(VkAccessFlags2 access)
+{
+    // every access bit used here is below bit 32 and shares its legacy value
+    assert((access >> 32) == 0);
+    return (VkAccessFlags)(access & 0xffffffffu);
+}
+
 void RHI_CmdEndBarrier()
 {
     VkBufferMemoryBarrier2 bufferBarriers[ARRAY_LEN(vk.bufferBarriers)];
@@ -1202,7 +1512,10 @@ void RHI_CmdEndBarrier()
     for(int i = 0; i < vk.textureBarrierCount; i++){
         Texture* texture = GET_TEXTURE(vk.textureBarriers[i]);
         VkImageLayout newLayout = GetVkImageLayout(vk.textureState[i]);
-        if(texture->currentLayout == newLayout && newLayout != VK_IMAGE_LAYOUT_GENERAL ){
+        // attachments are rewritten pass to pass in one layout, so they need the dependency
+        if(texture->currentLayout == newLayout && newLayout != VK_IMAGE_LAYOUT_GENERAL
+            && newLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            && newLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL){
             continue;
         }
         
@@ -1243,13 +1556,55 @@ void RHI_CmdEndBarrier()
     }
 
 
+    if(!vk.caps.synchronization2){
+        VkImageMemoryBarrier legacyImages[ARRAY_LEN(vk.textureBarriers)];
+        VkBufferMemoryBarrier legacyBuffers[ARRAY_LEN(vk.bufferBarriers)];
+        VkPipelineStageFlags srcStages = 0;
+        VkPipelineStageFlags dstStages = 0;
+
+        for(uint32_t i = 0; i < textureBarrierCount; i++){
+            const VkImageMemoryBarrier2 *b = &textureBarriers[i];
+            VkImageMemoryBarrier legacy = {};
+            legacy.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            legacy.srcAccessMask = GetLegacyAccessMask(b->srcAccessMask);
+            legacy.dstAccessMask = GetLegacyAccessMask(b->dstAccessMask);
+            legacy.oldLayout = b->oldLayout;
+            legacy.newLayout = b->newLayout;
+            legacy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            legacy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            legacy.image = b->image;
+            legacy.subresourceRange = b->subresourceRange;
+            legacyImages[i] = legacy;
+            srcStages |= GetLegacyStageMask(b->srcStageMask, qfalse);
+            dstStages |= GetLegacyStageMask(b->dstStageMask, qtrue);
+        }
+        for(uint32_t i = 0; i < bufferBarrierCount; i++){
+            const VkBufferMemoryBarrier2 *b = &bufferBarriers[i];
+            VkBufferMemoryBarrier legacy = {};
+            legacy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            legacy.srcAccessMask = GetLegacyAccessMask(b->srcAccessMask);
+            legacy.dstAccessMask = GetLegacyAccessMask(b->dstAccessMask);
+            legacy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            legacy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            legacy.buffer = b->buffer;
+            legacy.offset = b->offset;
+            legacy.size = b->size;
+            legacyBuffers[i] = legacy;
+            srcStages |= GetLegacyStageMask(b->srcStageMask, qfalse);
+            dstStages |= GetLegacyStageMask(b->dstStageMask, qtrue);
+        }
+        vkCmdPipelineBarrier(vk.activeCommandBuffer, srcStages, dstStages, 0,
+            0, NULL, bufferBarrierCount, legacyBuffers, textureBarrierCount, legacyImages);
+        return;
+    }
+
     VkDependencyInfo dep = {};
     dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dep.imageMemoryBarrierCount = textureBarrierCount;
     dep.pImageMemoryBarriers = textureBarriers;
     dep.bufferMemoryBarrierCount = bufferBarrierCount;
     dep.pBufferMemoryBarriers = bufferBarriers;
-    vkCmdPipelineBarrier2(vk.activeCommandBuffer, &dep);
+    vk.cmdPipelineBarrier2(vk.activeCommandBuffer, &dep);
 }
 
 void RHI_CmdTextureBarrier(rhiTexture handle, RHI_ResourceState flag)
@@ -1303,15 +1658,33 @@ rhiDurationQuery EncodeDurationQuery(uint32_t frameIndex, uint32_t durationQuery
     return handle;
 }
 
+static qbool s_gpuTimestampsEnabled = qfalse;
+
+qbool RHI_SupportsFragmentStores( void ){
+    return vk.caps.fragmentStoresEnabled;
+}
+
+// Set once per frame, before any query is recorded for that frame.
+void RHI_SetGPUTimestamps(qbool enabled){
+    s_gpuTimestampsEnabled = enabled;
+}
+
 rhiDurationQuery RHI_CmdBeginDurationQuery(void)
 {
+    if(!vk.caps.timestamps || !s_gpuTimestampsEnabled){
+        return (rhiDurationQuery) { 0 };
+    }
     assert(vk.durationQueryCount[vk.currentFrameIndex] < MAX_DURATION_QUERIES);
     if(vk.durationQueryCount[vk.currentFrameIndex] == 0){
         vk.durationQueryCount[vk.currentFrameIndex]++;
     }
     uint32_t durationQueryIndex = vk.durationQueryCount[vk.currentFrameIndex]++;
     rhiDurationQuery durationQuery = EncodeDurationQuery(vk.currentFrameIndex, durationQueryIndex);
-    vkCmdWriteTimestamp2(vk.activeCommandBuffer, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, vk.queryPool[vk.currentFrameIndex], durationQueryIndex * 2);
+    if(vk.caps.synchronization2){
+        vk.cmdWriteTimestamp2(vk.activeCommandBuffer, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, vk.queryPool[vk.currentFrameIndex], durationQueryIndex * 2);
+    }else{
+        vkCmdWriteTimestamp(vk.activeCommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, vk.queryPool[vk.currentFrameIndex], durationQueryIndex * 2);
+    }
     vk.query[vk.currentFrameIndex][durationQueryIndex] |= 1;
     return durationQuery;
 }
@@ -1324,7 +1697,11 @@ void RHI_CmdEndDurationQuery(rhiDurationQuery handle)
     DurationQuery query = DecodeDurationQuery(handle);
     assert(query.frameIndex == vk.currentFrameIndex);
     assert(query.durationQueryIndex < vk.durationQueryCount[vk.currentFrameIndex]);
-    vkCmdWriteTimestamp2(vk.activeCommandBuffer, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, vk.queryPool[vk.currentFrameIndex], query.durationQueryIndex * 2 + 1);
+    if(vk.caps.synchronization2){
+        vk.cmdWriteTimestamp2(vk.activeCommandBuffer, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, vk.queryPool[vk.currentFrameIndex], query.durationQueryIndex * 2 + 1);
+    }else{
+        vkCmdWriteTimestamp(vk.activeCommandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vk.queryPool[vk.currentFrameIndex], query.durationQueryIndex * 2 + 1);
+    }
     vk.query[query.frameIndex][query.durationQueryIndex] |= 2;
 }
 
@@ -1442,7 +1819,11 @@ double RHI_GetTimestampPeriodUs(void){
 #endif // ENABLE_PROFILER
 
 void RHI_DurationQueryReset(void){
-    vkResetQueryPool(vk.device, vk.queryPool[vk.currentFrameIndex],0, MAX_DURATION_QUERIES);
+    // Flags are cleared even when disabled so a later readback of this
+    // frame reports no data instead of stale results.
+    if(vk.caps.timestamps && s_gpuTimestampsEnabled){
+        vkResetQueryPool(vk.device, vk.queryPool[vk.currentFrameIndex],0, MAX_DURATION_QUERIES * 2);
+    }
     memset(vk.query[vk.currentFrameIndex], 0, sizeof(vk.query[vk.currentFrameIndex]));
 }
 
@@ -1634,7 +2015,7 @@ void RHI_EndTextureUpload()
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
     if(vk.uploadDesc.generateMips){
-        if(!r_mipFilter->integer){
+        if(!RB_UseFilteredMips()){
             FastMips();
         }else{
             SlowMips();
@@ -1657,6 +2038,62 @@ void RHI_EndTextureUpload()
     RHI_SubmitGraphics(&submitDesc);
 
     vk.uploadDesc = (rhiTextureUploadDesc){};
+    vk.activeCommandBuffer = previousCmdBuffer;
+}
+
+// Every chunk starts with no upload pending, so offset 0 of the staging buffer
+// is free, and the wait at the end leaves it free for the next texture upload.
+void RHI_UploadBufferData(rhiBuffer dst, const void *data, uint32_t byteCount)
+{
+    assert(uploadActive == 0);
+    assert(byteCount > 0);
+    const Buffer *dstBuffer = GET_BUFFER(dst);
+    if(byteCount > dstBuffer->desc.byteCount){
+        ri.Error(ERR_FATAL, "RHI_UploadBufferData: %u bytes exceed the %u byte buffer '%s'\n",
+            byteCount, dstBuffer->desc.byteCount, dstBuffer->desc.name);
+    }
+
+    VkCommandBuffer previousCmdBuffer = vk.activeCommandBuffer;
+    byte *staging = RHI_MapBuffer(vk.uploadBuffer);
+
+    for(uint32_t offset = 0; offset < byteCount;){
+        const uint32_t chunkBytes = min(byteCount - offset, vk.uploadBufferSize);
+        const qbool lastChunk = offset + chunkBytes == byteCount;
+
+        RHI_WaitOnSemaphore(vk.uploadSemaphore, vk.uploadSemaphoreCount);
+        vk.uploadByteOffset = 0;
+        memcpy(staging, (const byte*)data + offset, chunkBytes);
+        RHI_FlushBuffer(vk.uploadBuffer, 0, chunkBytes);
+
+        RHI_BindCommandBuffer(vk.uploadCmdBuffer[vk.uploadCmdBufferIndex]);
+        RHI_BeginCommandBuffer();
+        RHI_CmdBeginBarrier();
+        RHI_CmdBufferBarrier(vk.uploadBuffer, RHI_ResourceState_CopySourceBit);
+        RHI_CmdBufferBarrier(dst, RHI_ResourceState_CopyDestinationBit);
+        RHI_CmdEndBarrier();
+
+        RHI_CmdCopyBuffer(dst, offset, vk.uploadBuffer, 0, chunkBytes);
+
+        if(lastChunk){
+            RHI_CmdBeginBarrier();
+            RHI_CmdBufferBarrier(dst, RHI_ResourceState_VertexBufferBit);
+            RHI_CmdEndBarrier();
+        }
+        RHI_EndCommandBuffer();
+
+        vk.uploadSemaphoreCount++;
+        vk.uploadCmdBufferSignaledValue[vk.uploadCmdBufferIndex] = vk.uploadSemaphoreCount;
+
+        rhiSubmitGraphicsDesc submitDesc = {};
+        submitDesc.signalSemaphoreCount = 1;
+        submitDesc.signalSemaphores[0] = vk.uploadSemaphore;
+        submitDesc.signalSemaphoreValues[0] = vk.uploadSemaphoreCount;
+        RHI_SubmitGraphics(&submitDesc);
+
+        offset += chunkBytes;
+    }
+
+    RHI_WaitOnSemaphore(vk.uploadSemaphore, vk.uploadSemaphoreCount);
     vk.activeCommandBuffer = previousCmdBuffer;
 }
 
@@ -1685,31 +2122,28 @@ rhiTextureFormatId RHI_GetSwapChainFormat(void) {
 }
 
 void RHI_CmdBeginDebugLabel(const char * scope){
-    PFN_vkCmdBeginDebugUtilsLabelEXT pfnvkCmdBeginDebugUtilsLabelEXT= (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk.device, "vkCmdBeginDebugUtilsLabelEXT");
-    if(pfnvkCmdBeginDebugUtilsLabelEXT){
+    if(vk.ext.EXT_debug_utils && vkCmdBeginDebugUtilsLabelEXT){
         VkDebugUtilsLabelEXT labelInfo = {};
         Vector4Set(labelInfo.color, 1.0f, 1.0f, 1.0f, 1.0f);
         labelInfo.pLabelName = scope;
         labelInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
-        pfnvkCmdBeginDebugUtilsLabelEXT(vk.activeCommandBuffer, &labelInfo);
+        vkCmdBeginDebugUtilsLabelEXT(vk.activeCommandBuffer, &labelInfo);
     }
 }
 
 void RHI_CmdEndDebugLabel(void){
-    PFN_vkCmdEndDebugUtilsLabelEXT pfnvkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk.device, "vkCmdEndDebugUtilsLabelEXT");
-    if(pfnvkCmdEndDebugUtilsLabelEXT){
-        pfnvkCmdEndDebugUtilsLabelEXT(vk.activeCommandBuffer);
+    if(vk.ext.EXT_debug_utils && vkCmdEndDebugUtilsLabelEXT){
+        vkCmdEndDebugUtilsLabelEXT(vk.activeCommandBuffer);
     }
 }
 
 void RHI_CmdInsertDebugLabel(const char * label){
-    PFN_vkCmdInsertDebugUtilsLabelEXT pfnvkCmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk.device, "vkCmdInsertDebugUtilsLabelEXT");
-    if(pfnvkCmdInsertDebugUtilsLabelEXT){
+    if(vk.ext.EXT_debug_utils && vkCmdInsertDebugUtilsLabelEXT){
         VkDebugUtilsLabelEXT labelInfo = {};
         Vector4Set(labelInfo.color, 1.0f, 1.0f, 1.0f, 1.0f);
         labelInfo.pLabelName = label;
         labelInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
-        pfnvkCmdInsertDebugUtilsLabelEXT(vk.activeCommandBuffer, &labelInfo);
+        vkCmdInsertDebugUtilsLabelEXT(vk.activeCommandBuffer, &labelInfo);
     }
     
 }

@@ -132,9 +132,9 @@ static void WIN_MainWindowThreadFunc( thread_t *thread ) {
 	SetEvent( thread->initDoneEvent );
 
 	while ( !thread->stopRequested ) {
-		// PROF_InitThread Z_Mallocs, but mainzone doesn't exist until Com_Init --
-		// this thread starts earlier, so poll com_zoneInitialized before calling it
-		if ( !profRegistered && com_zoneInitialized ) {
+		// Com_Init resets the profiler and registers the main thread first, and
+		// this thread starts earlier, so poll com_profilerReady before registering
+		if ( !profRegistered && com_profilerReady ) {
 			PROF_InitThread( "Window" );
 			profRegistered = qtrue;
 		}

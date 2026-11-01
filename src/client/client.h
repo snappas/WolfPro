@@ -427,6 +427,7 @@ extern cvar_t  *cl_showServerCommands;      // NERVE - SMF
 extern cvar_t  *cl_autoNudge;
 extern cvar_t  *cl_timeNudge;
 extern cvar_t  *cl_showTimeDelta;
+extern cvar_t  *cl_timeStats;
 extern cvar_t  *cl_freezeDemo;
 
 extern cvar_t  *cl_yawspeed;
@@ -672,6 +673,7 @@ void CL_FirstSnapshot( void );
 void CL_ShaderStateChanged( void );
 void CL_UpdateLevelHunkUsage( void );
 void CL_ConfigstringModified(void);
+void CL_TimeStatsSnapshot( void );
 void CL_CGNDP_EndAnalysis(const char* filePath, int firstServerTime, int lastServerTime, qbool videoRestart);
 void CL_CGNDP_ResetAnalysis(void);
 qbool CL_CGNDP_AnalyzeSnapshot(int progress); // qtrue when a server pause is active

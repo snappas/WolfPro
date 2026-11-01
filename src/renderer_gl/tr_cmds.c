@@ -194,7 +194,8 @@ make sure there is enough command space, waiting on the
 render thread if needed.
 ============
 */
-void *R_GetCommandBuffer( int bytes ) {
+static void *R_GetCommandBufferReserved( int bytes, int reservedBytes ) {
+	static qboolean warned = qfalse;
 	renderCommandList_t *cmdList;
 
 	if ( !tr.registered ) {  //DAJ BUGFIX
@@ -203,17 +204,26 @@ void *R_GetCommandBuffer( int bytes ) {
 	cmdList = &backEndData[tr.smpFrame]->commands;
 
 	// always leave room for the end of list command
-	if ( cmdList->used + bytes + sizeof(int) > MAX_RENDER_COMMANDS ) {
+	if ( cmdList->used + bytes + sizeof(int) + reservedBytes > MAX_RENDER_COMMANDS ) {
 		if ( bytes > MAX_RENDER_COMMANDS - sizeof( int ) ) {
 			ri.Error( ERR_FATAL, "R_GetCommandBuffer: bad size %i", bytes );
 		}
 		// if we run out of room, just start dropping commands
+		if ( !warned ) {
+			warned = qtrue;
+			ri.Printf( PRINT_WARNING, "R_GetCommandBuffer: dropping commands, %i of %i bytes used\n", cmdList->used, MAX_RENDER_COMMANDS );
+		}
 		return NULL;
 	}
 
 	cmdList->used += bytes;
 
 	return cmdList->cmds + cmdList->used - bytes;
+}
+
+// keeps room for the end of frame command, so the frame always ends
+void *R_GetCommandBuffer( int bytes ) {
+	return R_GetCommandBufferReserved( bytes, sizeof( swapBuffersCommand_t ) );
 }
 
 
@@ -515,7 +525,7 @@ void RE_EndFrame( int *frontEndMsec, int *backEndMsec ) {
 	if ( !tr.registered ) {
 		return;
 	}
-	cmd = R_GetCommandBuffer( sizeof( *cmd ) );
+	cmd = R_GetCommandBufferReserved( sizeof( *cmd ), 0 );
 	if ( !cmd ) {
 		return;
 	}

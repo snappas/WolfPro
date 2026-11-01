@@ -92,11 +92,13 @@ float4 texEnv(float4 p, float4 s, uint texEnv){
 float4 ps(VOut input) : SV_Target
 {
     
+#if TRACE
     ShaderIndex index = unpackShaderIndex(rc.shaderIndex);
     uint2 XY = unpackPixelCenter(rc.pixelCenterXY);
     if(all(uint2(input.position.xy) == XY) && index.writeEnabled){
         shaderIndex.Store(index.writeIndex * 4, index.shaderIndex);
     }
+#endif
 
     UnpackedConstants uc = unpackConstants(rc.packedData);
     float4 color1 = texture[uc.textureIndex1].Sample(mySampler[uc.samplerIndex1], input.tc1);

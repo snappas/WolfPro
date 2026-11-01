@@ -108,6 +108,7 @@ void RB_BeginSurface( shader_t *shader, int fogNum ) {
 	tess.numVertexes = 0;
 	tess.shader = state;
 	tess.fogNum = fogNum;
+	tess.batchMode = TESS_BATCH_UNSET;
 	tess.dlightBits = 0;        // will be OR'd in by surface functions
 	tess.xstages = state->stages;
 	tess.numPasses = state->numUnfoggedPasses;
@@ -118,11 +119,66 @@ void RB_BeginSurface( shader_t *shader, int fogNum ) {
 		tess.shaderTime = tess.shader->clampTime;
 	}
 
-	VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
-	vb->indexFirst = vb->indexCount;
-	vb->vertexFirst = vb->vertexCount;
-
 	// done.
+}
+
+static void RB_WarnStreamOverflow( const char *streamName, uint32_t used, uint32_t capacity, uint32_t batchBytes ) {
+	if ( backEnd.streamOverflowWarned ) {
+		return;
+	}
+	backEnd.streamOverflowWarned = qtrue;
+	ri.Printf( PRINT_WARNING, "WARNING: %s stream full (%u of %u bytes used), skipping %u byte batch of shader '%s'\n",
+			   streamName, used, capacity, batchBytes, tess.shader->name );
+}
+
+/*
+==============
+RB_StreamVertices
+
+Appends to this frame's vertex stream. Nothing is written on failure.
+==============
+*/
+qbool RB_StreamVertices( const void *data, uint32_t byteCount, uint32_t *outOffset ) {
+	VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
+	const uint32_t offset = ALIGN_UP( vb->vertexUsed, 16 );
+
+	if ( byteCount > STREAM_VERTEX_BYTES - offset ) {
+		RB_WarnStreamOverflow( "vertex", vb->vertexUsed, STREAM_VERTEX_BYTES, byteCount );
+		return qfalse;
+	}
+
+	memcpy( vb->vertexData + offset, data, byteCount );
+	vb->vertexUsed = offset + byteCount;
+	*outOffset = offset;
+	return qtrue;
+}
+
+/*
+==============
+RB_StreamIndices
+
+Appends to this frame's index stream. Nothing is written on failure.
+==============
+*/
+qbool RB_StreamIndices( const void *data, uint32_t indexCount, uint32_t *outFirstIndex ) {
+	VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
+	const uint32_t byteCount = indexCount * (uint32_t)sizeof( glIndex_t );
+
+	if ( byteCount > STREAM_INDEX_BYTES - vb->indexUsed ) {
+		RB_WarnStreamOverflow( "index", vb->indexUsed, STREAM_INDEX_BYTES, byteCount );
+		return qfalse;
+	}
+
+	memcpy( vb->indexData + vb->indexUsed, data, byteCount );
+	*outFirstIndex = vb->indexUsed / (uint32_t)sizeof( glIndex_t );
+	vb->indexUsed += byteCount;
+	return qtrue;
+}
+
+// tess.indexes are batch-relative, each draw reaches its vertices by bind offset
+static qbool RB_StreamBatchGeometry( uint32_t *outFirstIndex, uint32_t *outPositionOffset ) {
+	return RB_StreamIndices( tess.indexes, tess.numIndexes, outFirstIndex )
+		&& RB_StreamVertices( tess.xyz, (uint32_t)( tess.numVertexes * sizeof( tess.xyz[0] ) ), outPositionOffset );
 }
 
 
@@ -557,58 +613,42 @@ static void RB_IterateStagesGenericVulkan(shaderCommands_t *input ){
 	
 	VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
 
-	if((vb->indexCount + tess.numIndexes) > IDX_MAX || (vb->vertexCount + tess.numVertexes) > VBA_MAX ){
-		assert(!"Out of vertex buffer memory");
+	uint32_t firstIndex;
+	uint32_t positionOffset;
+	if(!RB_StreamBatchGeometry(&firstIndex, &positionOffset)){
 		return;
 	}
 
-	byte *indexBufferData = RHI_MapBuffer(vb->index);
-	memcpy(indexBufferData + (vb->indexFirst * sizeof(tess.indexes[0])), tess.indexes,	tess.numIndexes * sizeof(tess.indexes[0]));
-	RHI_UnmapBuffer(vb->index);
-
-	byte *positionBufferData = RHI_MapBuffer(vb->position);
-	memcpy(positionBufferData + (vb->vertexFirst * sizeof(tess.xyz[0])), tess.xyz, tess.numVertexes * sizeof(tess.xyz[0]));
-	RHI_UnmapBuffer(vb->position);
-
+	// stream every stage before drawing any, so a full stream can't leave
+	// a batch partly drawn
+	uint32_t colorOffset[MAX_SHADER_STAGES];
+	uint32_t texCoordOffset[MAX_SHADER_STAGES];
+	int stageCount = 0;
 	for(int i = 0; i < MAX_SHADER_STAGES; i++){
-
-		
-
 		shaderStage_t *pStage = tess.xstages[i];
 		//if (pStage == NULL || !pStage->active) {
 		if (pStage == NULL) {
 			break;
 		}
 
-		rhiPipeline pipeline = pStage->pipeline[backEnd.msaaActive ? 1 : 0];
-
-		if (i > 0) {
-			//__debugbreak();
-			//break;
-		}
-
 		ComputeColors( pStage );
 		ComputeTexCoords( pStage );
 
-		if ( pStage->bundle[1].image[0] != 0 ) {
-			
-			//DrawMultitextured( input, stage );
+		if(!RB_StreamVertices(tess.svars.colors, (uint32_t)(tess.numVertexes * sizeof(tess.svars.colors[0])), &colorOffset[i])
+			|| !RB_StreamVertices(tess.svars.texcoords, (uint32_t)(tess.numVertexes * sizeof(float) * 2), &texCoordOffset[i])){
+			return;
 		}
+		stageCount++;
+	}
 
-		byte *tcBufferData = RHI_MapBuffer(vb->textureCoord[i]);
-		memcpy(tcBufferData + (vb->vertexFirst * sizeof(float) * 2), tess.svars.texcoords, tess.numVertexes * sizeof(float) * 2);
-		RHI_UnmapBuffer(vb->textureCoord[i]);
-
-		byte *colorBufferData = RHI_MapBuffer(vb->color[i]);
-		memcpy(colorBufferData + (vb->vertexFirst * sizeof(tess.svars.colors[0])), tess.svars.colors, tess.numVertexes * sizeof(tess.svars.colors[0]));
-		RHI_UnmapBuffer(vb->color[i]);
-
-		
+	for(int i = 0; i < stageCount; i++){
+		shaderStage_t *pStage = tess.xstages[i];
+		rhiPipeline pipeline = pStage->pipeline[backEnd.msaaActive ? 1 : 0];
 
 		pixelShaderPushConstants pc; 
 		image_t *currentImage = R_GetAnimatedImageSafe(&pStage->bundle[0]);
 		qbool clamp = currentImage->wrapClampMode == GL_CLAMP;
-		qbool anisotropy = r_ext_texture_filter_anisotropic->integer > 1 && !backEnd.projection2D && !currentImage->lightMap;
+		qbool anisotropy = RB_GetAnisotropy() > 1 && !backEnd.projection2D && !currentImage->lightMap;
 
 		pc.packedData = 0;
 		pc.packedData |= currentImage->descriptorIndex;
@@ -632,22 +672,15 @@ static void RB_IterateStagesGenericVulkan(shaderCommands_t *input ){
 			backEnd.pipelineLayoutDirty = qfalse;
 		}
 
-		rhiBuffer buffers[] = {vb->position, vb->color[i], vb->textureCoord[i]};
-		if(backEnd.previousVertexBufferCount != ARRAY_LEN(buffers) 
-			|| memcmp(buffers, backEnd.previousVertexBuffers, sizeof(buffers)))
-		{
-			RHI_CmdBindVertexBuffers(buffers, ARRAY_LEN(buffers));
-			memcpy(backEnd.previousVertexBuffers, buffers, sizeof(buffers));
-			backEnd.previousVertexBufferCount = ARRAY_LEN(buffers);
-		}
+		rhiBuffer buffers[] = {vb->vertex, vb->vertex, vb->vertex};
+		uint32_t offsets[] = {positionOffset, colorOffset[i], texCoordOffset[i]};
+		RHI_CmdBindVertexBuffers(buffers, offsets, ARRAY_LEN(buffers));
 
 		RHI_CmdPushConstants(pipeline, RHI_Shader_Vertex, backEnd.or.modelMatrix,sizeof(backEnd.or.modelMatrix));
 		RHI_CmdPushConstants(pipeline, RHI_Shader_Pixel, &pc, sizeof(pc));
 
-		RHI_CmdDrawIndexed(tess.numIndexes, vb->indexFirst, vb->vertexFirst);
+		RHI_CmdDrawIndexed(tess.numIndexes, firstIndex, 0);
 	}
-	vb->indexCount += tess.numIndexes;
-	vb->vertexCount += tess.numVertexes;
 }
 
 uint32_t packColorR11G11B10(vec3_t color){
@@ -662,48 +695,39 @@ static void RB_DrawDynamicLight(void){
 		
 	VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
 
-	if((vb->indexCount + tess.numIndexes) > IDX_MAX || (vb->vertexCount + tess.numVertexes) > VBA_MAX ){
-		assert(!"Out of vertex buffer memory");
+	int diffuseStageIndex = 0; //@TODO
+	shaderStage_t *pStage = tess.xstages[diffuseStageIndex];
+	if(pStage == NULL){
 		return;
 	}
 
-	byte *indexBufferData = RHI_MapBuffer(vb->index);
-	memcpy(indexBufferData + (vb->indexFirst * sizeof(tess.indexes[0])), tess.indexes,	tess.numIndexes * sizeof(tess.indexes[0]));
-	RHI_UnmapBuffer(vb->index);
-
-	byte *positionBufferData = RHI_MapBuffer(vb->position);
-	memcpy(positionBufferData + (vb->vertexFirst * sizeof(tess.xyz[0])), tess.xyz, tess.numVertexes * sizeof(tess.xyz[0]));
-	RHI_UnmapBuffer(vb->position);
-
-	byte *normalBufferData = RHI_MapBuffer(vb->normal);
-	memcpy(normalBufferData + (vb->vertexFirst * sizeof(tess.normal[0])), tess.normal, tess.numVertexes * sizeof(tess.normal[0]));
-	RHI_UnmapBuffer(vb->normal);
-
-	int diffuseStageIndex = 0; //@TODO 
-	shaderStage_t *pStage = tess.xstages[diffuseStageIndex];
-	//if (pStage == NULL || !pStage->active) {
-	if (pStage == NULL) {
-		//return;
+	// dlights are optional, leave the rest of the stream to transparents and 2D
+	if(vb->vertexUsed > DLIGHT_STREAM_LIMIT){
+		return;
 	}
 
+	uint32_t firstIndex;
+	uint32_t positionOffset;
+	uint32_t normalOffset;
+	if(!RB_StreamBatchGeometry(&firstIndex, &positionOffset)
+		|| !RB_StreamVertices(tess.normal, (uint32_t)(tess.numVertexes * sizeof(tess.normal[0])), &normalOffset)){
+		return;
+	}
 
 	ComputeColors( pStage );
 	ComputeTexCoords( pStage );
 
-	byte *tcBufferData = RHI_MapBuffer(vb->textureCoord[0]);
-	memcpy(tcBufferData + (vb->vertexFirst * sizeof(float) * 2), tess.svars.texcoords, tess.numVertexes * sizeof(float) * 2);
-	RHI_UnmapBuffer(vb->textureCoord[0]);
-
-	byte *colorBufferData = RHI_MapBuffer(vb->color[0]);
-	memcpy(colorBufferData + (vb->vertexFirst * sizeof(tess.svars.colors[0])), tess.svars.colors, tess.numVertexes * sizeof(tess.svars.colors[0]));
-	RHI_UnmapBuffer(vb->color[0]);
-
-	
+	uint32_t texCoordOffset;
+	uint32_t colorOffset;
+	if(!RB_StreamVertices(tess.svars.texcoords, (uint32_t)(tess.numVertexes * sizeof(float) * 2), &texCoordOffset)
+		|| !RB_StreamVertices(tess.svars.colors, (uint32_t)(tess.numVertexes * sizeof(tess.svars.colors[0])), &colorOffset)){
+		return;
+	}
 
 	dynamicLightPushConstants pc = {}; 
 	image_t *currentImage = R_GetAnimatedImageSafe(&pStage->bundle[0]);
 	qbool clamp = currentImage->wrapClampMode == GL_CLAMP;
-	qbool anisotropy = r_ext_texture_filter_anisotropic->integer > 1 && !backEnd.projection2D && !currentImage->lightMap;
+	qbool anisotropy = RB_GetAnisotropy() > 1 && !backEnd.projection2D && !currentImage->lightMap;
 
 	pc.samplerIndex = RB_GetSamplerIndex(clamp, anisotropy);
 	pc.textureIndex = currentImage->descriptorIndex;
@@ -725,22 +749,14 @@ static void RB_DrawDynamicLight(void){
 		backEnd.pipelineLayoutDirty = qfalse;
 	}
 
-	rhiBuffer buffers[] = {vb->position, vb->textureCoord[0], vb->color[0], vb->normal};
-	if(backEnd.previousVertexBufferCount != ARRAY_LEN(buffers) 
-		|| memcmp(buffers, backEnd.previousVertexBuffers, sizeof(buffers)))
-	{
-		RHI_CmdBindVertexBuffers(buffers, ARRAY_LEN(buffers));
-		memcpy(backEnd.previousVertexBuffers, buffers, sizeof(buffers));
-		backEnd.previousVertexBufferCount = ARRAY_LEN(buffers);
-	}
+	rhiBuffer buffers[] = {vb->vertex, vb->vertex, vb->vertex, vb->vertex};
+	uint32_t offsets[] = {positionOffset, texCoordOffset, colorOffset, normalOffset};
+	RHI_CmdBindVertexBuffers(buffers, offsets, ARRAY_LEN(buffers));
 
 	RHI_CmdPushConstants(pipeline, RHI_Shader_Vertex, backEnd.or.modelMatrix,sizeof(backEnd.or.modelMatrix));
 	RHI_CmdPushConstants(pipeline, RHI_Shader_Pixel, &pc, sizeof(pc));
 
-	RHI_CmdDrawIndexed(tess.numIndexes, vb->indexFirst, vb->vertexFirst);
-
-	vb->indexCount += tess.numIndexes;
-	vb->vertexCount += tess.numVertexes;
+	RHI_CmdDrawIndexed(tess.numIndexes, firstIndex, 0);
 }
 
 /*
@@ -943,28 +959,23 @@ void RB_StageIteratorLightmappedMultitexture( void ) {
 
 	VertexBuffers *vb = &backEnd.vertexBuffers[backEnd.currentFrameIndex];
 
-	if((vb->indexCount + tess.numIndexes) > IDX_MAX || (vb->vertexCount + tess.numVertexes) > VBA_MAX ){
-		assert(!"Out of vertex buffer memory");
-		return;
+	uint32_t firstIndex;
+	rhiBuffer buffers[2];
+	uint32_t offsets[2] = {0, 0};
+	if(tess.batchMode == TESS_BATCH_STATIC){
+		if(!RB_StreamIndices(tess.indexes, tess.numIndexes, &firstIndex)){
+			return;
+		}
+		buffers[0] = backEnd.worldPositions;
+		buffers[1] = backEnd.worldTexCoords;
+	}else{
+		if(!RB_StreamBatchGeometry(&firstIndex, &offsets[0])
+			|| !RB_StreamVertices(tess.texCoords, (uint32_t)(tess.numVertexes * sizeof(float) * 4), &offsets[1])){
+			return;
+		}
+		buffers[0] = vb->vertex;
+		buffers[1] = vb->vertex;
 	}
-
-	byte *indexBufferData = RHI_MapBuffer(vb->index);
-	memcpy(indexBufferData + (vb->indexFirst * sizeof(tess.indexes[0])), tess.indexes,	tess.numIndexes * sizeof(tess.indexes[0]));
-	RHI_UnmapBuffer(vb->index);
-
-	byte *positionBufferData = RHI_MapBuffer(vb->position);
-	memcpy(positionBufferData + (vb->vertexFirst * sizeof(tess.xyz[0])), tess.xyz, tess.numVertexes * sizeof(tess.xyz[0]));
-	RHI_UnmapBuffer(vb->position);
-
-
-	
-
-	//ComputeTexCoords( pStage );
-
-	byte *tcBufferData = RHI_MapBuffer(vb->textureCoordLM);
-	memcpy(tcBufferData + (vb->vertexFirst * sizeof(float) * 4), tess.texCoords, tess.numVertexes * sizeof(float) * 4);
-	RHI_UnmapBuffer(vb->textureCoordLM);
-	
 
 	pixelShaderPushConstants2 pc; 
 	image_t *image[2];
@@ -974,7 +985,7 @@ void RB_StageIteratorLightmappedMultitexture( void ) {
 	for(int i = 0; i < 2; i++){
 		image[i] = R_GetAnimatedImageSafe(&pStage->bundle[i]);
 		clamp[i] = image[i]->wrapClampMode == GL_CLAMP;
-		anisotropy[i] = r_ext_texture_filter_anisotropic->integer > 1 && !backEnd.projection2D && !image[i]->lightMap;
+		anisotropy[i] = RB_GetAnisotropy() > 1 && !backEnd.projection2D && !image[i]->lightMap;
 	}
 
 	
@@ -1001,22 +1012,12 @@ void RB_StageIteratorLightmappedMultitexture( void ) {
 		backEnd.pipelineLayoutDirty = qfalse;
 	}
 
-	rhiBuffer buffers[] = {vb->position, vb->textureCoordLM};
-	if(backEnd.previousVertexBufferCount != ARRAY_LEN(buffers) 
-		|| memcmp(buffers, backEnd.previousVertexBuffers, sizeof(buffers)))
-	{
-		RHI_CmdBindVertexBuffers(buffers, ARRAY_LEN(buffers));
-		memcpy(backEnd.previousVertexBuffers, buffers, sizeof(buffers));
-		backEnd.previousVertexBufferCount = ARRAY_LEN(buffers);
-	}
+	RHI_CmdBindVertexBuffers(buffers, offsets, ARRAY_LEN(buffers));
 
 	RHI_CmdPushConstants(pipeline, RHI_Shader_Vertex, backEnd.or.modelMatrix,sizeof(backEnd.or.modelMatrix));
 	RHI_CmdPushConstants(pipeline, RHI_Shader_Pixel, &pc, sizeof(pc));
 
-	RHI_CmdDrawIndexed(tess.numIndexes, vb->indexFirst, vb->vertexFirst);
-
-	vb->indexCount += tess.numIndexes;
-	vb->vertexCount += tess.numVertexes;
+	RHI_CmdDrawIndexed(tess.numIndexes, firstIndex, 0);
 }
 
 /*
@@ -1079,6 +1080,7 @@ void RB_EndSurface( void ) {
 
 	// clear shader so we can tell we don't have any unclosed surfaces
 	tess.numIndexes = 0;
+	tess.batchMode = TESS_BATCH_UNSET;  // 2D can append without a new RB_BeginSurface
 
 }
 

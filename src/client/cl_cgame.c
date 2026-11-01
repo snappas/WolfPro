@@ -1274,6 +1274,79 @@ void CL_CGameRendering( stereoFrame_t stereo ) {
 }
 
 
+// cl_timeStats 1: clock/interpolation summary every 5 seconds of live play
+static struct {
+	int64_t startUs, lastFrameUs;
+	int lastServerTime;
+	int frames, extrapolated, headroomMin, headroomSum;
+	int stalls, jumps;
+	int snaps, forward, back, fast, reset;
+	int64_t offsetMinUs, offsetMaxUs;   // snapshot serverTime - arrival time
+} timeStats;
+
+static qboolean CL_TimeStatsActive( void ) {
+	return cl_timeStats->integer && !clc.demoplaying && cls.state == CA_ACTIVE
+		&& com_timescale->value == 1.0f;
+}
+
+void CL_TimeStatsSnapshot( void ) {
+	int64_t offsetUs;
+
+	if ( !CL_TimeStatsActive() || !timeStats.startUs ) {
+		return;
+	}
+	offsetUs = (int64_t)cl.snap.serverTime * 1000 - Sys_Microseconds();
+	if ( !timeStats.snaps || offsetUs < timeStats.offsetMinUs ) {
+		timeStats.offsetMinUs = offsetUs;
+	}
+	if ( !timeStats.snaps || offsetUs > timeStats.offsetMaxUs ) {
+		timeStats.offsetMaxUs = offsetUs;
+	}
+	timeStats.snaps++;
+}
+
+static void CL_TimeStatsFrame( void ) {
+	int64_t nowUs;
+	int headroom;
+
+	if ( !CL_TimeStatsActive() ) {
+		timeStats.startUs = 0;
+		return;
+	}
+	nowUs = Sys_Microseconds();
+	if ( !timeStats.startUs ) {
+		Com_Memset( &timeStats, 0, sizeof( timeStats ) );
+		timeStats.startUs = nowUs;
+		timeStats.headroomMin = INT_MAX;
+	} else if ( nowUs - timeStats.lastFrameUs < 250000 ) {
+		// render time should advance exactly as much as real time
+		int err = ( cl.serverTime - timeStats.lastServerTime ) - cls.frametime;
+		timeStats.stalls += err < 0;
+		timeStats.jumps += err > 0;
+	}
+	timeStats.lastFrameUs = nowUs;
+	timeStats.lastServerTime = cl.serverTime;
+
+	// cgame can only interpolate while cg.time is before the newest snapshot
+	headroom = cl.snap.serverTime - cl.serverTime;
+	timeStats.frames++;
+	timeStats.extrapolated += headroom <= 0;
+	timeStats.headroomSum += headroom;
+	timeStats.headroomMin = MIN( timeStats.headroomMin, headroom );
+
+	if ( nowUs - timeStats.startUs >= 5000000 ) {
+		Com_Printf( "timestats: %d frames, %.1f%% extrapolated, headroom min %d avg %.1f ms, "
+			"%d stalls, %d jumps, %d snaps, arrival jitter %.1f ms, delta +1 x%d -2 x%d fast x%d reset x%d\n",
+			timeStats.frames, 100.0f * timeStats.extrapolated / timeStats.frames,
+			timeStats.headroomMin, (float)timeStats.headroomSum / timeStats.frames,
+			timeStats.stalls, timeStats.jumps, timeStats.snaps,
+			( timeStats.offsetMaxUs - timeStats.offsetMinUs ) / 1000.0f,
+			timeStats.forward, timeStats.back, timeStats.fast, timeStats.reset );
+		timeStats.startUs = 0;
+	}
+}
+
+
 /*
 =================
 CL_AdjustTimeDelta
@@ -1317,11 +1390,13 @@ void CL_AdjustTimeDelta( void ) {
 		if ( cl_showTimeDelta->integer ) {
 			Com_Printf( "<RESET> " );
 		}
+		timeStats.reset++;
 	} else if ( deltaDelta > 100 ) {
 		// fast adjust, cut the difference in half
 		if ( cl_showTimeDelta->integer ) {
 			Com_Printf( "<FAST> " );
 		}
+		timeStats.fast++;
 		cl.serverTimeDelta = ( cl.serverTimeDelta + newDelta ) >> 1;
 	} else {
 		// slow drift adjust, only move 1 or 2 msec
@@ -1333,9 +1408,11 @@ void CL_AdjustTimeDelta( void ) {
 			if ( cl.extrapolatedSnapshot ) {
 				cl.extrapolatedSnapshot = qfalse;
 				cl.serverTimeDelta -= 2;
+				timeStats.back++;
 			} else {
 				// otherwise, move our sense of time forward to minimize total latency
 				cl.serverTimeDelta++;
+				timeStats.forward++;
 			}
 		}
 	}
@@ -1542,6 +1619,8 @@ void CL_SetCGameTime( void ) {
 	if ( cl.newSnapshots ) {
 		CL_AdjustTimeDelta();
 	}
+
+	CL_TimeStatsFrame();
 
 	// See if we need to print any warnings..
 	CL_CheckRestStatus();

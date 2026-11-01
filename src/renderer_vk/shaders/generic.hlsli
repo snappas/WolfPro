@@ -47,7 +47,9 @@ struct SceneView
   float4 clipPlane;
 };
 [[vk::binding(2)]] ConstantBuffer<SceneView> sceneView;
+#if TRACE
 [[vk::binding(3)]] RWByteAddressBuffer shaderIndex;
+#endif
 
 float4 unpackColorR8G8B8A8(uint color){
     uint4 res = uint4(color, (color >> 8), (color >> 16), (color >> 24)) & uint4(0xFF, 0xFF, 0xFF, 0xFF);

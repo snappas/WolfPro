@@ -944,7 +944,7 @@ extern int time_backend;            // renderer backend time
 extern int com_frameTime;
 
 extern qboolean com_errorEntered;
-extern volatile qboolean com_zoneInitialized; // set once mainzone exists -- other threads must not Z_Malloc before this
+extern volatile qboolean com_profilerReady; // set once Com_Init has set up the profiler -- other threads must not register before this
 
 typedef enum {
 	TAG_FREE,

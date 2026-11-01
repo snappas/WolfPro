@@ -52,6 +52,7 @@ cvar_t  *cl_packetdup;
 cvar_t  *cl_autoNudge;
 cvar_t  *cl_timeNudge;
 cvar_t  *cl_showTimeDelta;
+cvar_t  *cl_timeStats;
 cvar_t  *cl_freezeDemo;
 
 cvar_t  *cl_shownet = NULL;     // NERVE - SMF - This is referenced in msg.c and we need to make sure it is NULL
@@ -2757,6 +2758,7 @@ void CL_Init( void ) {
 	cl_showServerCommands = Cvar_Get( "cl_showServerCommands", "0", 0 );
 	cl_showSend = Cvar_Get( "cl_showSend", "0", CVAR_TEMP );
 	cl_showTimeDelta = Cvar_Get( "cl_showTimeDelta", "0", CVAR_TEMP );
+	cl_timeStats = Cvar_Get( "cl_timeStats", "0", CVAR_TEMP );
 	cl_freezeDemo = Cvar_Get( "cl_freezeDemo", "0", CVAR_TEMP );
 	rcon_client_password = Cvar_Get( "rconPassword", "", CVAR_TEMP );
 	cl_activeAction = Cvar_Get( "activeAction", "", CVAR_TEMP );

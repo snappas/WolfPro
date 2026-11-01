@@ -80,11 +80,13 @@ float4 ps(VOut input) : SV_Target
     AlphaTest(texture[uc.textureIndex], mySampler[uc.samplerIndex], uc.alphaTest, input.tc, uc.alphaBoost, color.a);
     #endif
 
+#if TRACE
     ShaderIndex index = unpackShaderIndex(rc.shaderIndex);
     uint2 XY = unpackPixelCenter(rc.pixelCenterXY);
     if(all(uint2(input.position.xy) == XY) && index.writeEnabled){
         shaderIndex.Store(index.writeIndex * 4, index.shaderIndex);
     }
+#endif
 
     return color;
 }

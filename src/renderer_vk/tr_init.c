@@ -50,7 +50,6 @@ cvar_t  *r_railWidth;
 cvar_t  *r_railCoreWidth;
 cvar_t  *r_railSegmentLength;
 
-cvar_t  *r_ignoreFastPath;
 
 cvar_t  *r_verbose;
 cvar_t  *r_ignore;
@@ -176,6 +175,9 @@ cvar_t  *r_gpu;
 
 cvar_t *r_debugUI;
 cvar_t *r_debugInput;
+cvar_t *r_shaderTrace;
+cvar_t *r_framesInFlight;
+cvar_t *r_legacyRendering;
 cvar_t *r_mipFilter;
 
 cvar_t *r_sleepThreshold;
@@ -213,6 +215,9 @@ static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean sh
 
 static void InitVulkan( void ) {
 	RHI_Init();
+	RB_ResolveAnisotropy();
+	backEnd.framesInFlight = r_framesInFlight->integer;
+	RHI_SetFramesInFlight(backEnd.framesInFlight);
 
 	rhiBufferDesc vertexBufferDesc = {};
 	vertexBufferDesc.initialState = RHI_ResourceState_VertexBufferBit;
@@ -224,7 +229,7 @@ static void InitVulkan( void ) {
 	uniformBufferDesc.memoryUsage = RHI_MemoryUsage_Upload;
 	uniformBufferDesc.allowedStates = RHI_ResourceState_CopySourceBit;
 
-	for(int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++){
+	for(int i = 0; i < backEnd.framesInFlight; i++){
 		uniformBufferDesc.name = va("%s %d", "Scene View Upload", i);
 		uniformBufferDesc.byteCount = SCENEVIEW_MAX * sizeof(SceneView);
 		backEnd.sceneViewUploadBuffers[i] = RHI_CreateBuffer(&uniformBufferDesc);
@@ -233,41 +238,17 @@ static void InitVulkan( void ) {
 
 		vertexBufferDesc.initialState = RHI_ResourceState_VertexBufferBit;
 		vertexBufferDesc.allowedStates = RHI_ResourceState_VertexBufferBit;
-		vertexBufferDesc.name = va("%s %d", "Position Buffer", i);
-		vertexBufferDesc.byteCount = VBA_MAX * sizeof(tess.xyz[0]);
-		backEnd.vertexBuffers[i].position = RHI_CreateBuffer(&vertexBufferDesc);
-
-		vertexBufferDesc.initialState = RHI_ResourceState_VertexBufferBit;
-		vertexBufferDesc.allowedStates = RHI_ResourceState_VertexBufferBit;
-		vertexBufferDesc.name = va("%s %d", "Normal Buffer", i);
-		vertexBufferDesc.byteCount = VBA_MAX * sizeof(tess.normal[0]);
-		backEnd.vertexBuffers[i].normal = RHI_CreateBuffer(&vertexBufferDesc);
+		vertexBufferDesc.name = va("%s %d", "Vertex Stream", i);
+		vertexBufferDesc.byteCount = STREAM_VERTEX_BYTES;
+		backEnd.vertexBuffers[i].vertex = RHI_CreateBuffer(&vertexBufferDesc);
+		backEnd.vertexBuffers[i].vertexData = RHI_MapBuffer(backEnd.vertexBuffers[i].vertex);
 
 		vertexBufferDesc.initialState = RHI_ResourceState_IndexBufferBit;
 		vertexBufferDesc.allowedStates = RHI_ResourceState_IndexBufferBit;
-		vertexBufferDesc.name = va("%s %d", "Index Buffer", i);
-		vertexBufferDesc.byteCount = IDX_MAX * sizeof(tess.indexes[0]);
+		vertexBufferDesc.name = va("%s %d", "Index Stream", i);
+		vertexBufferDesc.byteCount = STREAM_INDEX_BYTES;
 		backEnd.vertexBuffers[i].index = RHI_CreateBuffer(&vertexBufferDesc);
-
-		for(int stage = 0; stage < MAX_SHADER_STAGES; stage++){
-			vertexBufferDesc.initialState = RHI_ResourceState_VertexBufferBit;
-			vertexBufferDesc.allowedStates = RHI_ResourceState_VertexBufferBit;
-			vertexBufferDesc.name = va("%s %d #%d", "Texture Coordinates Buffer", i, stage+1);
-			vertexBufferDesc.byteCount = VBA_MAX * sizeof(tess.texCoords[0][0]);
-			backEnd.vertexBuffers[i].textureCoord[stage] = RHI_CreateBuffer(&vertexBufferDesc);
-
-			vertexBufferDesc.initialState = RHI_ResourceState_VertexBufferBit;
-			vertexBufferDesc.allowedStates = RHI_ResourceState_VertexBufferBit;
-			vertexBufferDesc.name = va("%s %d #%d", "Color Buffer", i, stage+1);
-			vertexBufferDesc.byteCount = VBA_MAX * sizeof(tess.vertexColors[0]);
-			backEnd.vertexBuffers[i].color[stage] = RHI_CreateBuffer(&vertexBufferDesc);
-		}
-		vertexBufferDesc.initialState = RHI_ResourceState_VertexBufferBit;
-		vertexBufferDesc.allowedStates = RHI_ResourceState_VertexBufferBit;
-		vertexBufferDesc.name = va("%s %d", "Texture Coordinates Buffer LM", i);
-		vertexBufferDesc.byteCount = VBA_MAX * sizeof(tess.texCoords[0]);
-		backEnd.vertexBuffers[i].textureCoordLM = RHI_CreateBuffer(&vertexBufferDesc);
-
+		backEnd.vertexBuffers[i].indexData = RHI_MapBuffer(backEnd.vertexBuffers[i].index);
 	}
 
 	uniformBufferDesc.initialState = RHI_ResourceState_CopyDestinationBit;
@@ -294,8 +275,12 @@ static void InitVulkan( void ) {
 	backEnd.shaderIndexReadbackBuffer = RHI_CreateBuffer(&shaderIndexReadbackDesc);
 
 	backEnd.renderComplete = RHI_CreateTimelineSemaphore(qfalse);
-	backEnd.renderCompleteBinary = RHI_CreateBinarySemaphore();
-	backEnd.imageAcquiredBinary = RHI_CreateBinarySemaphore();
+	for(int i = 0; i < RHI_MAX_SWAP_CHAIN_IMAGES; i++){
+		backEnd.renderCompleteBinary[i] = RHI_CreateBinarySemaphore();
+	}
+	for(int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++){
+		backEnd.imageAcquiredBinary[i] = RHI_CreateBinarySemaphore();
+	}
 	backEnd.swapChainTextures = RHI_GetSwapChainImages();
 	backEnd.swapChainTextureCount = RHI_GetSwapChainImageCount();
 
@@ -328,7 +313,7 @@ static void InitVulkan( void ) {
 	for(int a = 0; a < 2; a++){
 		for(int c = 0; c < 2; c++){
 			int i = RB_GetSamplerIndex(c, a);
-			int anisotropy = a && r_ext_texture_filter_anisotropic->integer > 1 ? r_ext_texture_filter_anisotropic->integer : 1;
+			int anisotropy = a ? RB_GetAnisotropy() : 1;
 			backEnd.sampler[i] = RHI_CreateSampler(va("Sampler C:%d A:%d", c, a), c? RHI_TextureAddressing_Clamp: RHI_TextureAddressing_Repeat, anisotropy);
 		}
 
@@ -359,7 +344,10 @@ static void InitVulkan( void ) {
 	
 
 	rhiTextureDesc colorTextureDesc = {};
-	colorTextureDesc.allowedStates = RHI_ResourceState_RenderTargetBit | RHI_ResourceState_ShaderInputBit | RHI_ResourceState_CopySourceBit | RHI_ResourceState_ShaderReadWriteBit;
+	colorTextureDesc.allowedStates = RHI_ResourceState_RenderTargetBit | RHI_ResourceState_ShaderInputBit | RHI_ResourceState_CopySourceBit;
+	if(RB_IsMSAARequested()){
+		colorTextureDesc.allowedStates |= RHI_ResourceState_ShaderReadWriteBit;
+	}
 	colorTextureDesc.format = R8G8B8A8_UNorm;
 	colorTextureDesc.height = glConfig.vidHeight;
 	colorTextureDesc.initialState = RHI_ResourceState_RenderTargetBit;
@@ -791,6 +779,9 @@ void GfxInfo_f( void ) {
 
 	ri.Printf( PRINT_ALL, "texturemode: %s\n", r_textureMode->string );
 	ri.Printf( PRINT_ALL, "picmip: %d\n", r_picmip->integer );
+	ri.Printf( PRINT_ALL, "MSAA: %ux (r_msaa %d, max %ux)\n", RB_GetMSAASampleCount(), r_msaa->integer, RHI_GetMaxMSAASamples() );
+	ri.Printf( PRINT_ALL, "anisotropy: %ux (r_anisotropy %d, max %ux)\n", RB_GetAnisotropy(), r_ext_texture_filter_anisotropic->integer, RHI_GetMaxAnisotropy() );
+	ri.Printf( PRINT_ALL, "mip filter: %s (r_mipFilter %d)\n", enablestrings[RB_UseFilteredMips()], r_mipFilter->integer );
 	ri.Printf( PRINT_ALL, "texenv add: %s\n", enablestrings[glConfig.textureEnvAddAvailable != 0] );
 	ri.Printf( PRINT_ALL, "compressed textures: %s\n", enablestrings[glConfig.textureCompression != TC_NONE] );
 
@@ -819,7 +810,7 @@ R_Register
 void R_Register( void ) {
 	//
 	// latched and archived variables
-	r_ext_texture_filter_anisotropic    = ri.Cvar_Get( "r_anisotropy", "16", CVAR_ARCHIVE | CVAR_LATCH );
+	r_ext_texture_filter_anisotropic    = ri.Cvar_Get( "r_anisotropy", "-1", CVAR_ARCHIVE | CVAR_LATCH );
 
 
 	r_picmip = ri.Cvar_Get( "r_picmip", "1", CVAR_ARCHIVE | CVAR_LATCH ); //----(SA)	mod for DM and DK for id build.  was "1" // JPW NERVE pushed back to 1
@@ -849,7 +840,6 @@ void R_Register( void ) {
 	r_vertexLight = ri.Cvar_Get( "r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_uiFullScreen = ri.Cvar_Get( "r_uifullscreen", "0", 0 );
 	r_subdivisions = ri.Cvar_Get( "r_subdivisions", "4", CVAR_ARCHIVE | CVAR_LATCH );
-	r_ignoreFastPath = ri.Cvar_Get( "r_ignoreFastPath", "1", CVAR_ARCHIVE | CVAR_LATCH );
 
 	//
 	// temporary latched variables that can only change over a restart
@@ -950,12 +940,17 @@ void R_Register( void ) {
 
 	r_debugUI = ri.Cvar_Get( "r_debugUI", "0", CVAR_TEMP);
 	r_debugInput = ri.Cvar_Get( "r_debugInput", "0", CVAR_TEMP);
+	r_shaderTrace = ri.Cvar_Get( "r_shaderTrace", "0", CVAR_TEMP | CVAR_LATCH);
 
-	r_mipFilter = ri.Cvar_Get( "r_mipFilter", "1", CVAR_ARCHIVE | CVAR_LATCH);
+	r_mipFilter = ri.Cvar_Get( "r_mipFilter", "-1", CVAR_ARCHIVE | CVAR_LATCH);
 
 	r_sleepThreshold = ri.Cvar_Get("r_sleepThreshold", "2500", CVAR_ARCHIVE);
 
-	r_msaa = ri.Cvar_Get("r_msaa", "8", CVAR_ARCHIVE | CVAR_LATCH);
+	r_msaa = ri.Cvar_Get("r_msaa", "-1", CVAR_ARCHIVE | CVAR_LATCH);
+	r_framesInFlight = ri.Cvar_Get("r_framesInFlight", "1", CVAR_ARCHIVE | CVAR_LATCH);
+	AssertCvarRange( r_framesInFlight, 1, RHI_FRAMES_IN_FLIGHT, qtrue );
+	r_legacyRendering = ri.Cvar_Get("r_legacyRendering", "0", CVAR_ARCHIVE | CVAR_LATCH);
+	AssertCvarRange( r_legacyRendering, 0, 7, qtrue );
 	r_alphaboost = ri.Cvar_Get("r_alphaboost", "0", CVAR_ARCHIVE);
 
 	r_noborder = ri.Cvar_Get("r_noborder", "0", CVAR_ARCHIVE | CVAR_LATCH);
@@ -1202,8 +1197,13 @@ void RE_Shutdown( qboolean destroyWindow ) {
 		ri.Tag_Free();  // wipe all render alloc'd zone memory
 	}
 
+	if ( destroyWindow ) {
+		RHI_SavePipelineCache();
+	}
 	RHI_Shutdown(destroyWindow);
-	R_ClearFrame();
+	if ( backEndData ) {
+		R_ClearFrame();
+	}
 	RB_ClearPipelineCache();
 	tr.registered = qfalse;
 }
@@ -1219,6 +1219,7 @@ Touch all images to make sure they are resident
 =============
 */
 void RE_EndRegistration( void ) {
+	RHI_SavePipelineCache();
 }
 
 void R_ComputeCursorPosition( int* x, int* y )

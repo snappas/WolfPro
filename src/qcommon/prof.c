@@ -4,9 +4,14 @@
 #if defined( ENABLE_PROFILER )
 
 #if defined( _WIN32 )
+#include <intrin.h>
 #define PROF_THREAD_LOCAL __declspec( thread )
+#define PROF_LOCK_ACQUIRE( lock ) while ( _InterlockedExchange( ( lock ), 1 ) ) {}
+#define PROF_LOCK_RELEASE( lock ) _InterlockedExchange( ( lock ), 0 )
 #else
 #define PROF_THREAD_LOCAL __thread
+#define PROF_LOCK_ACQUIRE( lock ) while ( __sync_lock_test_and_set( ( lock ), 1 ) ) {}
+#define PROF_LOCK_RELEASE( lock ) __sync_lock_release( lock )
 #endif
 
 typedef struct profiler_s {
@@ -21,6 +26,7 @@ typedef struct profiler_s {
 
 static profiler_t prof;
 static PROF_THREAD_LOCAL profThread_t *prof_currentThread = NULL;
+static volatile long prof_threadsLock = 0; // guards prof.threads/threadCount
 
 void Prof_Init( void ) {
 	static qboolean initialized = qfalse;
@@ -34,51 +40,57 @@ void Prof_Init( void ) {
 	prof.currentFrameIndex = -1; // sentinel: no frame started yet, distinct from slot 0
 }
 
-// NOTE: not thread-safe against concurrent calls -- prof.threadCount/prof.threads[]
-// are unprotected shared state. Safe today because the only call site (Com_Init)
-// runs once, single-threaded, at startup. If a future effort registers multiple
-// threads concurrently, this needs real synchronization first.
-void Prof_InitThread( const char *name ) {
-	profThread_t *t;
+// Uses calloc because the zone has no locks and threads register while the
+// main thread is allocating. Returns the new thread's slot, or -1 if none.
+static int32_t Prof_AddThread( const char *name, qboolean isGPUThread, profThread_t **thread ) {
+	profThread_t *t = (profThread_t *)calloc( 1, sizeof( profThread_t ) );
+	int32_t index = -1;
 
-	if ( prof.threadCount >= PROF_MAX_THREADS ) {
-		Com_Printf( "Prof_InitThread: PROF_MAX_THREADS exceeded, '%s' not registered\n", name );
-		return;
-	}
-
-	t = (profThread_t *)Z_Malloc( sizeof( profThread_t ) );
-	Com_Memset( t, 0, sizeof( *t ) );
-	t->used = qtrue;
-	t->isMainThread = ( prof.threadCount == 0 );
-	Q_strncpyz( t->name, name, sizeof( t->name ) );
-
-	prof.threads[prof.threadCount++] = t;
-	prof_currentThread = t;
-}
-
-// Same "not thread-safe against concurrent calls" caveat as Prof_InitThread
-// above -- prof.threadCount/prof.threads[] are unprotected shared state.
-// Safe today because the only call site (the GPU bridging code) lazily
-// registers once from the single render thread this engine already runs
-// everything on.
-int32_t Prof_InitVirtualThread( const char *name ) {
-	profThread_t *t;
-	int32_t index;
-
-	if ( prof.threadCount >= PROF_MAX_THREADS ) {
-		Com_Printf( "Prof_InitVirtualThread: PROF_MAX_THREADS exceeded, '%s' not registered\n", name );
+	if ( !t ) {
 		return -1;
 	}
 
-	t = (profThread_t *)Z_Malloc( sizeof( profThread_t ) );
-	Com_Memset( t, 0, sizeof( *t ) );
 	t->used = qtrue;
-	t->isMainThread = qfalse;
-	t->isGPUThread = qtrue;
+	t->isGPUThread = isGPUThread;
 	Q_strncpyz( t->name, name, sizeof( t->name ) );
 
-	index = prof.threadCount;
-	prof.threads[prof.threadCount++] = t;
+	PROF_LOCK_ACQUIRE( &prof_threadsLock );
+	if ( prof.threadCount < PROF_MAX_THREADS ) {
+		t->isMainThread = !isGPUThread && prof.threadCount == 0;
+		index = prof.threadCount;
+		prof.threads[index] = t;
+		prof.threadCount = index + 1;
+	}
+	PROF_LOCK_RELEASE( &prof_threadsLock );
+
+	if ( index < 0 ) {
+		free( t );
+		return -1;
+	}
+
+	*thread = t;
+	return index;
+}
+
+void Prof_InitThread( const char *name ) {
+	profThread_t *t;
+
+	if ( Prof_AddThread( name, qfalse, &t ) < 0 ) {
+		Com_Printf( "Prof_InitThread: no slot for '%s', limit is %i\n", name, PROF_MAX_THREADS );
+		return;
+	}
+
+	prof_currentThread = t;
+}
+
+int32_t Prof_InitVirtualThread( const char *name ) {
+	profThread_t *t;
+	int32_t index = Prof_AddThread( name, qtrue, &t );
+
+	if ( index < 0 ) {
+		Com_Printf( "Prof_InitVirtualThread: no slot for '%s', limit is %i\n", name, PROF_MAX_THREADS );
+	}
+
 	return index; // deliberately does NOT touch prof_currentThread
 }
 

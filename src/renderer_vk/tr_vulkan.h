@@ -20,7 +20,7 @@
 
 #define MAX_LAYERS 16
 #define MAX_EXTENSIONS 16
-#define MAX_SWAP_CHAIN_IMAGES 16
+#define MAX_SWAP_CHAIN_IMAGES RHI_MAX_SWAP_CHAIN_IMAGES
 #define MAX_TEXTURES (MAX_IMAGEDESCRIPTORS) // needs space for render targets too
 #define MAX_DURATION_QUERIES 64
 #define MAX_UPLOADCMDBUFFERS 64
@@ -40,7 +40,13 @@
 
 // Nvidia Nsight Systems 2020.2 is supposed to support Vulkan 1.2
 // on my PC, it only captures with Vulkan 1.1 :-(
-#define MINIMUM_VULKAN_API_VERSION (VK_MAKE_API_VERSION(0, 1, 3, 0))
+#define MINIMUM_VULKAN_API_VERSION (VK_MAKE_API_VERSION(0, 1, 2, 0))
+#define TARGET_VULKAN_API_VERSION (VK_MAKE_API_VERSION(0, 1, 3, 0))
+
+// r_legacyRendering bits
+#define LEGACY_RENDERING_KHR 1
+#define LEGACY_RENDERING_NO_SYNCHRONIZATION2 2
+#define LEGACY_RENDERING_NO_DYNAMIC_RENDERING 4
 
 #define BIT_MASK(BitCount) ((1 << BitCount) - 1)
 
@@ -90,6 +96,20 @@
 
 #define MAX_LAYERS 16
 #define MAX_EXTENSIONS 16
+
+// optional device capabilities, filled for the selected device
+typedef struct VulkanCaps
+{
+	qbool timestamps;       // timestampComputeAndGraphics and non-zero timestampValidBits
+	qbool anisotropy;
+	qbool fillModeNonSolid;
+	qbool fragmentStores;   // fragmentStoresAndAtomics supported by the device
+	qbool fragmentStoresEnabled; // requested at device creation
+	float maxAnisotropy;
+	qbool core13;           // Vulkan 1.3 feature struct and entry points in use, not KHR
+	qbool dynamicRendering;
+	qbool synchronization2;
+} VulkanCaps;
 
 typedef struct Queues
 {
@@ -183,11 +203,10 @@ typedef struct DescriptorSet
 typedef struct
 {
 	rhiBufferDesc desc;
-	void* mappedData; // only if host coherent
+	void* mappedData; // NULL for device-local buffers
 	VkBuffer buffer;
 	VmaAllocation allocation;
 	RHI_MemoryUsage memoryUsage;
-	qbool mapped;
 	qbool hostCoherent;
 	RHI_ResourceState currentLayout;
 
@@ -240,14 +259,24 @@ typedef struct Vulkan
 	VkPhysicalDevice physicalDevice;
 	VkPhysicalDeviceProperties deviceProperties;
 	VkPhysicalDeviceFeatures deviceFeatures;
+	VulkanCaps caps;
 
 	VkDevice device;
+
+	// core or KHR entry points, NULL while the feature is off
+	PFN_vkCmdBeginRendering cmdBeginRendering;
+	PFN_vkCmdEndRendering cmdEndRendering;
+	PFN_vkCmdPipelineBarrier2 cmdPipelineBarrier2;
+	PFN_vkCmdWriteTimestamp2 cmdWriteTimestamp2;
+
+	VkPipelineCache pipelineCache;
 
 	VmaAllocator allocator;
 
 	VkSwapchainKHR swapChain;
 	VkSurfaceFormatKHR swapChainFormat;
 	uint32_t swapChainImageCount;
+	qbool swapChainRecreatePending;
 	VkImage swapChainImages[MAX_SWAP_CHAIN_IMAGES];
 	rhiTexture swapChainRenderTargets[MAX_SWAP_CHAIN_IMAGES];
 
@@ -307,6 +336,7 @@ typedef struct Vulkan
 	VkQueryPool queryPool[RHI_FRAMES_IN_FLIGHT];
 	uint32_t query[RHI_FRAMES_IN_FLIGHT][MAX_DURATION_QUERIES];
 	uint32_t currentFrameIndex;
+	uint32_t framesInFlight;
 	uint32_t durationQueryCount[RHI_FRAMES_IN_FLIGHT];
 	qboolean vsync;
 
@@ -348,6 +378,7 @@ VkBlendFactor GetSourceColorBlendFactor(unsigned int bits);
 VkBlendFactor GetDestinationColorBlendFactor(unsigned int bits);
 VkFormat GetVkFormatFromVertexFormat(RHI_VertexFormat format, uint32_t elementCount);
 VkSampleCountFlagBits GetVkSampleCount(uint32_t samples);
-void RecreateSwapchain(void);
+qbool RecreateSwapchain(void);
+void DestroyFramebufferCache( void );
 
 #endif

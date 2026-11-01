@@ -7,6 +7,8 @@
 #include "../qcommon/qcommon.h"
 
 #define RHI_FRAMES_IN_FLIGHT			2
+#define RHI_MAX_SWAP_CHAIN_IMAGES		16
+#define RHI_MAX_PIPELINES				4352
 
 
 // Video initialization:
@@ -127,6 +129,7 @@ typedef enum RHI_MemoryUsage
 	RHI_MemoryUsage_DeviceLocal,
 	RHI_MemoryUsage_Upload,
 	RHI_MemoryUsage_Readback,
+	RHI_MemoryUsage_Staging,
 	RHI_MemoryUsage_Count
 } RHI_MemoryUsage;
 typedef struct rhiTextureDesc
@@ -371,6 +374,7 @@ typedef struct rhiGraphicsPipelineDesc {
 	rhiTextureFormatId colorFormat;
 	uint32_t sampleCount;
 	qbool alphaToCoverage;
+	qbool noDepthAttachment; // pass has no depth attachment
 } rhiGraphicsPipelineDesc;
 
 typedef struct rhiComputePipelineDesc {
@@ -385,6 +389,7 @@ typedef struct rhiComputePipelineDesc {
 
 void RHI_Init( void );
 void RHI_Shutdown(qboolean destroyWindow);
+void RHI_SavePipelineCache( void );
 
 void RHI_WaitUntilDeviceIdle(); //debug only
 
@@ -395,10 +400,15 @@ void RHI_WaitOnSemaphore(rhiSemaphore semaphore, uint64_t semaphoreValue);
 rhiBuffer RHI_CreateBuffer(const rhiBufferDesc *desc);
 byte* RHI_MapBuffer(rhiBuffer buffer); //cpu visible buffers
 void RHI_UnmapBuffer(rhiBuffer buffer);
+void RHI_FlushBuffer(rhiBuffer buffer, uint32_t offset, uint32_t byteCount); //no-op on coherent memory
 
 rhiTexture RHI_CreateTexture(const rhiTextureDesc *desc);
 
 rhiSampler RHI_CreateSampler(const char* name, RHI_TextureAddressing mode, uint32_t anisotropy);
+
+qbool RHI_IsIntegratedGPU( void );
+uint32_t RHI_GetMaxMSAASamples( void ); // 8, 4, 2 or 1
+uint32_t RHI_GetMaxAnisotropy( void );  // 1 when unsupported
 
 void RHI_CreateShader();
 
@@ -432,7 +442,7 @@ RHI_RenderPass* RHI_CurrentRenderPass(void);
 
 void RHI_CmdBindPipeline(rhiPipeline pipeline); //create pipeline layout here
 void RHI_CmdBindDescriptorSet(rhiPipeline pipeline, rhiDescriptorSet descriptorSet);
-void RHI_CmdBindVertexBuffers(const rhiBuffer *vertexBuffers, uint32_t bufferCount);
+void RHI_CmdBindVertexBuffers(const rhiBuffer *buffers, const uint32_t *offsets, uint32_t bufferCount);
 void RHI_CmdBindIndexBuffer(rhiBuffer indexBuffer);
 void RHI_CmdSetViewport(int32_t x, int32_t y, uint32_t width, uint32_t height, float minDepth, float maxDepth);
 void RHI_CmdSetScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
@@ -462,6 +472,9 @@ qbool RHI_GPUTicksToCpuUs(uint64_t gpuTicks, int64_t *outCpuUs); // qfalse if no
 double RHI_GetTimestampPeriodUs(void); // vk.deviceProperties.limits.timestampPeriod, in microseconds -- lets callers outside rhi.c convert a raw GPU tick delta without pulling in tr_vulkan.h
 #endif
 void RHI_DurationQueryReset(void);
+qbool RHI_SupportsFragmentStores( void ); // device was created with fragment stores enabled
+void RHI_SetGPUTimestamps(qbool enabled); // call once per frame before any query
+void RHI_SetFramesInFlight( uint32_t count ); // slots in use, up to RHI_FRAMES_IN_FLIGHT
 
 //upload manager
 void RHI_BeginBufferUpload();
@@ -471,6 +484,7 @@ void RHI_EndBufferUpload();
 
 void RHI_BeginTextureUpload(rhiTextureUpload *textureUpload, const rhiTextureUploadDesc *textureUploadDesc);
 void RHI_EndTextureUpload();
+void RHI_UploadBufferData(rhiBuffer dst, const void *data, uint32_t byteCount); // blocks until the copy is finished
 rhiSemaphore RHI_GetUploadSemaphore(void); //(semaphore handle, value to wait on)
 uint64_t RHI_GetUploadSemaphoreValue(void);
 
