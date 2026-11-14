@@ -414,8 +414,9 @@ void SV_DirectConnect( const netadr_t *from ) {
 		if ( cl->state == CS_FREE ) {
 			continue;
 		}
-		if ( NET_CompareAdr( from, &cl->netchan.remoteAddress ) && cl->netchan.qport == qport ) {
-			// both qport and netport should match for a reconnecting client
+		// a matching ip:port is the same client socket even if the qport differs,
+		// e.g. the game crashed and was restarted, which picks a new random qport
+		if ( NET_CompareAdr( from, &cl->netchan.remoteAddress ) ) {
 			Com_Printf( "%s:reconnect\n", NET_AdrToString( from ) );
 			newcl = cl;
 
