@@ -2235,6 +2235,9 @@ void BeginIntermission( void ) {
 	// send the current scoring to all clients
 	SendScoreboardMessageToAllClients();
 
+	trap_Cvar_Update( &g_currentRound );
+	trap_Cvar_Update( &g_nextTimeLimit );
+
 	G_matchInfoDump(EOM_MATCHINFO);
 
 }
