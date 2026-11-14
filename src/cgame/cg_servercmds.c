@@ -834,9 +834,17 @@ void CG_AddToNotify( const char *str ) {
 		trap_Cvar_VariableStringBuffer("cg_notifyPlayerOnly", var, sizeof(var));
 		int notifyPlayerOnly = atoi(var);
 		if (notifyPlayerOnly) {
-			const char* playerName = Info_ValueForKey(CG_ConfigString(CS_PLAYERS + cg.snap->ps.clientNum), "n");
-			if (strlen(playerName)) {
-				if (strstr(str, playerName) == NULL) {
+			// clientinfo name follows cg_registeredPlayers like obituaries do;
+			// compare color-free since cg_teamObituaryColors recolors names
+			char playerName[MAX_QPATH];
+			char cleanStr[1024];
+
+			Q_strncpyz(playerName, cgs.clientinfo[cg.snap->ps.clientNum].name, sizeof(playerName));
+			Q_CleanStr(playerName);
+			if (playerName[0]) {
+				Q_strncpyz(cleanStr, str, sizeof(cleanStr));
+				Q_CleanStr(cleanStr);
+				if (strstr(cleanStr, playerName) == NULL) {
 					return;
 				}
 			}
