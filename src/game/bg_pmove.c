@@ -2266,13 +2266,11 @@ void PM_AdjustAimSpreadScale( void ) {
 	switch ( pm->ps->weapon ) {
 	case WP_LUGER:
 	case WP_SILENCER:
+	case WP_COLT:
 		wpnScale = 0.5f;
 		break;
 	case WP_AKIMBO: //----(SA)	added
 		wpnScale = 0.5;
-		break;
-	case WP_COLT:
-		wpnScale = 0.4f;        // doesn't fire as fast, but easier to handle than luger
 		break;
 	case WP_VENOM:
 		wpnScale = 0.9f;        // very heavy
