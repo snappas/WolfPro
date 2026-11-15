@@ -1895,6 +1895,7 @@ typedef struct weap_ws_convert_s {
 #define CGF_STATSDUMP       0x02
 #define CGF_AUTOACTIVATE    0x04
 #define CGF_PREDICTITEMS    0x08
+#define CGF_NOMEDICLOCK     0x10    // opt-out, so clients without the flag keep the lock
 
 int BG_cleanName( const char *pszIn, char *pszOut, unsigned int dwMaxLength, qboolean fCRLF );
 extWeaponStats_t BG_WeapStatForWeapon( weapon_t iWeaponID );

@@ -1332,7 +1332,7 @@ float G_GetWeaponSpread( int weapon ) {
 		switch ( weapon ) {
 		case WP_LUGER: spread = 600; break;
 		case WP_SILENCER: spread = 900; break;
-		case WP_COLT: spread = 800; break;
+		case WP_COLT: spread = 600; break;
 		case WP_AKIMBO: spread = 800; break;         //----(SA)added
 		case WP_VENOM: spread = 600; break;
 		case WP_MP40: spread = 400; break;

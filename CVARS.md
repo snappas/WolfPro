@@ -258,6 +258,7 @@ commands, not a cvar — there is no `g_refereePassword`.
 | `cg_drawWeaponIconFlash` | `0` | ARCHIVE | Flash the weapon-bar icon on certain weapon events. |
 | `cg_enemyTimerColor/X/Y/ProX/ProY`, `cg_reinforcementTimeColor/X/Y/ProX/ProY` | various | ARCHIVE | Reinforcement-timer colors and positions (normal + widescreen "pro" layout). |
 | `cg_errordecay` | `100` | — **[debug/advanced]** | Prediction-error smoothing decay rate. |
+| `cg_findMedic` | `1` | ARCHIVE | `1` = while wounded and waiting for a revive, the camera locks onto the nearest teammate medic in view. `0` = no lock; keep turning the camera freely with the mouse. |
 | `cg_fov` | `90` | ARCHIVE | Player field-of-view. |
 | `cg_fragsY` / `cg_fragsWidth` | `0` / `16` | ARCHIVE | Frags counter position/width. |
 | `cg_gun_frame` | `0` | TEMP **[debug]** | Forces the view-weapon to a specific animation frame. |
