@@ -690,6 +690,11 @@ void WolfFindMedic( gentity_t *self ) {
 	self->client->ps.viewlocked = 0;
 	self->client->ps.stats[STAT_DEAD_YAW] = 999;
 
+	if(self->client->pers.clientFlags & CGF_NOMEDICLOCK){
+		self->client->ps.stats[STAT_DEAD_YAW] = SHORT2ANGLE((short)(self->client->pers.cmd.angles[YAW] + self->client->ps.delta_angles[YAW]));
+		return;
+	}
+
 	VectorCopy( self->s.pos.trBase, start );
 	start[2] += self->client->ps.viewheight;
 

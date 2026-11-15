@@ -325,6 +325,7 @@ vmCvar_t cg_redlimbotime;
 vmCvar_t cg_bluelimbotime;
 
 vmCvar_t cg_autoReload;
+vmCvar_t cg_findMedic;
 
 vmCvar_t cg_bloodDamageBlend;
 vmCvar_t cg_bloodFlash;
@@ -670,6 +671,7 @@ cvarTable_t cvarTable[] = {
 	{ &cg_showAIState, "cg_showAIState", "0", CVAR_CHEAT},
 
 	{ &cg_autoReload, "cg_autoReload", "1", CVAR_ARCHIVE },
+	{ &cg_findMedic, "cg_findMedic", "1", CVAR_ARCHIVE },
 
 	{ &cg_bloodDamageBlend, "cg_bloodDamageBlend", "1.0", CVAR_ARCHIVE },
 	{ &cg_bloodFlash, "cg_bloodFlash", "1.0", CVAR_ARCHIVE },
@@ -900,7 +902,8 @@ void CG_setClientFlags(void) {
 			((cg_autoReload.integer > 0) ? CGF_AUTORELOAD : 0) |
 			((cg_autoAction.integer & AA_STATSDUMP) ? CGF_STATSDUMP : 0) |
 			((cg_autoactivate.integer > 0) ? CGF_AUTOACTIVATE : 0) |
-			((cg_predictItems.integer > 0) ? CGF_PREDICTITEMS : 0)
+			((cg_predictItems.integer > 0) ? CGF_PREDICTITEMS : 0) |
+			((cg_findMedic.integer > 0) ? 0 : CGF_NOMEDICLOCK)
 			// Add more in here, as needed
 		),
 		cl_guid.string
@@ -955,7 +958,8 @@ void CG_UpdateCvars( void ) {
 			if (cv->vmCvar == &cg_autoAction || cv->vmCvar == &cg_autoReload ||
 				cv->vmCvar == &int_cl_timenudge || cv->vmCvar == &int_cl_maxpackets ||
 				cv->vmCvar == &cg_autoactivate || cv->vmCvar == &cg_predictItems || cv->vmCvar == &cg_hitsounds ||
-				cv->vmCvar == &cg_hitsoundBodyStyle || cv->vmCvar == &cg_hitsoundHeadStyle) {
+				cv->vmCvar == &cg_hitsoundBodyStyle || cv->vmCvar == &cg_hitsoundHeadStyle ||
+				cv->vmCvar == &cg_findMedic) {
 				setFlags = qtrue;
 			}
 		}

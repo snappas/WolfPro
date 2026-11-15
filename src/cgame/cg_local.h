@@ -1900,6 +1900,7 @@ extern vmCvar_t cg_descriptiveText;
 
 // TTimo
 extern vmCvar_t cg_autoReload;
+extern vmCvar_t cg_findMedic;
 
 extern vmCvar_t cg_uinfo;
 
