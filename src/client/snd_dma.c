@@ -564,6 +564,9 @@ void S_memoryLoad( sfx_t *sfx ) {
 	if ( !S_LoadSound( sfx ) ) {
 //		Com_Printf( S_COLOR_YELLOW "WARNING: couldn't load sound: %s\n", sfx->soundName );
 		sfx->defaultSound = qtrue;
+	} else {
+		// a file missing earlier can appear later (pk3 downloaded, pure list changed)
+		sfx->defaultSound = qfalse;
 	}
 	sfx->inMemory = qtrue;
 }
